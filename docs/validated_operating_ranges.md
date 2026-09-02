@@ -721,6 +721,32 @@ conditioning (`|S| >= 3`) from the start, or explicitly characterize
 the accuracy cost of whatever cap it chooses. See D-053. No production
 pipeline change was made or authorized by this charter.
 
+**Stage 6b (D-054) — CMIknn estimator, first-pass validation: point
+estimate and power confirmed, Type-I error control inconclusive (not
+disconfirmed) at this replicate count.** `mintnet.mi.cmiknn` (Frenzel
+& Pompe 2007, generalizing the validated bivariate KSG-1 formula) with
+a local-permutation significance test (Runge 2018) was validated
+against a known closed-form Gaussian reference across `|S| in
+{0,1,2,3}`. **`|S|=0` matches the existing validated bivariate
+estimator bit-for-bit** (not approximately) on identical data — the
+new estimator's own base correctness is confirmed, not assumed.
+**Power is strong and scales correctly with `N`**: `100%` rejection at
+`alpha=.05` for `|S| in {0,1,2}` at every tested `N in {300,500,750}`;
+`|S|=3` (hardest case) climbs `74% -> 98% -> 100%` across that same
+`N` range. **Type-I error control formally REASSESSed against the
+frozen gate's own strict bands, but every out-of-band observation was
+checked directly with an exact binomial test and none reached even
+`p<.05` against its own nominal rate** — with only `50` validation
+replicates (this run's own disclosed, timing-driven scope reduction
+from the charter's own `500`), the evidence cannot distinguish
+correct calibration from mild over-liberality. **Do not read this as
+a confirmed defect in the local-permutation construction** — read it
+as "needs more replicates to resolve," the concrete, already-scoped
+next step (same `N`/`k`/`k_perm`/`B`, replicate count only increased).
+`mi-native` remains blocked from composing this into any retain/prune
+mechanism until a replicate-count follow-up resolves Type-I error
+either way. See D-054.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

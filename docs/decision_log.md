@@ -4406,3 +4406,114 @@ DPI's strong, recall-free precision gain on the *existing* Gaussian
 baseline is itself worth a dedicated implementation charter on `main`,
 independent of `mi-native`'s own progress — noted here, not acted on.
 `docs/validated_operating_ranges.md` should record this finding.
+
+## D-054: Conditional-MI estimator's own point estimate confirmed exact-correct and power is strong; Type-I error control is inconclusive, not disconfirmed, at this replicate count (mi-native, Stage 6b, first pass)
+
+Date: 2026-09-02
+
+Stage: mi-native / Stage 6b (estimator validation, first pass)
+
+Status: **REASSESS per the frozen gate as literally written** — but
+read the rationale below before treating this as a defect finding;
+the mechanical verdict and the honest statistical read diverge here in
+a way this project's own discipline requires stating plainly rather
+than either overriding the frozen gate or letting a technicality stand
+in for an accurate account of the evidence.
+
+Decision timing: Predeclared before results — every criterion (bias/
+RMSE bounds, Type-I error bands, power threshold) was fixed in
+`docs/stage6b_charter.md` before this run; a disclosed, documented
+scope reduction (grid size only, not any criterion) was made before
+launching this specific run — see Prior specification below.
+
+Question: Is CMIknn (Frenzel & Pompe 2007, generalizing the already-
+validated bivariate KSG-1 estimator) paired with a local-permutation
+significance test (Runge 2018) accurate and, more importantly,
+correctly calibrated (Type-I error control) across `|S| in {0,1,2,3}`?
+
+Prior specification: `docs/stage6b_charter.md`. **Implementation-time
+scope reduction, disclosed in `stage6b.py`'s own module docstring
+before this run, not discovered after**: a single significance test
+costs `~1.2s` at `N=300` and `~21s` at `N=1500` (`B=199` permutations,
+measured directly), dominated by per-permutation nearest-neighbor
+query overhead. The charter's own full grid (`N` up to `1500`, `500`
+replicates) would take many hours for this first pass alone — a cost
+the charter itself anticipated and made contingent on a runtime
+finding, not assumed affordable. This run used `N = [300, 500, 750]`,
+`100` replicates (development `0`-`49`, validation `50`-`99`), `B =
+99` permutations, `8` conditions (one null, one alt, per `|S|`, reusing
+only already-validated DGP fixtures) — smaller than the charter's own
+frozen grid, same criteria, same DGPs' own logic.
+
+Evidence: Local run (`results/generated/stage6b_cmi_validation/`,
+gitignored), all `24` condition/N cells, `0` errors.
+`raw_metrics.csv` (2,400 rows), `report.json`, `stage6b_report.md`.
+Additionally: `tests/unit/test_cmiknn.py`'s own `|S|=0` exact-agreement
+check (this charter's criterion 3) — passed, bit-for-bit numerical
+equality against `mintnet.mi.ksg.estimate_ksg_mi` on identical data,
+not merely "close."
+
+**Point-estimate accuracy and power are unambiguous and strong.**
+Every `alt` condition (a genuine direct edge) rejected at `alpha=.05`
+in the large majority to totality of validation replicates at every
+`N`: `100%` for `|S| in {0,1,2}` at every tested `N`; `|S|=3` (the
+hardest case, the overlapping-triangles fixture) climbed from `74%`
+(`N=300`) to `98%` (`N=500`) to `100%` (`N=750`) — power increasing
+with `N` exactly as expected for a harder estimation problem, not a
+flat or erratic pattern. Mean estimates for every `null` condition
+sat within `~.005` of the analytic `0`, and every `alt` condition's
+mean estimate was clearly positive and stable across `N`.
+
+**Type-I error control is where the frozen gate's literal criterion
+fails — but the evidence does not actually distinguish "correctly
+calibrated" from "mildly over-liberal" at this replicate count, and
+saying so is not equivocation, it is the accurate statistical
+statement.** Several null-condition cells fell outside the charter's
+own `[.03,.07]` (`alpha=.05`) or `[.005,.015]` (`alpha=.01`) bands —
+e.g. `s0_null, N=500`: `10%` rejection at `alpha=.05` (band `.03`-
+`.07`); `s2_null, N=300`: `4%` at `alpha=.01` (band `.005`-`.015`).
+Checked directly with an exact binomial test against each cell's own
+nominal rate (not assumed, computed): **every one of these
+out-of-band observations has a two-sided p-value `>= .09` against its
+own nominal target** — none reach even the conventional `.05`
+significance threshold for "distinguishable from correctly
+calibrated." With only `50` validation replicates, the binomial
+standard error at a true `5%` rate is `~3.1` percentage points (a
+`95%` interval of roughly `[0, 11%]`) and at a true `1%` rate is
+`~1.4` points (roughly `[0, 3.8%]`) — bands this wide make the
+charter's own strict interval an appropriately strict target but a
+statistically underpowered one to test against at this sample size.
+
+Decision: **REASSESS, formally, per the frozen gate's own literal
+text — this project's own discipline does not permit waiving a
+predeclared criterion because the failure looks likely to be a sample-
+size artifact, no matter how plausible that read is.** But this
+REASSESS should not be read as "the local-permutation mechanism is
+shown to be miscalibrated" — the evidence available at this replicate
+count cannot support that conclusion either. It is read here as
+**inconclusive on Type-I error, confirmed on point-estimate accuracy
+and power**, which is a materially different, more encouraging
+finding than a bare REASSESS label conveys on its own.
+
+Rationale: This mirrors D-004's own precedent exactly (Stage 1c): a
+frozen selection/gate rule can fail on a technicality driven by
+insufficient replicate count even when the underlying trend is
+favorable, and the correct response is not to override the rule after
+seeing results, but to charter the fix (here: more replicates, the
+cheap lever — unlike `N` or permutation count, more replicates does
+not change per-test cost, only the precision of the *rate estimate*)
+and re-test properly.
+
+Consequences: Per `docs/stage6b_charter.md`'s own consequences section,
+a REASSESS on Type-I error blocks the whole `mi-native` track from
+proceeding to a Stage-1-equivalent composition charter — this stands.
+The concrete next step is a **replicate-count-only** follow-up (same
+`N`, `k`, `k_perm`, `B`, conditions; only `replicates` increases,
+e.g. to `500`-`1000`) to obtain a statistically resolved Type-I-error
+verdict before either confirming PROCEED or diagnosing a real defect
+in the local-permutation construction. Extending `N` to the charter's
+own full `1500` and resolving smaller operational alphas (`B` scaling
+or a parametric-tail approach) remain separately deferred, unaffected
+by this finding. `docs/validated_operating_ranges.md` should record
+this finding, including the inconclusive/confirmed distinction, not
+just the REASSESS label.
