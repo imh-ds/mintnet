@@ -1,0 +1,11 @@
+isolation_sample_sizes: [750]
+isolation_strength: 0.5
+composed_sample_sizes: [750]
+composed_strength: 0.5
+composed_screening_alpha: 0.001
+max_conditioning_size: 4
+replicates: 20
+isolation_master_seed: 20260829
+composed_master_seed: 20260830
+development_replicates: [0, 9]
+validation_replicates: [10, 19]

@@ -684,6 +684,43 @@ dedicated future charter (new estimator, new DGPs with known discrete
 structure, the same falsification discipline as every other
 mechanism) validating it first.
 
+## mi-native track: conditioning-set architecture (Stage 6a, D-053)
+
+**Branch note**: as of 2026-09-01, `main` is tagged
+`v1-partial-correlation-baseline` and frozen as the complete,
+validated Gaussian/partial-correlation MINT (R1-R6 above). A separate
+branch, `mi-native`, carries forward development of a genuinely
+MI-based mechanism (KSG-1 is validated bivariate-only, Stage 0; the
+live pipeline through `v1-partial-correlation-baseline` uses closed-form
+Fisher-z tests throughout, not MI — see D-003's own disclosed scope
+note). This section tracks `mi-native`-only findings.
+
+**Stage 6a (D-053) — conditioning-dimension requirement, no new
+estimator yet.** Before building a conditional-MI estimator, this
+charter tested whether DPI's own conditioning-set *architecture* (not
+its estimator) needs to change, using the existing Fisher-z primitive
+as the testbed. Finding: a PC-style growing-conditioning-set search
+(size 1, escalate only if nothing prunes, run on MINT's own screened
+candidate graph) **matches or beats full-component conditioning's own
+F1 at every tested N on all five shapes, with zero measured recall
+cost anywhere** — including the composed noisy `p=15` networks, where
+precision improves substantially (`overlap`: `.84`-`.93` to
+`.95`-`.97`) with recall staying at exactly `1.0`. Unlike PC itself
+(D-051), this design does not trade recall for precision, plausibly
+because it only ever runs on pairs that already passed MINT's own
+screening step first. **Dimension requirement for `mi-native`'s own
+future estimator**: most decisions (`55`-`97%` depending on shape)
+resolve at conditioning size `1`, but the composed networks show a
+real minority needing size `3` or more, with a measured, non-trivial
+tail whose true dimension exceeds this charter's own disclosed search
+cap of `4` (`~1-3%` of candidate edges on the composed networks hit
+that cap without resolving). **A single-variable conditional-MI
+estimator (e.g. Runge 2018) is necessary but not sufficient** — the
+future estimator-validation charter must support multivariable
+conditioning (`|S| >= 3`) from the start, or explicitly characterize
+the accuracy cost of whatever cap it chooses. See D-053. No production
+pipeline change was made or authorized by this charter.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

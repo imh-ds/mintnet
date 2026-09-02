@@ -4279,3 +4279,130 @@ own rationale remains untested and is not ruled out as an additional,
 co-occurring contributor — this charter measured one specific
 mechanism, not all plausible ones. `docs/validated_operating_ranges.md`
 should record this finding in its own Comparator benchmarking section.
+
+## D-053: Growing-subset DPI matches or beats full-component DPI everywhere tested, with zero recall cost — but the composed networks need conditioning dimension beyond 3 in a real minority of cases (mi-native track, Stage 6a)
+
+Date: 2026-09-01
+
+Stage: mi-native / Stage 6a (first mi-native charter; no new estimator)
+
+Status: Descriptive, no production pipeline change — per
+`docs/stage6a_charter.md`'s own decision structure, this is a
+diagnostic comparison on the existing Fisher-z partial-correlation
+primitive, run to scope a future conditional-MI estimator, not to
+authorize a change to `compose_screen_then_prune`.
+
+Decision timing: Predeclared before results — the `.01` accuracy
+tolerance, the majority-of-tested-N convention, and the search-depth
+cap of `4` were all fixed in `docs/stage6a_charter.md` itself before
+this run.
+
+Question: Does a PC-style growing-conditioning-set search (test size
+1, escalate only if nothing prunes, using MINT's own screened
+candidate graph as the starting adjacency) resolve at lower dimension
+than the current full-component design, recover any of D-052's own
+passthrough-unconditioned false-positive gap, and reveal the actual
+maximum conditioning dimension this project's validated DGPs require?
+
+Prior specification: `docs/stage6a_charter.md`. Two tiers: isolated
+motifs (triad, hub, 5-node overlapping-triangles, no screening/noise,
+`N in {750, 1500}`) and the composed, noisy `p=15` networks
+(`chain_fork_hub`, `overlap`, identical draws to D-047/D-051/D-052),
+`2,000` replicates per cell, both mechanisms run on identical data.
+
+Evidence: Local run (`results/generated/stage6a_conditioning_architecture/`,
+gitignored), all `18` cells (`5` isolated shapes x `2` N, `2` composed
+shapes x `7` N) `0` errors. `raw_metrics.csv`, `conditioning_sizes.csv`
+(`333,348` candidate-edge rows across both composed shapes), `report.json`,
+`stage6a_report.md`.
+
+| shape | max size used | accuracy reading | recall reading |
+|---|---|---|---|
+| triangle (all 3) | 1 | identical to full-component at both N | identical |
+| hub | 2 | comparable-or-better at both N | no cost |
+| overlap_isolated | 3 | comparable-or-better at both N | no cost |
+| chain_fork_hub (composed) | 4 (cap) | comparable-or-better at 7/7 N | no cost |
+| overlap (composed) | 4 (cap) | comparable-or-better at 7/7 N | no cost |
+
+**The triad control passed exactly as required** (a 3-node component
+has only one other member, so growing-subset search can never test
+anything beyond size 1, and must reproduce full-component DPI's own
+numbers bit-for-bit — it did, at both `N`, a built-in correctness
+check on the new implementation, not just a scientific result).
+
+**On the composed noisy networks — the setting that actually matters —
+precision improves substantially and consistently, with zero measured
+recall cost at any tested N, on either shape.** `overlap`: precision
+`.838`-`.927` (full-component) to `.946`-`.967` (growing-subset) across
+the whole `N` grid, SHD falling by roughly half to three-quarters at
+every `N` (e.g. `N=750`: `2.089` to `.545`); F1 `.909`-`.959` to
+`.971`-`.983`. `chain_fork_hub`: a smaller but consistent gain,
+precision `.913`-`.939` to `.921`-`.947`, F1 `.951`-`.966` to
+`.956`-`.971`. **Recall stayed at exactly `1.0000` for growing-subset
+DPI at every single composed-tier cell** — the same perfect recall
+full-component DPI already had. This is a meaningful, non-obvious
+result: growing-subset DPI uses the identical OR-rule logic PC's own
+skeleton search uses (D-051's own explanation for PC's precision
+advantage), but does **not** show PC's own weak-edge recall cost here.
+The plausible reason (not directly tested, but consistent with the
+architecture): growing-subset DPI only ever runs on pairs that already
+passed MINT's own unconditional screening step first — unlike PC,
+which tests every pair from scratch — so it inherits screening's own
+recall-preserving property that PC never had access to.
+
+**Dimension finding, the charter's own central deliverable, from the
+full per-candidate-edge distribution (not just the shape-level max):**
+the overwhelming majority of decisions resolve at size `1`
+(`96.8%` of all `127,050` chain_fork_hub candidate-edge decisions;
+`55.6%` of all `206,298` overlap candidate-edge decisions). `overlap`
+has a real secondary mass at size `3` (`40.2%` of decisions) — the
+5-node two-triangle structure's own genuine 3-variable conditioning
+need, matching `overlap_isolated`'s own clean-motif finding exactly.
+**The search-depth cap (`4`) was reached on both composed shapes, not
+just theoretically but at a measurable rate**: `1.30%` of
+chain_fork_hub's candidate edges and `2.87%` of overlap's landed at
+size `4`, and among those, `140` (`chain_fork_hub`) and `3,473`
+(`overlap`) — roughly `8.5%` and `58.7%` of their own size-`4` group
+respectively — were genuine cap-truncations (`cap_reached=True`: the
+component still had untested larger subsets when the search stopped),
+not cases that happened to resolve exactly at `4`. **This means the
+true required conditioning dimension on the composed noisy networks is
+not cleanly bounded at `3`, or even at `4`, for a real minority of
+candidate edges** — a long tail exists whose true dimension this
+charter's own disclosed cap did not measure.
+
+Decision: **Descriptive; no change to the production pipeline.**
+Growing-subset DPI is a strong candidate for a future implementation
+charter on the Gaussian baseline itself (would need its own accuracy
+gate, not assumed safe from a diagnostic comparison alone, per this
+charter's own non-goals) — but this decision's primary purpose is
+scoping `mi-native`: **most decisions need only single-variable
+conditioning, but a real (if small) minority on the composed networks
+need dimension `3` or more, with an uncharacterized tail beyond `4`.**
+
+Rationale: The precision gain concentrating on `overlap` and tracking
+almost exactly the two shapes D-052 flagged (passthrough-unconditioned
+edges being D-052's own measured problem, MATERIAL specifically on
+`overlap`) is consistent, not coincidental — growing-subset DPI
+examines every connected component, not just validated cliques, so it
+directly closes the exact gap D-052 measured, and the size of the
+precision gain on each shape tracks the size of D-052's own
+passthrough share on that same shape.
+
+Consequences: For `mi-native`'s own next charter (the conditional-MI
+estimator itself): a single-variable conditional-MI-plus-local-
+permutation method (Runge, 2018) would correctly handle the large
+majority of real decisions, but **cannot be the only mechanism built** —
+the composed networks demonstrably need multivariable conditioning
+(dimension `>= 3`, with a measured, non-trivial tail beyond `4`) for a
+real share of edges, concentrated on shapes with genuine multi-way
+shared-node structure like `overlap`. The estimator-validation charter
+must plan for at least `|S| <= 3` support from the start, and should
+either extend the cap further or explicitly characterize the accuracy
+cost of whatever cap is chosen, rather than assume `4` is safe just
+because it was this charter's own arbitrary starting choice. Separately,
+flagging for a future (not this charter's own) decision: growing-subset
+DPI's strong, recall-free precision gain on the *existing* Gaussian
+baseline is itself worth a dedicated implementation charter on `main`,
+independent of `mi-native`'s own progress — noted here, not acted on.
+`docs/validated_operating_ranges.md` should record this finding.
