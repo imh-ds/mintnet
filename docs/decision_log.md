@@ -4708,3 +4708,53 @@ result itself is now clean regardless of the full story behind why
 pattern, but worth revisiting if a future charter needs to reason about
 *why* particular DGPs calibrate differently, not just *whether* they
 do.
+
+## D-057: Power confirmed at the calibrated setting (k_CMI=40, k_perm=3) — |S|=3 needs N>=750, not N=300, for reliable detection (mi-native, Stage 6d Stage C)
+
+Date: 2026-09-03
+
+D-056's own required next action before any Stage-1-equivalent
+composition charter: confirm power (ability to detect a genuine direct
+edge) is not lost at the newly calibrated `k_perm=3` setting. Run as 8
+isolated GitHub Actions shards (`mintnet.experiments.stage6c_c`, same
+sharding pattern as Stage B), `N in {300, 750}`, `200` replicates per
+condition, against the four `_alt` (known-true-edge) conditions from
+Stage 6b's own registry.
+
+**Result: power holds cleanly at `|S| in {0,1,2}` — 100% rejection at
+both `N=300` and `N=750`, both `alpha in {.05,.01}`, no exceptions.**
+**`|S|=3` (the hardest case, the overlapping-triangles DGP) is the one
+exception, and it is a narrow, expected one, not a new problem**:
+`77.5%` power at `N=300`/`alpha=.05` — just under the charter's own
+`>=.80` threshold — climbing to `99%` at `N=750`. At `alpha=.01`:
+`50%` at `N=300` climbing to `95%` at `N=750`. This is the same
+pattern D-054's own first-pass validation already found for `|S|=3`
+(`74% -> 98% -> 100%` across `N=300/500/750` there) — consistent
+across two independent runs with two different local-permutation
+constructions, which is itself informative: this is a genuine property
+of detecting a direct edge at conditioning depth `3` on this
+composed DGP, not an artifact of either construction.
+
+Rationale: per Stage 6c's own charter, Stage C is diagnostic once Stage
+B PROCEEDs, not a second gate that can re-block the track — and this
+project's own precedent (D-054, and the original Stage 0/1 operating-
+range documentation for other components) treats "needs a higher `N`
+floor for a specific hard case" as an operating-range characteristic
+to document, not a REASSESS trigger, provided the shortfall is narrow,
+consistent with prior evidence, and resolves cleanly at a higher `N`
+already in scope. All three hold here (`77.5%` vs. `80%` is a `2.5`
+point miss, matches D-054's own prior finding almost exactly, and
+resolves to `99%` at `N=750`).
+
+Consequences: `mi-native`'s calibrated local-permutation test
+(`k_CMI=40`, `k_perm=3`) is validated on both Type-I error (D-056) and
+power (this entry), closing the Stage 6b/6c/6d estimator-validation
+arc. **Operating-range note for any future composition charter**:
+budget `N>=750` where `|S|=3`-depth conditioning is expected to matter
+for detecting a true edge at `alpha=.05`; `N=300` is borderline for
+that specific case (fine for `|S| in {0,1,2}` at either `N`). `docs/
+validated_operating_ranges.md` should record this alongside D-056.
+`mi-native` may now plan the Stage-1-equivalent composition charter
+D-053/D-054/D-056 all named as the next step, reusing the growing-
+subset DPI architecture from Stage 6a (D-053) and this calibrated
+estimator/test pair.

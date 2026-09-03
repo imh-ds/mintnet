@@ -806,9 +806,28 @@ identical label. `k_perm=10` is also fully defensible; `k_perm in
 {5,20,adaptive}` each have scattered, non-systematic misses and are not
 the selected default. **`mi-native` now has a validated, calibrated
 significance test** (`k_CMI=40`, `k_perm=3`) — the block from D-055 is
-lifted. Stage C (power at this calibrated setting) has not yet been run
-and remains before any Stage-1-equivalent composition charter. See
-D-056.
+lifted. See D-056.
+
+**Stage 6d Stage C (D-057) — power confirmed; `|S|=3` needs `N>=750`.**
+At the calibrated setting (`k_CMI=40`, `k_perm=3`): **100% power at
+`|S| in {0,1,2}`** for both `N=300` and `N=750`, both `alpha in
+{.05,.01}`. **`|S|=3` (overlapping-triangles DGP, the hardest case)
+needs `N=750`, not `N=300`, for reliable detection**: `77.5%` power at
+`N=300`/`alpha=.05` (just under the `>=.80` threshold) climbing to
+`99%` at `N=750`; `50%` at `N=300`/`alpha=.01` climbing to `95%` at
+`N=750`. This matches D-054's own earlier finding for `|S|=3` almost
+exactly (`74% -> 98% -> 100%` across `N=300/500/750` there, under the
+pre-fix construction) — consistent across two different local-
+permutation constructions, so this is a genuine property of detecting
+a direct edge at conditioning depth `3` on this DGP, not a construction
+artifact. **Operating-range note**: budget `N>=750` wherever `|S|=3`-
+depth conditioning is expected to matter for edge detection at
+`alpha=.05`; `N=300` is borderline for that specific case only (fine
+for `|S| in {0,1,2}` at either `N`). This closes the Stage
+6b/6c/6d estimator-validation arc — `mi-native` may now plan the
+Stage-1-equivalent composition charter (D-053/D-054/D-056's own named
+next step), reusing Stage 6a's growing-subset DPI architecture and
+this calibrated estimator/test pair. See D-057.
 
 ## Maintenance
 
