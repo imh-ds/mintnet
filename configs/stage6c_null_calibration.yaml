@@ -14,8 +14,8 @@ stage_b:
   master_seed: 60300
 
 stage_c:
-  k_cmi: 20        # overwritten once Stage B's own recommendation is confirmed
-  k_perm_label: kperm5  # overwritten once Stage B's own recommendation is confirmed
+  k_cmi: 40             # Stage 6d/D-056's own calibrated setting
+  k_perm_label: kperm3  # Stage 6d/D-056's own calibrated setting (smallest defensible k_perm)
   sample_sizes: [300, 750]
   replicates: 200
   permutations: 199

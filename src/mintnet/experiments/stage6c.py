@@ -381,29 +381,54 @@ def _run_stage_c_cell(task: tuple[dict, int, int, StageCConfig]) -> list[dict[st
     return rows
 
 
-def run_stage_c(config: StageCConfig, output_dir: Path, max_workers: int | None = None) -> pd.DataFrame:
+_STAGE_C_COLUMNS = (
+    "stage", "k_perm_label", "k_perm_resolved", "k_cmi", "label", "s", "n",
+    "replicate", "seed", "status", "error", "estimate", "p_value",
+)
+
+
+def run_stage_c(
+    config: StageCConfig,
+    output_dir: Path,
+    max_workers: int | None = None,
+    labels: tuple[str, ...] | None = None,
+    sample_sizes: tuple[int, ...] | None = None,
+    write_report: bool = True,
+) -> pd.DataFrame:
+    """`labels`/`sample_sizes` restrict which cells run, for a
+    single-cell CI shard -- task selection is filtered down from the
+    full (ALT_CONDITIONS x config.sample_sizes) grid, never regenerated
+    from the filtered subset, so a shard's seeds match what an
+    unsharded run would draw for that same cell (seeds already key off
+    `condition_index`/`n`/`replicate`, all full-grid quantities)."""
     import os
     from concurrent.futures import ProcessPoolExecutor
 
     started = time.perf_counter()
+    target_labels = set(labels) if labels is not None else None
+    target_sizes = set(sample_sizes) if sample_sizes is not None else None
+
     tasks = [
         (condition, condition_index, n, config)
         for condition_index, condition in enumerate(ALT_CONDITIONS)
         for n in config.sample_sizes
+        if (target_labels is None or str(condition["label"]) in target_labels)
+        and (target_sizes is None or n in target_sizes)
     ]
-    if max_workers is None:
-        max_workers = min(len(tasks), max(1, (os.cpu_count() or 1) - 1))
 
     rows: list[dict[str, object]] = []
-    if max_workers > 1 and len(tasks) > 1:
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for cell_rows in executor.map(_run_stage_c_cell, tasks):
-                rows.extend(cell_rows)
-    else:
-        for task in tasks:
-            rows.extend(_run_stage_c_cell(task))
+    if tasks:
+        if max_workers is None:
+            max_workers = min(len(tasks), max(1, (os.cpu_count() or 1) - 1))
+        if max_workers > 1 and len(tasks) > 1:
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                for cell_rows in executor.map(_run_stage_c_cell, tasks):
+                    rows.extend(cell_rows)
+        else:
+            for task in tasks:
+                rows.extend(_run_stage_c_cell(task))
 
-    raw = pd.DataFrame(rows)
+    raw = pd.DataFrame(rows, columns=_STAGE_C_COLUMNS) if not rows else pd.DataFrame(rows)
     resolved = {
         "k_cmi": config.k_cmi,
         "k_perm_label": config.k_perm_label,
@@ -414,6 +439,11 @@ def run_stage_c(config: StageCConfig, output_dir: Path, max_workers: int | None 
         "master_seed": config.master_seed,
     }
     _write_evidence(output_dir, raw, resolved, time.perf_counter() - started, config.source_path)
+    if not write_report:
+        return raw
+    from mintnet.experiments.stage6c_reporting import write_stage_c_report
+
+    write_stage_c_report(raw, config, output_dir)
     return raw
 
 
