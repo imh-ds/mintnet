@@ -775,6 +775,41 @@ as unverified against Runge (2018)'s reference implementation), not a
 tunable parameter within that construction. See D-055 for the full
 per-cell evidence and next-step priority order.
 
+**Correction (Stage 6d, superseding this paragraph's own speculation
+above)**: the "`|S|=3` calibrates better because it's a denser DGP with
+less local-neighborhood exhaustion" explanation was checked directly
+(`scripts/measure_permutation_exhaustion.py`, requested by independent
+peer review before trusting the fix below) and found **wrong** —
+exhaustion rate actually *increases* with `|S|` (`s3_null` has the
+highest rate of the three conditions, not the lowest). The `|S|`
+gradient in D-055's results is not explained by exhaustion frequency
+alone; left as an open, disclosed question, not resolved.
+
+**Stage 6d (D-056) — local-permutation construction fixed to match
+Runge/tigramite's own reference implementation; PROCEED.** Comparing
+`mintnet.mi.cmiknn`'s shuffle directly against
+`tigramite.independence_tests.cmiknn.CMIknn`'s own
+`get_shuffle_significance`/`get_restricted_permutation` found three
+discrepancies, now fixed: self-inclusive Z-neighbor lists (was
+excluded), Chebyshev distance for the Z-neighbor query (was Euclidean),
+and — the likely primary cause of D-055's finding — reusing the
+last-tried neighbor on local exhaustion rather than falling back to a
+uniformly random point from the entire dataset (which could be
+arbitrarily far in Z-space, corrupting the local structure the shuffle
+exists to preserve). Re-running Stage 6c's own identical design (same
+grid, same 400 replicates/cell, same gate) against the fix: **`k_perm=3`
+is defensible across every tested `N in {150,300,750}` x `|S| in
+{1,2,3}` x `alpha in {.05,.01}` cell (18/18)** — D-055's own worst cell
+(`kperm3`/`s2_null`, flat `.11`-`.1175` against a `.05` target,
+unmoved by `N`) is now `.0325`-`.0525` across that same range under the
+identical label. `k_perm=10` is also fully defensible; `k_perm in
+{5,20,adaptive}` each have scattered, non-systematic misses and are not
+the selected default. **`mi-native` now has a validated, calibrated
+significance test** (`k_CMI=40`, `k_perm=3`) — the block from D-055 is
+lifted. Stage C (power at this calibrated setting) has not yet been run
+and remains before any Stage-1-equivalent composition charter. See
+D-056.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

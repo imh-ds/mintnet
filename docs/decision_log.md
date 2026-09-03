@@ -4610,3 +4610,101 @@ instead. `docs/validated_operating_ranges.md` should record this
 finding as a confirmed, replicated defect — not an inconclusive result
 — and note that no CMI-based significance test in this codebase is
 validated for use until this is resolved.
+
+## D-056: Local-permutation test PROCEEDs after matching Runge/tigramite's reference construction — k_perm=3 controls Type-I error everywhere tested (mi-native, Stage 6d)
+
+Date: 2026-09-03
+
+D-055's own required next step was a direct comparison of
+`mintnet.mi.cmiknn`'s local-permutation shuffle against Runge (2018)'s
+reference implementation (`tigramite.independence_tests.cmiknn.CMIknn`).
+That comparison (this session, with independent peer review of the
+diagnosis before re-running) found three structural discrepancies:
+(1) the reference includes each point itself in its own Z-neighbor
+list (self-inclusive); the prior code excluded it. (2) **Most likely
+primary cause**: on local-neighborhood exhaustion, the reference reuses
+the last-tried neighbor (accepting a rare collision) rather than
+reaching outside the neighborhood; the prior code instead fell back to
+a uniformly random point from the *entire* dataset, arbitrarily far in
+Z-space. (3) The reference uses Chebyshev/max-norm distance for the
+Z-neighbor query, matching this module's own `estimate_cmiknn`
+convention; the prior code used `scipy`'s Euclidean default. All three
+are now fixed in `mintnet.mi.cmiknn._z_neighbors`/`_restricted_permutation`.
+
+**Peer-review addendum, before re-running**: an independent review of
+the diagnosis (not just the fix) flagged that the causal story should
+be measured, not inferred — specifically, whether local-neighborhood
+exhaustion actually correlates with the cells that were most
+miscalibrated in D-055. A cheap diagnostic
+(`scripts/measure_permutation_exhaustion.py`, skips `estimate_cmiknn`
+entirely, measures only the neighbor-matching bookkeeping) was run
+before the re-validation. Result: **partially confirms, partially
+refutes** the causal story as originally stated. Within a fixed `|S|`,
+exhaustion rate tracks `k_perm` exactly as expected (smaller `k_perm`
+exhausts far more often), and the fixed construction's exhaustion rate
+is lower than the prior construction's fallback rate at *every* tested
+cell — consistent with the fix doing what it claims. But *across*
+`|S|`, exhaustion rate **increases** with `|S|` (`s3_null` has the
+highest rate of the three conditions, not the lowest) — the opposite
+of this session's own speculative claim when proposing the fix (that
+`|S|=3`'s better D-055 calibration was because it was "denser, less
+exhaustion"). That specific claim was wrong. The `|S|` gradient in
+D-055's own results is therefore not fully explained by exhaustion
+frequency alone; something else about the DGP/pair matters too, not
+yet identified — noted here rather than silently dropped, since it
+means this session's causal story was incomplete even though the fix
+itself worked (see result below).
+
+**Re-validation (Stage 6d, docs/stage6d_charter.md): identical design
+to Stage 6c (same grid, same 400 replicates/cell, same gate), rerun
+against the corrected construction only, via the same 60-shard GitHub
+Actions dispatch.**
+
+**Verdict: PROCEED.** `k_perm=3` is defensible across every tested `N
+in {150,300,750}` x `|S| in {1,2,3}` x `alpha in {.05,.01}` cell —
+18/18 cells pass, several with rate exactly at or very near nominal
+(e.g. `s2_null`/`N=150`/`alpha=.05`: `13/400 = .0325`; `s1_null`/`N=750`/
+`alpha=.01`: `1/400 = .0025`). `k_perm=10` is also fully defensible.
+`k_perm in {5, 20, adaptive}` each have a small number of scattered
+misses (mildly conservative or liberal, none matching D-055's
+flat-with-N liberal-bias signature) and are not selected as the
+default per the charter's own smallest-defensible-value preference.
+`|S|=0` (global permutation, unaffected by this fix by construction)
+is essentially unchanged from D-055's own reading, including its one
+recurring narrow miss at `N=300`/`alpha=.01` — consistent with the fix
+targeting exactly the mechanism it was supposed to (local matching),
+not incidentally changing the unconditional case.
+
+**Direct before/after, matching the peer reviewer's own predicted
+diagnostic framework**: D-055's worst cell (`kperm3`/`s2_null`,
+flat ~`.11`-`.1175` from `N=150` to `N=750` against a `.05` target) is
+now `.0325`-`.0525` across that same `N` range under the identical
+`k_perm=3` label — a clean move to nominal, not a partial improvement,
+which per the reviewer's own stated interpretation ("if the previously
+liberal cells move down toward 5% with Wilson intervals overlapping
+the target, that's strong evidence the defect was indeed the
+permutation implementation") is the strong-confirmation outcome, not
+the ambiguous one.
+
+Rationale: this is the outcome the project's own falsification
+discipline is built to produce — a genuine defect was found, chartered
+honestly as a REASSESS rather than smoothed over, fixed at the
+construction level (not tuned around), and the fix is confirmed by a
+clean, properly-powered before/after on the identical design, with an
+independent peer review's own request for measured (not inferred)
+mechanism evidence incorporated before treating the fix as validated.
+
+Consequences: `mi-native` is unblocked from D-053/D-054's own named
+next step — a Stage-1-equivalent charter composing this estimator and
+test into a conditional-independence retain/prune mechanism, using
+`k_perm=3` (`k_CMI=40`) as the operational default. Stage C (power at
+the calibrated setting) was not yet run under this corrected
+construction/`k_perm` and remains the charter's own next action before
+that composition charter, per `docs/stage6d_charter.md`. The
+unexplained `|S|`-vs-exhaustion-rate discrepancy noted above is left
+as an open, disclosed loose end — not blocking, since the calibration
+result itself is now clean regardless of the full story behind why
+`|S|=3`'s exhaustion rate pattern doesn't match its calibration
+pattern, but worth revisiting if a future charter needs to reason about
+*why* particular DGPs calibrate differently, not just *whether* they
+do.
