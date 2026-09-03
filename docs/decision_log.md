@@ -4758,3 +4758,61 @@ validated_operating_ranges.md` should record this alongside D-056.
 D-053/D-054/D-056 all named as the next step, reusing the growing-
 subset DPI architecture from Stage 6a (D-053) and this calibrated
 estimator/test pair.
+
+## D-058: Stage 7 isolation-tier timing measurement — real per-replicate costs measured, and GitHub Actions' 256-shard matrix limit requires multiple dispatches for the real evidence run (mi-native, Stage 7 feasibility)
+
+Date: 2026-09-03
+
+`docs/stage7_charter.md`'s own "Compute-cost disclosure" section
+required measuring real wall-clock cost of the entire growing-subset-
+DPI-with-CMI pipeline per replicate, on each isolation-tier motif,
+before finalizing any replicate count for the charter's own evidence
+run — not assuming affordability. Implemented `growing_subset_dpi_mi`
+(`mintnet.pipeline`, additive alongside the existing Fisher-z
+`growing_subset_dpi`) and a dedicated timing runner
+(`mintnet.experiments.stage7_isolation_timing`), sharded to one
+replicate per GitHub Actions shard for maximum parallelism (5 motifs
+x 2 N x 20 replicates = 200 shards, all succeeded, ~49 minutes
+wall-clock).
+
+**Measured per-replicate cost (mean seconds), at the calibrated
+setting (`k_CMI=40`, `k_perm=3`, `permutations=199`):**
+
+| motif | N=750 | N=1500 | mean tests/replicate |
+|---|---|---|---|
+| triad (all three) | ~21-22s | ~68-70s | 3 |
+| hub | ~85s | ~277s | ~12 |
+| overlap | ~364s (6min) | ~1112s (18.5min) | ~47-50 |
+
+`overlap` (the `|S|=3` shape) dominates cost by more than an order of
+magnitude over the other motifs, driven directly by its own
+significance-test count, not per-test cost alone — consistent with a
+true edge costing the full combinatorial subset count up to the search
+cap when it never triggers an early prune (as expected for a real
+direct edge), while most false edges resolve in a single test.
+
+**A second, independent finding, not about the mechanism itself**:
+GitHub Actions hard-caps a single matrix dispatch at 256 jobs. This
+measurement's own 200-shard dispatch was already close to that
+ceiling. At full one-replicate-per-shard granularity, `5 motifs x 2 N
+x R replicates <= 256` caps `R` at approximately `25` — well below
+Stage 1's own original 500-replicate (`250`/`250` development/
+validation split) precedent for a falsification gate of this kind.
+
+Rationale: this is an infrastructure/feasibility finding, not a
+mechanism result, and is recorded here anyway per this project's own
+standing discipline of disclosing scope-affecting findings rather than
+absorbing them silently into a later run's own numbers.
+
+Consequences: the real Stage 7 evidence run will use **multiple
+separate GitHub Actions dispatches, each with a distinct `master_seed`
+and its own complete, internally-consistent replicate range (e.g. `25`
+replicates each), combined post-hoc** rather than one dispatch — this
+preserves full one-replicate-per-shard parallelism (chosen over
+batching multiple replicates per shard, which risks exceeding
+GitHub's own 6-hour per-job timeout on the `overlap`/`N=1500` cell
+specifically, and over simply accepting a smaller `R`, which would
+weaken the gate's own statistical resolution relative to Stage 1's
+precedent). Implementing the multi-dispatch combination tooling and
+choosing the final total replicate count are the next concrete steps,
+not yet done as of this entry.
