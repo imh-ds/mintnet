@@ -4816,3 +4816,32 @@ weaken the gate's own statistical resolution relative to Stage 1's
 precedent). Implementing the multi-dispatch combination tooling and
 choosing the final total replicate count are the next concrete steps,
 not yet done as of this entry.
+
+**Correction (same day, appended, not silently edited)**: implementing
+the real evidence runner surfaced that this entry's own timing
+measurement used the wrong motif set. The frozen charter's own
+isolation-tier gate is `chain`, `fork`, and `triangle` (`balanced`/
+`moderate`/`strong`) — identical to Stage 1's own motifs. This entry's
+own measurement instead used `triad` (`balanced`/`moderate`/`strong`),
+`hub`, and `overlap` — Stage 6a's own isolation-tier motif set, not
+this charter's. `triad` and `triangle` are the same fixture (identical
+function), so that portion of the measurement is directly valid.
+`chain`/`fork` were never measured directly, but share `triad`'s exact
+3-node, pool-size-1 structure (confirmed while building the real
+runner: every candidate pair in a 3-node motif has exactly one
+possible conditioning set, with no combinatorial search at all), so
+their cost is safely inferable from `triad`'s own measured numbers
+(~`21`-`70`s/replicate) rather than requiring a separate remeasurement.
+`hub` and `overlap` were never part of this charter's own isolation-
+tier gate; their (expensive) cost data remains valid and useful for a
+future composed-tier charter, not for this one. Net effect: the real
+gate's own per-replicate cost is roughly `5x` cheaper than this
+entry's own total suggested, and the pool-size-1 structure additionally
+means the full `9`-value `alpha` grid can be swept for free by
+re-thresholding a single computed p-value per pair, rather than
+rerunning the significance test once per `alpha` — eliminating the
+`9x` cost multiplier this entry's own multi-dispatch planning implicitly
+assumed. `R=500` (Stage 1's own exact replicate count) fits in a
+single GitHub Actions dispatch as a result; see the Stage 7 isolation-
+tier evidence runner's own implementation
+(`mintnet.experiments.stage7_isolation`) for the corrected design.
