@@ -747,6 +747,34 @@ next step (same `N`/`k`/`k_perm`/`B`, replicate count only increased).
 mechanism until a replicate-count follow-up resolves Type-I error
 either way. See D-054.
 
+**Stage 6c (D-055) — local-permutation test's Type-I error control is a
+confirmed, replicated defect, not an artifact of replicate count.** The
+follow-up D-054 called for (400 replicates/cell, not 50; Wilson 95%
+CIs reported per cell; `k_perm in {3,5,10,20,adaptive}` swept
+independently of `k_CMI`, fixed at `40`) came back **REASSESS with a
+clear, non-noise pattern**, not the earlier ambiguity. `|S|=0`
+(unconditional, no local-neighborhood matching) is close to calibrated.
+**`|S| in {1,2}` are liberal at `alpha=.05` under every swept `k_perm`,
+and the excess rejection rate does not shrink with `N`** (e.g. `kperm3`
+at `|S|=2`: `.1175 -> .11 -> .11` from `N=150` to `N=750` — flat, the
+signature of a real construction bias, not finite-sample noise).
+`|S|=3` is the best-behaved conditional case, counter to the naive
+expectation that higher-dimensional conditioning should calibrate
+worse, not better — plausibly a DGP-density effect (overlapping-
+triangles' own local neighborhood structure vs. the fork/hub fixtures'),
+flagged as a pattern to investigate rather than a general claim.
+**No `(k_CMI, k_perm)` regime in the tested grid controls Type-I error
+across the full `|S| in {0,1,2,3}` range `mi-native` needs (D-053).**
+**No CMI-based significance test in this codebase is validated for use
+until this is resolved** — this is a harder block than D-054's, since
+D-054 left open the possibility that more replicates alone would
+confirm calibration; that possibility is now closed. The most likely
+locus of the defect is `mintnet.mi.cmiknn._local_permutation`'s own
+matching construction (already disclosed in its own module docstring
+as unverified against Runge (2018)'s reference implementation), not a
+tunable parameter within that construction. See D-055 for the full
+per-cell evidence and next-step priority order.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

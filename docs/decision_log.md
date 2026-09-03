@@ -4517,3 +4517,96 @@ or a parametric-tail approach) remain separately deferred, unaffected
 by this finding. `docs/validated_operating_ranges.md` should record
 this finding, including the inconclusive/confirmed distinction, not
 just the REASSESS label.
+
+## D-055: Local-permutation test is systematically liberal at |S| in {1, 2} regardless of k_perm within the tested range — a confirmed defect, not an artifact of replicate count (mi-native, Stage 6c)
+
+Date: 2026-09-03
+
+D-054's REASSESS was inconclusive at 50 replicates/cell. Stage 6c
+(`docs/stage6c_charter.md`) re-ran the null-calibration question
+properly powered — 400 replicates/cell, Wilson 95% confidence
+intervals reported per cell, `k_perm in {3, 5, 10, 20, adaptive}`
+swept independently of `k_CMI` (fixed at `40`, Stage A's own
+recommendation from a separate point-estimate-only sensitivity check),
+across `N in {150, 300, 750}` and `|S| in {0, 1, 2, 3}` — 48 null
+cells, run as 60 isolated GitHub Actions shards (`sharded_benchmark.yml`
+dispatched against the new `mintnet.experiments.stage6c_b` entry
+point) rather than local multiprocessing, after a local attempt at
+this same sweep ran into severe multi-process contention on a single
+machine (see this session's own record of that operational detour).
+
+**Verdict: REASSESS. Confirmed, not inconclusive** — every one of the
+5 swept `k_perm` values fails the charter's own band-or-CI-overlap gate
+somewhere in the grid, and the failure pattern is systematic rather
+than scattered noise:
+
+- **`|S| = 0` (unconditional, global permutation) is close to
+  calibrated**: rejection rates `.03`-`.0425` at `alpha=.05` (nominal
+  band `[.03,.07]`), one narrow miss at `alpha=.01`/`N=300` (`.02`,
+  CI `[.0102,.039]` — just barely excludes `.01`). This is the
+  *simplest* case (no `k_perm`, no local-neighborhood matching at
+  all), and it is the best-behaved — consistent with the miscalibration
+  living specifically in the local-permutation mechanism, not in
+  `estimate_cmiknn` itself or in the general permutation-testing
+  approach.
+- **`|S| = 1` and `|S| = 2` (fork/hub DGPs) are liberal at `alpha=.05`
+  almost everywhere**, and this does **not** shrink reliably with `N`:
+  `kperm3` stays at `.11`-`.13` rejection rate at `|S|=2` from `N=150`
+  through `N=750` (nominal target: `.05`) — flat, not narrowing, which
+  is the signature of a real bias in the permutation construction, not
+  finite-sample noise that a bigger `N` would fix. Larger `k_perm`
+  values reduce but do not eliminate this: `kperm20` still shows
+  `.05`-`.085` at `|S|=1,2` depending on `N`; the `adaptive` rule
+  (scaling `k_perm` with `N`) does no better than the best fixed value.
+- **`|S| = 3` (overlapping-triangles DGP) is the best-behaved
+  conditional case**, close to nominal at `alpha=.05` for every
+  `k_perm`, with isolated `alpha=.01` misses (e.g. `kperm20`/`N=150`:
+  `0/400` rejections, band excludes `0`). This is the opposite of the
+  naive expectation (more conditioning dimensions should be harder to
+  calibrate, not easier) and is most plausibly a DGP-density effect
+  (the overlapping-triangles fixture's own local neighborhood
+  structure differs from the fork/hub fixtures') rather than evidence
+  that high-dimensional conditioning is actually easier in general —
+  flagged here as a pattern to investigate, not a general claim.
+
+**No `(k_CMI, k_perm)` regime in the swept grid controls Type-I error
+everywhere `mi-native` needs it to** (D-053's own scope: `|S|` up to
+`3`). The pattern — flat-with-N liberal bias concentrated at
+intermediate conditioning dimension, absent at `|S|=0` and mild at
+`|S|=3` — points at the local-permutation *matching* step itself
+(`mintnet.mi.cmiknn._local_permutation`'s greedy random matching among
+each point's `k_perm` nearest `Z`-neighbors) as the mechanism to
+revise, not simply a parameter to retune within its current form. The
+charter's own module-docstring disclosure — that this construction "is
+not verified against the original paper's own reference implementation"
+— is the leading candidate explanation; a literature/implementation
+comparison against Runge's own reference code is the most direct next
+diagnostic, ahead of inventing a new construction from scratch.
+
+Rationale: this is exactly the kind of finding the charter's own
+loosened gate (band-or-CI-overlap, replacing D-054's strict-band-only
+comparison) was designed to distinguish from D-054's ambiguity — with
+400 replicates, cells that are truly miscalibrated show CIs that
+clearly exclude the nominal rate and stay excluded across `N`, which
+is what happened here, versus D-054's cells whose CIs comfortably
+contained the nominal rate. The project's own falsification discipline
+applies without exception: this is not treated as "close enough" or
+smoothed over by picking the least-bad `k_perm` and proceeding.
+
+Consequences: Per `docs/stage6c_charter.md`'s own consequences section,
+this REASSESS blocks `mi-native` from any Stage-1-equivalent
+composition charter until the local-permutation construction itself is
+revised (not just retuned) and re-validated. Stage C (power at a
+calibrated setting) was not run, since no calibrated setting exists to
+test — per the charter, Stage C is only decision-relevant contingent on
+a Stage B PROCEED. Concrete next steps, in priority order: (1) compare
+`_local_permutation`'s own construction directly against Runge (2018)'s
+reference implementation/description for a structural discrepancy: (2)
+if none is found, investigate whether the fork/hub DGPs' own local
+density structure (versus the overlapping-triangles DGP's) explains why
+`|S| in {1,2}` miscalibrate but `|S|=3` does not, which would point at
+a data-adaptive (not fixed or `N`-scaled) `k_perm` rule as the fix
+instead. `docs/validated_operating_ranges.md` should record this
+finding as a confirmed, replicated defect — not an inconclusive result
+— and note that no CMI-based significance test in this codebase is
+validated for use until this is resolved.
