@@ -1,6 +1,6 @@
 import numpy as np
 
-from mintnet.mi.cmiknn import estimate_cmiknn, local_permutation_test
+from mintnet.mi.cmiknn import _restricted_permutation, _z_neighbors, estimate_cmiknn, local_permutation_test
 from mintnet.mi.ksg import estimate_ksg_mi
 
 
@@ -60,6 +60,45 @@ def test_local_permutation_test_rejects_a_genuine_direct_edge() -> None:
     result = local_permutation_test(x1, x2, x3, k=20, permutations=99, rng=rng)
 
     assert result.p_value <= 0.05
+
+
+def test_z_neighbors_are_self_inclusive() -> None:
+    """D-055's fix, point 1: matches Runge/tigramite's own reference --
+    each point's own index must appear in its own neighbor list (a
+    point is its own nearest neighbor at distance 0), not excluded."""
+    rng = np.random.default_rng(5)
+    z = rng.normal(size=(50, 2))
+    neighbors = _z_neighbors(z, k_perm=5)
+    assert all(i in neighbors[i] for i in range(50))
+
+
+def test_restricted_permutation_never_reaches_outside_the_local_neighborhood() -> None:
+    """D-055's fix, point 2: every assigned index must come from the
+    point's own neighbor list -- unlike the prior version, which fell
+    back to a uniformly random pick from the entire dataset (possibly
+    far in Z-space) whenever local candidates were exhausted."""
+    rng = np.random.default_rng(6)
+    n = 30
+    z = rng.normal(size=(n, 1))  # 1D Z and small k_perm forces frequent exhaustion
+    neighbors = _z_neighbors(z, k_perm=3)
+
+    for _ in range(20):
+        perm = _restricted_permutation(neighbors, rng)
+        assert len(perm) == n
+        for i in range(n):
+            assert perm[i] in neighbors[i], "assigned index must be one of the point's own k_perm neighbors"
+
+
+def test_restricted_permutation_can_collide_rather_than_reach_globally() -> None:
+    """With k_perm=1 (no alternative but self), every point maps to
+    itself -- the identity permutation, not an error and not a global
+    fallback -- confirming the 'reuse the last one anyway' behavior
+    rather than raising or substituting a distant point."""
+    rng = np.random.default_rng(7)
+    z = rng.normal(size=(20, 1))
+    neighbors = _z_neighbors(z, k_perm=1)
+    perm = _restricted_permutation(neighbors, rng)
+    assert np.array_equal(perm, np.arange(20))
 
 
 def test_local_permutation_test_unconditional_rejects_independent_data_rarely() -> None:

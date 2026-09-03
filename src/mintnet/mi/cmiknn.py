@@ -5,15 +5,49 @@ per-dimension standardization, Chebyshev/max-norm distance, and
 self-inclusive open-ball neighbor counting via the epsilon-minus
 radius trick. Paired with a local-permutation significance test
 (Runge, 2018) for conditional independence testing, since CMIknn has
-no closed-form null distribution. See docs/stage6b_charter.md.
+no closed-form null distribution. See docs/stage6b_charter.md and
+docs/stage6d_charter.md.
 
-Implementation-time disclosure: the local-permutation shuffle below is
-a good-faith, documented construction of Runge's general idea (bias a
-permutation of Y toward each point's own nearest Z-neighbors, so the
-Y-Z and X-Z marginal structure survives the shuffle while the direct
-X-Y link is broken) -- it is not verified against the original paper's
-own reference implementation, and this charter's own Type-I-error gate
-exists specifically to catch it if this construction is not valid.
+D-055 (Stage 6c): a first-pass, good-faith construction of the local
+permutation shuffle was found, with proper statistical power, to be
+genuinely miscalibrated at |S| in {1, 2} regardless of k_perm -- not a
+tunable-parameter problem. D-055's own required next step was to
+compare that construction directly against Runge's own reference
+implementation (`tigramite.independence_tests.cmiknn.CMIknn`'s
+`get_shuffle_significance`/`get_restricted_permutation`). Three
+structural discrepancies were found and are fixed below:
+
+1. **Self-inclusion**: the reference queries each point's nearest
+   neighbors in Z-space *including the point itself* as a candidate
+   (a point is its own nearest neighbor at distance 0). The prior
+   version explicitly excluded self. Self-inclusion means a point
+   occasionally maps to itself under the shuffle (no-op for that
+   point on that replicate) -- an intentional, not incidental,
+   property of the reference construction.
+2. **No global fallback on local exhaustion -- the actual likely cause
+   of D-055's finding**: when every one of a point's `k_perm`
+   neighbors is already claimed by an earlier point in the same
+   permutation replicate, the reference reuses the last-tried
+   neighbor anyway (accepting an occasional duplicate/collision
+   rather than a strict permutation). The prior version instead fell
+   back to a *uniformly random pick from the entire remaining
+   dataset* -- which can be arbitrarily far from the point's own
+   Z-neighborhood, corrupting exactly the local Y-Z structure this
+   shuffle exists to preserve. This should matter most exactly where
+   local exhaustion is common, plausibly explaining why |S| in {1, 2}
+   miscalibrated while |S| = 0 (no local matching at all) and |S| = 3
+   (a denser DGP, less exhaustion) did not.
+3. **Distance metric**: the reference queries Z-neighbors with
+   Chebyshev/max-norm distance (`p=inf`), matching this module's own
+   `estimate_cmiknn` convention throughout. The prior version queried
+   with `scipy`'s default (Euclidean, `p=2`) -- a silent inconsistency
+   with the rest of this module, independent of the other two issues.
+
+The reference implementation also computes the Z-neighbor tree/query
+ONCE per significance test (Z does not change across permutation
+replicates) rather than once per replicate; adopted below both for
+fidelity to the reference and because it removes a real, previously
+unnecessary cost (a full KD-tree rebuild per permutation).
 """
 
 from __future__ import annotations
@@ -107,29 +141,48 @@ def estimate_cmiknn(x: ArrayLike, y: ArrayLike, z: ArrayLike | None = None, *, k
     return float(estimate)
 
 
-def _local_permutation(y: np.ndarray, z_standardized: np.ndarray, k_perm: int, rng: np.random.Generator) -> np.ndarray:
-    """Shuffle y toward each point's own k_perm nearest Z-neighbors: a
-    greedy random matching (not a naive per-point independent draw),
-    so the result is a valid permutation of y, not a resampling with
-    replacement."""
-    n = len(y)
+def _z_neighbors(z_standardized: np.ndarray, k_perm: int) -> np.ndarray:
+    """Each point's `k_perm` nearest Z-neighbors, self-inclusive,
+    Chebyshev/max-norm distance -- matches Runge/tigramite's own
+    `CMIknn.get_shuffle_significance` exactly (see this module's own
+    docstring, point 1 and 3). Computed once per significance test,
+    not once per permutation replicate, since Z is fixed throughout."""
+    n = z_standardized.shape[0]
+    k = min(k_perm, n)
     tree = cKDTree(z_standardized)
-    _, neighbor_idx = tree.query(z_standardized, k=min(k_perm + 1, n))
-    neighbor_idx = neighbor_idx[:, 1:]  # drop self (always the nearest neighbor of itself)
+    _, neighbor_idx = tree.query(z_standardized, k=k, p=np.inf)
+    if k == 1:
+        neighbor_idx = neighbor_idx[:, None]
+    return neighbor_idx.astype(int)
+
+
+def _restricted_permutation(neighbors: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Runge/tigramite's own `get_restricted_permutation`: shuffle each
+    point's own (self-inclusive) neighbor list, then visit points in a
+    random order and assign each one the first not-yet-used neighbor
+    from its own shuffled list. If every one of a point's `k_perm`
+    neighbors is already claimed, reuse the last one anyway (an
+    accepted, rare collision) rather than reaching outside the local
+    neighborhood -- the fix for D-055 (a prior version instead fell
+    back to a uniformly random point from the entire dataset, which
+    could be arbitrarily far in Z-space)."""
+    n, k = neighbors.shape
+    shuffled = neighbors.copy()
+    for row in shuffled:
+        rng.shuffle(row)
 
     order = rng.permutation(n)
     used = np.zeros(n, dtype=bool)
-    perm = np.full(n, -1, dtype=int)
+    perm = np.empty(n, dtype=int)
     for i in order:
-        candidates = [int(j) for j in neighbor_idx[i] if not used[j]]
-        if candidates:
-            j = candidates[int(rng.integers(len(candidates)))]
-        else:
-            leftover = np.flatnonzero(~used)
-            j = int(leftover[int(rng.integers(len(leftover)))])
-        perm[i] = j
-        used[j] = True
-    return np.asarray(y, dtype=float)[perm]
+        m = 0
+        use = int(shuffled[i, m])
+        while used[use] and m < k - 1:
+            m += 1
+            use = int(shuffled[i, m])
+        perm[i] = use
+        used[use] = True
+    return perm
 
 
 @dataclass(frozen=True)
@@ -164,9 +217,11 @@ def local_permutation_test(
     else:
         z_array = _as_conditioning_matrix(z, n)
         z_s = _standardize_columns(z_array)
+        y_array = _as_finite_vector(y, "y")
+        neighbors = _z_neighbors(z_s, k_perm)
         for b in range(permutations):
-            y_shuffled = _local_permutation(y, z_s, k_perm, rng)
-            null[b] = estimate_cmiknn(x, y_shuffled, z, k=k)
+            perm = _restricted_permutation(neighbors, rng)
+            null[b] = estimate_cmiknn(x, y_array[perm], z, k=k)
 
     p_value = (float(np.sum(null >= observed)) + 1.0) / (permutations + 1.0)
     return LocalPermutationResult(statistic=observed, p_value=p_value, null_distribution=tuple(null.tolist()))
