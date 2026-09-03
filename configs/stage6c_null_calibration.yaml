@@ -1,0 +1,23 @@
+stage_a:
+  k_cmi_values: [10, 20, 40]
+  sample_sizes: [150, 300, 750, 1500]
+  replicates: 500
+  master_seed: 60300
+
+stage_b:
+  k_cmi: 40  # Stage A's own recommendation (lowest pooled null-variance RMSE); see stage_a_report.md
+  k_perm_labels: [kperm3, kperm5, kperm10, kperm20, adaptive]
+  sample_sizes: [150, 300, 750]
+  replicates: 400
+  permutations: 199
+  alphas: [0.05, 0.01]
+  master_seed: 60300
+
+stage_c:
+  k_cmi: 20        # overwritten once Stage B's own recommendation is confirmed
+  k_perm_label: kperm5  # overwritten once Stage B's own recommendation is confirmed
+  sample_sizes: [300, 750]
+  replicates: 200
+  permutations: 199
+  alphas: [0.05, 0.01]
+  master_seed: 60300

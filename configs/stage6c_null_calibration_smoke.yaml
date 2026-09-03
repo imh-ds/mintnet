@@ -1,0 +1,23 @@
+stage_a:
+  k_cmi_values: [10, 20]
+  sample_sizes: [150, 300]
+  replicates: 5
+  master_seed: 60301
+
+stage_b:
+  k_cmi: 20
+  k_perm_labels: [kperm5, kperm10]
+  sample_sizes: [150, 300]
+  replicates: 5
+  permutations: 19
+  alphas: [0.05, 0.01]
+  master_seed: 60301
+
+stage_c:
+  k_cmi: 20
+  k_perm_label: kperm5
+  sample_sizes: [150, 300]
+  replicates: 5
+  permutations: 19
+  alphas: [0.05, 0.01]
+  master_seed: 60301
