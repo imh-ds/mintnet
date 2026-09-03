@@ -1,0 +1,8 @@
+motifs: [triad_balanced, triad_moderate, triad_strong, hub, overlap]
+sample_sizes: [750, 1500]
+replicates: 20
+alpha: 0.05
+k_cmi: 40
+k_perm: 3
+permutations: 199
+master_seed: 70000

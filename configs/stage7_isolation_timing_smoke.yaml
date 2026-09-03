@@ -1,0 +1,8 @@
+motifs: [triad_balanced, hub]
+sample_sizes: [150, 300]
+replicates: 2
+alpha: 0.05
+k_cmi: 10
+k_perm: 3
+permutations: 19
+master_seed: 70001

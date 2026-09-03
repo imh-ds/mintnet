@@ -7,6 +7,7 @@ from .compose import (
     describe_component,
 )
 from .growing_subset_dpi import GrowingSubsetResult, growing_subset_dpi
+from .growing_subset_dpi_mi import MIGrowingSubsetResult, growing_subset_dpi_mi
 from .sequential import PairDecision, sequential_screen_and_prune, sequential_screen_and_prune_detailed
 
 __all__ = [
@@ -19,4 +20,6 @@ __all__ = [
     "PairDecision",
     "growing_subset_dpi",
     "GrowingSubsetResult",
+    "growing_subset_dpi_mi",
+    "MIGrowingSubsetResult",
 ]
