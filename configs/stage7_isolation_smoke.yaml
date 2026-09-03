@@ -1,0 +1,14 @@
+sample_sizes: [150, 300]
+strengths: [0.3, 0.5, 0.7]
+triangle_families: [balanced, moderate, strong]
+alphas: [0.50, 0.10, 0.05]
+replicates: 4
+batch_size: 2
+k_cmi: 10
+k_perm: 3
+permutations: 19
+master_seed: 70201
+development_replicates: [0, 1]
+validation_replicates: [2, 3]
+minimum_indirect_prune_tpr: 0.80
+maximum_triangle_true_edge_prune_fpr: 0.10
