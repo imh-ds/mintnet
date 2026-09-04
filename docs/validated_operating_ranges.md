@@ -829,6 +829,33 @@ Stage-1-equivalent composition charter (D-053/D-054/D-056's own named
 next step), reusing Stage 6a's growing-subset DPI architecture and
 this calibrated estimator/test pair. See D-057.
 
+**Stage 7 isolation tier (D-059, revised after independent peer
+review) — REASSESS: a proven structural conflict between the gate's
+two criteria at this signal strength, not a grid-resolution issue and
+not (yet) a fixable tuning problem.** The first Stage-1-equivalent
+composition attempt (`R=500`, `N in {750,1500}`, calibrated
+`k_CMI=40`/`k_perm=3`) found no eligible development alpha pair.
+Chain/fork pruning rate tracks `1 - alpha` almost exactly (confirming
+D-056/D-057's calibration generalizes to these new DGPs), which
+requires `alpha <~ .2` to meet the `>= .80` TPR gate. The `strong`
+triangle family's own FPR does not clear the `<= .10` gate anywhere
+below `alpha = .5` (`.241`/`.187`/`.142`/`.084` at `alpha=
+.1/.2/.3/.5`) — by which point chain TPR has collapsed to `.543`.
+**No `alpha` in `(0,1)` satisfies both constraints simultaneously**;
+a finer alpha grid cannot fix this. The underlying cause: the
+`strong` family's third edge has true Gaussian conditional MI of only
+`~0.0032` nats (partial r `-0.08`) — CMIknn pays a real, expected
+efficiency cost relative to the analytically-correctly-specified
+Fisher-z test at this near-null Gaussian alternative, not a defect.
+`mi-native` remains blocked from any Stage-1-equivalent composition
+charter until a dedicated power-curve/operating-frontier charter
+(sweep partial-correlation strength finely, several `N`, calibrated
+estimator held frozen, overlay the `1-alpha` null constraint) maps
+where — if anywhere — a feasible operating point exists; retuning the
+estimator against this one fixture before that mapping exists risks
+overfitting the tuning to a validation target. See D-059's own
+same-day revision for the full derivation.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

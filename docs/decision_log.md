@@ -4845,3 +4845,176 @@ assumed. `R=500` (Stage 1's own exact replicate count) fits in a
 single GitHub Actions dispatch as a result; see the Stage 7 isolation-
 tier evidence runner's own implementation
 (`mintnet.experiments.stage7_isolation`) for the corrected design.
+
+## D-059: Stage 7 isolation-tier evidence — REASSESS, driven by a real power gap on the triangle motif's weak third edge, not just an alpha-grid artifact (mi-native, Stage 7)
+
+Date: 2026-09-04
+
+`docs/stage7_charter.md`'s own isolation-tier evidence run (`R=500`,
+`250`/`250` development/validation, `N in {750,1500}`, `k_CMI=40`,
+`k_perm=3`, `permutations=199`), run as 90 GitHub Actions shards
+(all succeeded, ~2-2.5h wall-clock).
+
+**Verdict: REASSESS** ("no eligible development alpha pair" —
+`mintnet.experiments.stage1b_reporting.select_alpha_pair`'s own
+adjacent-pair requirement found no qualifying pair on pooled
+development data).
+
+**Surface-level cause: a grid-resolution artifact, closely paralleling
+D-003's own original finding for the Fisher-z mechanism.** Pooled
+across strengths and `N`, `alpha=0.2` is the *only* single value where
+chain TPR (`.837`), fork TPR (`.830`), and triangle FPR (`.099`) all
+individually satisfy the gate at once — its neighbors on the frozen
+grid (`0.1`: triangle FPR `.134`, too high; `0.3`: chain/fork TPR
+`.737`/`.739`, too low) each fail one side. The selection rule requires
+two *adjacent* passing values, not just one, so this narrow single-
+point window doesn't qualify — the same category of issue Stage 1b
+hit on its own first pass (D-003), which needed follow-up charters
+(D-004 and later) before reaching PROCEED.
+
+**Deeper cause, found by direct like-for-like comparison against
+D-003's own recorded Fisher-z numbers at the same `alpha=0.05`: CMI
+shows meaningfully less power on the `strong` triangle family's
+deliberately weak third edge (partial correlation `-0.08`), and does
+not improve with `N` the way Fisher-z did.**
+
+| | smaller N | larger N | trend |
+|---|---|---|---|
+| Fisher-z (D-003), `alpha=.05` | `.187` @ `N=500` | `.111` @ `N=1000` | `-41%`, steep |
+| CMIknn (this run), `alpha=.05` | `.289` @ `N=750` | `.273` @ `N=1500` | `-6%`, nearly flat |
+
+Despite testing at a *higher* `N` than D-003's own comparison and using
+the *same* `alpha`, CMI's own false-pruning rate on this specific edge
+is worse than Fisher-z's was at half the `N`, and does not show
+Fisher-z's own steep N-driven improvement. This matters because
+D-004's own historical fix for the analogous Fisher-z problem (raise
+the `N` floor) is exactly the kind of fix this flat trend argues
+*against* — if the gap were closing with `N` the way Fisher-z's did,
+more data would plausibly resolve it; the near-flat trend suggests
+something more structural (finite-sample KNN bias/variance in the
+nonparametric estimator itself, at this signal strength, versus the
+exact closed-form Fisher-z test's zero approximation error on Gaussian
+data) that a higher `N` floor alone may not fix.
+
+Rationale: both causes are reported together, not conflated — the
+grid-resolution issue alone would suggest "just add finer alpha
+values near `0.15`-`0.25`"; the power-gap finding suggests that fix
+alone may not be sufficient, since even the best individual alpha
+(`0.2`) still leaves the `strong` family's own per-cell FPR
+(`.207`/`.187` at `N=750`/`1500`) well above the `.10` threshold — the
+pooled `.099` that appears to pass is an average across all three
+triangle families, not evidence that `strong` itself passes, and the
+frozen gate's own validation step checks each cell individually, not
+just the pooled figure.
+
+Consequences: per the charter's own consequences section, this
+REASSESS blocks any Stage-1-equivalent composition charter until
+resolved. Two distinct next steps are now visible, not yet decided
+between: (1) a narrower-resolution alpha grid near the `0.15`-`0.25`
+window, which would resolve the grid-artifact half of this finding on
+its own but, per the power-gap finding above, may still fail the
+`strong` family's own per-cell validation regardless; (2) a direct
+investigation of whether the `strong` family's own weak-edge power gap
+is fixable by tuning the estimator (larger `k_CMI`, different
+`k_perm`, more permutations for finer `alpha` resolution near the
+true crossover) versus being an inherent cost of the nonparametric
+estimator at this specific signal strength — the latter would be a
+disclosed, real limitation of the MI-based mechanism relative to the
+Gaussian-exact Fisher-z one, not a bug to fix. Neither has been
+started as of this entry; `docs/validated_operating_ranges.md` should
+record this finding once a path forward is chosen.
+
+**Revision (same day, appended after independent peer review, not
+silently edited): the true diagnosis is sharper than "two candidate
+next steps, not yet decided between" above suggests — option (1) is
+ruled out, not merely uncertain, and the finding is better
+characterized as a structural constraint than a to-be-diagnosed power
+gap.**
+
+**Permutation-resolution floor, confirmed directly in this run's own
+data, not just theoretically.** `permutations=199` gives a minimum
+resolvable p-value of `1/200=.005` — already disclosed in
+`docs/stage7_charter.md`'s own alpha-grid section before this run, but
+not previously connected to what the results actually show: triangle
+FPR is **exactly `1.000`** at `alpha in {.0001,.001}` for every family,
+because retention (`p<=alpha`) is mechanically impossible below the
+resolution floor. This is a clean, mechanical artifact, fully
+anticipated by the charter's own disclosure, and it does not affect
+the diagnosis below (which concerns `alpha` in `[.05, .5]`, far above
+the floor) — stated here so a future reader sees the connection
+explicitly rather than having to rediscover it.
+
+**The chain/fork pruning rate matches `1 - alpha` almost exactly across
+the entire grid** (e.g. `alpha=.3`: predicted `.700`, observed `.737`;
+`alpha=.5`: predicted `.500`, observed `.543` — consistently `2`-`4`
+points more aggressive than nominal, a minor, consistent conservative
+bias, not a concern). This is expected for a well-calibrated
+significance test under a true null (`P(retain | H0) ~ alpha`, so
+`P(prune | H0) ~ 1 - alpha`) and is itself a valuable independent
+confirmation that D-056/D-057's own calibration generalizes correctly
+to these new chain/fork DGPs, which were not part of the original
+calibration study's own null-condition battery.
+
+**That relationship makes the conflict provable, not just apparent at
+the tested grid's own three neighboring points.** Requiring chain/fork
+TPR `>= .80` requires `alpha <~ .2` (matches `1 - .2 = .80` almost
+exactly). Checking the `strong` triangle family's own FPR across the
+**entire** tested range, not just the immediate neighbors of the
+pooled `.2` crossing point:
+
+| `alpha` | `.1` | `.2` | `.3` | `.5` |
+|---|---|---|---|---|
+| `strong` FPR | `.241` | `.187` | `.142` | `.084` |
+| chain TPR | `.920` | `.837` | `.737` | `.543` |
+
+`strong`-family FPR does not clear the `<=.10` threshold anywhere
+before `alpha=.5` — and by `alpha=.5`, chain TPR has already collapsed
+to `.543`, far below the `.80` floor. **No `alpha` in `(0, 1)` satisfies
+both constraints simultaneously** at this `N`, this DGP, and this
+calibrated estimator setting — not "the grid's neighbors happen not to
+align," a genuine structural conflict between the two gate criteria as
+currently posed. **Option (1) above (finer alpha-grid resolution) is
+therefore ruled out as a fix on its own, not merely unproven.**
+
+**Reframing the power gap itself**: for the `strong` triangle's own
+weak edge (partial correlation `-0.08`), the true Gaussian conditional
+MI is `I = -0.5*ln(1-.08^2) ~ 0.0032` nats — a tiny effect. Fisher-z
+is the analytically correctly-specified test for exactly this Gaussian
+regime; CMIknn deliberately discards that parametric structure to
+estimate the same tiny effect nonparametrically from finite-sample
+neighbor geometry. The right characterization is **an expected
+efficiency cost of a nonparametric test relative to a correctly-
+specified parametric one at a near-null Gaussian alternative** — not
+"CMIknn may have an inherent defect." This is, by construction, closer
+to a worst-case benchmark for MI-based methods (linear, Gaussian data,
+compared against a near-optimal test for exactly that setting) than a
+representative one; it correctly measures the efficiency this project
+is paying for nonparametric flexibility, not whether that flexibility
+is ever worth it (nonlinear/non-Gaussian DGPs, where Fisher-z should
+fail and CMIknn should earn its keep, remain the charter's own
+disclosed future work, unaffected by this finding).
+
+**Revised consequences, superseding the "two options, not yet decided"
+framing above**: the next step is not finer alpha-gridding (ruled out)
+or blind re-tuning of `k_CMI`/`k_perm`/`permutations` against this one
+`strong` fixture (a real overfitting risk — turning a validation
+fixture into a tuning target, against this project's own standing
+discipline). It is a **dedicated power-curve/operating-frontier
+charter**: freeze the calibrated estimator/test construction, sweep
+partial-correlation strength finely (e.g. `|rho| in {.04, .06, .08,
+.10, .12, .15, .20}`) at several `N`, estimate `P(reject | H1)` as a
+function of `alpha`, `N`, and effect size, and overlay the null-side
+constraint `P(prune | H0) ~ 1 - alpha` to find where (if anywhere) a
+feasible operating point exists — answering "what is MINT's actual
+detection limit in effect-size terms," a sharper and more useful
+question than "can this one fixture be made to pass." Only after that
+frontier is mapped does it make sense to ask whether retuning `k_CMI`/
+`k_perm` shifts it, without breaking the Type-I calibration already
+established in D-056.
+
+**Terminology note, adopted going forward**: `true_edge_prune_fpr`
+invites confusion (conventional FPR means rejecting a true null; here
+the graph-level error direction reverses depending on whether the edge
+is direct or indirect). Future work should use a name like
+"direct-edge false-pruning rate" instead — not renamed retroactively
+in already-recorded evidence, but adopted in new code and reporting.
