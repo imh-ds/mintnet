@@ -1,0 +1,8 @@
+target_rhos: [0.0, 0.04, 0.06, 0.08, 0.10, 0.12, 0.15, 0.20, 0.25]
+sample_sizes: [750, 1500, 3000]
+replicates: 400
+batch_size: 50
+k_cmi: 40
+k_perm: 3
+permutations: 199
+master_seed: 70300

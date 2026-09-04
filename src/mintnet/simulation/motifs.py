@@ -115,3 +115,32 @@ def sample_precision_triangle(
     covariance = np.linalg.inv(precision)
     data = rng.multivariate_normal(np.zeros(3), covariance, size=n)
     return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
+
+
+def sample_weak_edge_triangle(target_rho: float, n: int, rng: np.random.Generator) -> np.ndarray:
+    """Draw a triangle fixture extending `strong`'s own structure: the
+    same two dominant edges (partial correlation `.45` between columns
+    0-1, `.25` between columns 0-2, matching `strong`'s own off-diagonal
+    precision entries), with the third edge's own partial correlation
+    (columns 1-2) set to `target_rho` instead of `strong`'s fixed
+    `-.08` -- for Stage 7b's own effect-size sweep. See
+    docs/stage7b_charter.md.
+
+    Since this precision matrix has a unit diagonal,
+    `partial_correlation(i,j) = -precision[i,j]` exactly (the same
+    convention every named fixture above already uses) -- `target_rho`
+    is therefore the exact resulting partial correlation on columns
+    (1, 2), not an approximation. Positive-definiteness is checked, not
+    assumed, exactly as `sample_precision_triangle` does for its own
+    named fixtures.
+    """
+    n = _validate_n(n)
+    rho = float(target_rho)
+    precision = np.array([[1.0, -0.45, -0.25], [-0.45, 1.0, -rho], [-0.25, -rho, 1.0]])
+    try:
+        np.linalg.cholesky(precision)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError(f"weak_edge_triangle precision is not positive definite at target_rho={rho}") from exc
+    covariance = np.linalg.inv(precision)
+    data = rng.multivariate_normal(np.zeros(3), covariance, size=n)
+    return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
