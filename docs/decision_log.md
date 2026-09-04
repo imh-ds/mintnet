@@ -5018,3 +5018,78 @@ the graph-level error direction reverses depending on whether the edge
 is direct or indirect). Future work should use a name like
 "direct-edge false-pruning rate" instead — not renamed retroactively
 in already-recorded evidence, but adopted in new code and reporting.
+
+## D-060: Stage 7b power-curve mapping — the detection limit shrinks with N (not flat), but the original `strong` fixture's own edge (0.08) remains out of reach through N=3000 (mi-native, Stage 7b)
+
+Date: 2026-09-04
+
+Stage 7b's own evidence run (`R=400`, `9` target partial-correlation
+values `x` `3` `N` values `x` `50`-value `alpha` grid, calibrated
+`k_CMI=40`/`k_perm=3`/`permutations=199` held completely fixed
+throughout), run as 216 GitHub Actions shards. All shards succeeded,
+zero errors. Wall-clock ran to ~15.5 hours — well beyond this
+session's own ~3-8 hour projection from the pre-run timing
+measurement; no precise root cause was chased down (likely lower
+effective GitHub Actions concurrency for this heavier, longer-running
+batch than the smaller prior run that projection was based on), and it
+does not affect the evidence itself.
+
+**In-family null calibration confirmed directly** (this charter's own
+explicit design choice, not assumed from D-059's different DGP
+structure): at `target_rho=0`, rejection rate tracks nominal `alpha`
+closely at every `N` (e.g. `alpha=.2`: `.170`/`.178`/`.195` observed at
+`N=750`/`1500`/`3000` vs. `.200` nominal; `alpha=.5`: `.468`/`.468`/
+`.458` vs. `.500`). D-056's calibration generalizes to this new
+`weak_edge_triangle` fixture family too, not just chain/fork.
+
+**Detection-limit summary (smallest `|target_rho|` with any feasible
+`alpha`, per `N`):**
+
+| `N` | detection limit | feasible `alpha` window (at that limit) |
+|---|---|---|
+| `750` | `0.20` | `[.08, .23]` |
+| `1500` | `0.15` | `[.12, .22]` |
+| `3000` | `0.12` | `[.16, .20]` |
+
+**The detection limit genuinely shrinks with `N`** — `.20 -> .15 ->
+.12` as `N` doubles each time (`25%` then `20%` relative shrinkage,
+decelerating but real). This refines, rather than overturns, D-059's
+own "nearly flat" finding: that finding was measured at a *fixed*
+`alpha=.05`, far outside the actual usable operating window (`~.12`-
+`.25`); at the *best* `alpha` for each `N`, improvement with `N` is
+real, just slower than Fisher-z's own historical rate on the analogous
+problem.
+
+**The original `strong` triangle fixture's own edge (`|target_rho| =
+0.08`) is still not reached at any tested `N`, including `N=3000`**:
+at `alpha=.5` (the most permissive value tested), power there is only
+`.848` (`N=3000`), short of the `.90` floor; at more usable alphas
+(e.g. `.2`) power is only `.518`. D-059's own core finding stands —
+the `strong` fixture specifically remains below this mechanism's
+current detection limit — but the shrinking-limit trend suggests
+reaching it is a matter of *how much more data*, not a permanent
+structural wall. Naive extrapolation of the observed shrinkage rate
+(not a fitted model, stated as a rough order-of-magnitude estimate
+only) would place the crossing point for `0.08` somewhere well beyond
+`N=3000`, plausibly in the `5,000`-`15,000` range — not confirmed,
+flagged as a hypothesis for a future charter to test directly rather
+than assumed.
+
+Rationale: this is exactly the descriptive answer Stage 7b's own
+charter set out to produce — a real operating frontier exists and
+shifts favorably with `N`, characterized with actual data rather than
+inferred from a single hard fixture's own flat-looking trend at one
+fixed `alpha`.
+
+Consequences: `mi-native` now has a concrete, evidence-based answer to
+"what `N`/effect-size combinations does the calibrated mechanism
+actually support," per D-059's own posed question. Per the charter's
+own consequences section: a future Stage-1-equivalent composition
+charter could proceed scoped to DGPs whose true effect size is at or
+above the mapped limit for its own chosen `N` (e.g. `N=3000` supports
+detecting `|rho_partial| >= .12`) — a scoped, honest constraint, not a
+general capability claim. Whether to also charter a direct test of the
+`N=5,000`-`15,000` extrapolation (to settle whether `0.08` is ever
+reachable) or to accept the current mechanism's own bounded
+performance on near-null Gaussian effects as a disclosed limitation is
+a separate, not-yet-made executive decision.

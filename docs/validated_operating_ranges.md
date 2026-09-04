@@ -856,6 +856,28 @@ estimator against this one fixture before that mapping exists risks
 overfitting the tuning to a validation target. See D-059's own
 same-day revision for the full derivation.
 
+**Stage 7b (D-060) — the detection limit shrinks with `N` (not flat);
+`strong` fixture's own edge (`0.08`) still out of reach through
+`N=3000`.** In-family null calibration confirmed directly on the new
+`weak_edge_triangle` fixture family (rejection rate tracks nominal
+`alpha` closely at every `N`). **Detection limit (smallest
+`|partial correlation|` with a feasible operating `alpha`)**: `.20` @
+`N=750`, `.15` @ `N=1500`, `.12` @ `N=3000` — real, if decelerating,
+improvement with `N` (`25%` then `20%` relative shrinkage per
+doubling), refining D-059's own "nearly flat" finding, which was
+measured at a single fixed `alpha=.05` far outside the actual `~.12`-
+`.25` usable window. **The original `strong` fixture's own edge
+(`0.08`) remains below the detection limit at every tested `N`**
+(power only `.848` at `N=3000`/`alpha=.5`, the most permissive setting
+tested) — D-059's core finding stands, but the shrinking trend
+suggests this is a data-quantity question, not a permanent wall; naive
+extrapolation (unconfirmed) places the crossing point somewhere past
+`N=3000`, plausibly `5,000`-`15,000`. **Practical takeaway**: a future
+composition charter can be scoped to DGPs at or above the mapped limit
+for its own chosen `N` (e.g. `N=3000` supports `|rho_partial| >=
+.12`) — a bounded, evidence-based constraint, not a general capability
+claim. See D-060.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
