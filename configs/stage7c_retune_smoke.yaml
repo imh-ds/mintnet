@@ -1,0 +1,8 @@
+k_cmis: [10, 40]
+target_rhos: [0.0, 0.08]
+sample_sizes: [150, 300]
+replicates: 4
+batch_size: 2
+k_perm: 3
+permutations: 19
+master_seed: 70401
