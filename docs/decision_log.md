@@ -5250,3 +5250,52 @@ detection limits as a new, separately-tracked entry alongside CMIknn's
 own `k_CMI=80` line, since the two are not (yet) merged into one
 pipeline recommendation — that composition decision is separate,
 larger future work, per the charter's own explicit non-goals.
+
+## D-063: Calibration transfers — degree=1 (and degree=3) remain calibrated on Stage 7's own real fixtures, degree=2 does not (mi-native, Stage 7e calibration-transfer check)
+
+Date: 2026-09-06
+
+Stage 7e's own up-front calibration-transfer check (`degree in
+{1,2,3}`, chain/fork's own genuine null pair `(0,2)|1` across `3`
+strengths each, triangle's own three real pairs across `balanced`/
+`moderate`/`strong`, `N in {750,1500}`, `R=200`, `54` GitHub Actions
+shards, zero errors) answers the charter's own explicit caveat: does
+D-062's `degree=1` finding (measured on `weak_edge_triangle`) transfer
+onto Stage 7's own actual isolation-tier fixtures, rather than being
+assumed?
+
+**Calibration filter (chain/fork null): `degree in {1, 3}` remain
+defensible across every motif/strength/N/alpha; `degree=2` does
+not.** This is the same kind of non-monotonic pattern D-061 found for
+`k_CMI` (`40` failing while its neighbors `30`/`60` passed) — reported
+plainly rather than smoothed over, and a second, independent
+confirmation that a swept complexity parameter's own calibration can
+fail at an interior value without failing at its neighbors, on data
+this specific composition has not been checked against before.
+
+**Triangle power (descriptive, informs the choice among calibrated
+survivors): `degree=1` clearly outperforms `degree=3` on the hardest
+case.** On the `strong` family's own weak edge (pair `1-2`,
+`target_rho=-0.08` — the exact case that blocked Stage 7's original
+CMIknn-based composition): `degree=1` reaches power `.450`/`.755` at
+`N=750`/`1500` (`alpha=0.05`, a conventional, non-permissive setting);
+`degree=3` reaches only `.250`/`.455` at the same `N`. `degree=2`
+(uncalibrated, shown for completeness) sits between them at `.250`/
+`.665`. For reference, this power level at a strict `alpha=0.05`
+already exceeds anything CMIknn achieved on this same edge at any
+tested `k_CMI` — D-061's own best result needed `alpha=.5` (the most
+permissive setting tested) to reach power `.925` at `N=3000`, and even
+then failed the simultaneous pruning requirement.
+
+Rationale: both a Type-I check and a power check were required before
+committing to an operating `degree` for Stage 7e's own main run,
+exactly as the charter's own calibration-transfer section specified —
+neither result was assumed from D-062's own different fixture family.
+
+Consequences: **`degree=1` is confirmed as Stage 7e's operating
+setting** — calibrated on Stage 7's own real fixtures (not just
+transferred from D-062's), and the strongest performer among
+calibrated survivors on the charter's own hardest historical case.
+Stage 7e's main run (isolation-tier gate, then composed-tier
+comparison) is now unblocked to proceed with `degree=1`, per the
+charter's own required sequencing.
