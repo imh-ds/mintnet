@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 
@@ -71,8 +73,58 @@ def aggregate(module_path: str, config_path: Path, shards_dir: Path, output_dir:
 
     output_dir.mkdir(parents=True, exist_ok=True)
     raw.to_csv(output_dir / "raw_metrics.csv", index=False)
+    _write_provenance(shard_paths, output_dir)
     reporting.write_report(raw, config, output_dir)
     return raw
+
+
+def _write_provenance(shard_paths: list[Path], output_dir: Path) -> None:
+    """Every shard writes its own `metadata.json`/`resolved_config.yaml`
+    (see e.g. `mintnet.experiments.stage7b_frontier._write_evidence`),
+    but this aggregator previously dropped both -- the combined
+    artifact had raw evidence and a report but no provenance at all.
+    `resolved_config.yaml` is identical across shards (it reflects the
+    full grid's own config, not a shard's own filtered subset) and is
+    copied through unchanged. `metadata.json` is synthesized: most
+    fields (git commit, charter hash, python/platform) are also
+    shard-invariant and taken from the first shard, but `runtime_seconds`
+    is summed across every shard (a meaningful aggregate figure, unlike
+    any single shard's own value) and `recorded_at_utc` reflects
+    aggregation time, not any one shard's own completion time."""
+    shard_dirs = sorted({path.parent for path in shard_paths})
+    if not shard_dirs:
+        return
+
+    reference_config = shard_dirs[0] / "resolved_config.yaml"
+    if reference_config.is_file():
+        (output_dir / "resolved_config.yaml").write_text(reference_config.read_text(encoding="utf-8"), encoding="utf-8")
+
+    metadatas = []
+    for shard_dir in shard_dirs:
+        metadata_path = shard_dir / "metadata.json"
+        if metadata_path.is_file():
+            metadatas.append(json.loads(metadata_path.read_text(encoding="utf-8")))
+    if not metadatas:
+        return
+
+    reference = metadatas[0]
+    total_runtime = sum(float(m.get("runtime_seconds", 0.0)) for m in metadatas)
+    aggregated_metadata = {
+        "charter_sha256": reference.get("charter_sha256"),
+        "git_commit": reference.get("git_commit"),
+        "python": reference.get("python"),
+        "platform": reference.get("platform"),
+        "recorded_at_utc": datetime.now(UTC).isoformat(),
+        "total_runtime_seconds": total_runtime,
+        "shard_count": len(metadatas),
+        "note": (
+            "Synthesized from per-shard metadata.json files at aggregation time. "
+            "total_runtime_seconds sums every shard's own runtime (each shard ran in "
+            "parallel, so this is not the run's own wall-clock time). Other fields are "
+            "shard-invariant and taken from the first shard, sorted by directory name."
+        ),
+    }
+    (output_dir / "metadata.json").write_text(json.dumps(aggregated_metadata, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> None:
