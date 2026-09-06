@@ -117,6 +117,98 @@ def sample_precision_triangle(
     return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
 
 
+def sample_monotonic_curvature_triangle(
+    target_rho: float, n: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Draw a triangle fixture where the third edge (columns 1, 2) is
+    related through a monotonic, saturating nonlinear transform
+    (`tanh`) rather than linearly -- Stage 7d's own mild-curvature
+    condition. See docs/stage7d_charter.md.
+
+    Built by drawing `sample_weak_edge_triangle(target_rho, n, rng)`
+    (columns 0, 1 unchanged) and replacing column 2 with `tanh` of
+    itself, re-standardized. `tanh` is a strictly monotonic (hence
+    injective) elementwise transform, and mutual information is exactly
+    invariant under an injective transform of a single argument:
+    `I(X1; tanh(X2) | X0) = I(X1; X2 | X0)`, for any joint distribution.
+    (Injectivity is what invariance requires here, not surjectivity --
+    `tanh`'s bounded range `(-1, 1)` does not weaken the claim.)
+
+    This fixture therefore has the *exact same* population conditional
+    mutual information as `sample_weak_edge_triangle(target_rho, ...)`
+    at the same `target_rho` -- a matched-MI, harder-for-a-linear-test
+    counterpart, not a stronger or weaker true dependence. Pearson
+    correlation (and any partial-correlation/Fisher-z test built on it)
+    is *not* invariant under a nonlinear monotonic transform, so such a
+    test sees a distorted, generally attenuated relationship here
+    instead of the true partial correlation `target_rho` it would
+    recover on the untransformed fixture.
+    """
+    data = sample_weak_edge_triangle(target_rho, n, rng).copy()
+    data[:, 2] = np.tanh(data[:, 2])
+    return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
+
+
+_USHAPE_DOMINANT_EDGE_01 = 0.45
+_USHAPE_DOMINANT_EDGE_02 = 0.25
+_USHAPE_CURVATURE_BOUND = 1.0 / np.sqrt(2.0)
+
+
+def _validate_curvature(curvature: float) -> float:
+    value = float(curvature)
+    if not abs(value) < _USHAPE_CURVATURE_BOUND:
+        raise ValueError(
+            f"curvature must satisfy abs(curvature) < {_USHAPE_CURVATURE_BOUND:.6f} (1/sqrt(2)), "
+            "so the quadratic term's own variance share cannot exceed the residual's total unit variance"
+        )
+    return value
+
+
+def sample_ushape_triangle(curvature: float, n: int, rng: np.random.Generator) -> np.ndarray:
+    """Draw a triangle fixture where the third edge (columns 1, 2) is a
+    symmetric quadratic dependence -- "U"-shaped for `curvature > 0`,
+    inverted-U for `curvature < 0` -- with *exactly zero* linear partial
+    correlation given column 0. Stage 7d's own diagnostic condition for
+    whether a structured estimator has quietly collapsed to a linear
+    model. See docs/stage7d_charter.md.
+
+    Construction: column 0 is a common cause of columns 1 and 2 at
+    `strong`'s own dominant-edge magnitudes (`.45`, `.25`). Column 1's
+    residual (after removing column 0's linear effect) is standard
+    normal noise `e1`. Column 2's residual is
+    `curvature * (e1**2 - 1) + sqrt(1 - 2*curvature**2) * e2`, with
+    independent standard normal `e2` -- a deterministic *quadratic*
+    function of `e1` plus independent noise, not a linear one.
+
+    Because `e1` is standard normal, `E[e1] = E[e1**3] = 0` exactly, so
+    `Cov(e1, e1**2 - 1) = E[e1**3] - E[e1] = 0` exactly, for *any*
+    `curvature`. Since column 0's linear effect is removed identically
+    from both columns 1 and 2, this is also the column-0-partialled
+    correlation: a Fisher-z/partial-correlation test sees a perfect
+    null here for any `curvature`, while the true conditional mutual
+    information `I(X1; X2 | X0)` is strictly positive whenever
+    `curvature != 0` (column 2's residual is a non-constant function of
+    column 1's residual plus independent noise, hence not conditionally
+    independent of it).
+
+    `curvature` must satisfy `abs(curvature) < 1/sqrt(2)` so the
+    independent-noise variance share `1 - 2*curvature**2` stays
+    positive. `curvature = 0` is a valid null (column 2's residual is
+    then pure noise, so columns 1 and 2 are fully conditionally
+    independent given column 0).
+    """
+    n = _validate_n(n)
+    curvature = _validate_curvature(curvature)
+    x0 = rng.normal(size=n)
+    e1 = rng.normal(size=n)
+    e2 = rng.normal(size=n)
+    x1 = _USHAPE_DOMINANT_EDGE_01 * x0 + np.sqrt(1.0 - _USHAPE_DOMINANT_EDGE_01**2) * e1
+    residual_2 = curvature * (e1**2 - 1.0) + np.sqrt(1.0 - 2.0 * curvature**2) * e2
+    x2 = _USHAPE_DOMINANT_EDGE_02 * x0 + np.sqrt(1.0 - _USHAPE_DOMINANT_EDGE_02**2) * residual_2
+    data = np.column_stack((x0, x1, x2))
+    return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
+
+
 def sample_weak_edge_triangle(target_rho: float, n: int, rng: np.random.Generator) -> np.ndarray:
     """Draw a triangle fixture extending `strong`'s own structure: the
     same two dominant edges (partial correlation `.45` between columns
