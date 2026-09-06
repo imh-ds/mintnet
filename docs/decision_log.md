@@ -5162,3 +5162,91 @@ has a documented, bounded gain, not an open question anymore.
 `docs/validated_operating_ranges.md` should record `k_CMI=80` as the
 new recommended default alongside `k_perm=3`, with the `N=750`/`1500`
 scope noted explicitly.
+
+## D-062: Structured conditional-density estimator beats the CMIknn baseline on linear/mild-curvature effect sizes, but shows no U-shape advantage — both estimators detect it equally well (mi-native, Stage 7d)
+
+Date: 2026-09-06
+
+Stage 7d's own head-to-head evidence run (structured-density `degree`
+sweep: `degree in {1,2,3,4}`, `13` DGP conditions, `R=400`, `156`
+GitHub Actions shards; CMIknn baseline: `k_CMI=80`/`k_perm=3` per
+D-061, same `13` conditions, `R=100` per this session's own agreed
+cost-scoping decision, `39` shards — both zero errors) answers the
+charter's own two questions directly.
+
+**Stage A (calibration filter): all four `degree` values remain
+calibrated** on the `linear_0.0` null at every tested `N` — unlike
+`k_CMI`'s own non-monotonic pattern in D-061, `degree` shows no
+calibration casualties across the tested range.
+
+**Stage B (detection limit), best calibrated degree vs. CMIknn
+baseline, `R=100`'s own wider Wilson CIs checked and found defensible
+throughout:**
+
+| `N` | family | structured density (best degree) | CMIknn baseline |
+|---|---|---|---|
+| 750 | linear | `.12` (degree=1) | `.15` |
+| 750 | curvature | `.12` (degree=1) | `.20` |
+| 750 | ushape | `.30` (degree=2) | `.30` |
+| 1500 | linear | `.08` (degree=1) | `.12` |
+| 1500 | curvature | `.12` (degree=1) | `.12` (tie) |
+| 1500 | ushape | `.30` (degree=2) | `.30` (tie) |
+| 3000 | linear | `.08` (degree=1) | `.12` |
+| 3000 | curvature | `.08` (degree=1) | `.12` |
+| 3000 | ushape | `.30` (degree=2) | `.30` (tie) |
+
+**The structured-density estimator strictly beats or ties the CMIknn
+baseline on every linear and mild-curvature cell tested, never
+worse** — a genuine, calibrated efficiency win on exactly the kind of
+data this project has used throughout (Gaussian-linear, plus the
+monotonic-transform variant), and directly explains *why*: a
+regularized low-degree polynomial model can exploit the known-plausible
+shape of the relationship the way CMIknn's fully density-free kNN
+estimator cannot, at exactly the sample-efficiency cost quantified
+earlier this session (Cramer-Rao-optimal parametric tests vs. slower
+nonparametric convergence rates). Notably, `degree=1` (the *simplest*
+basis) is usually the best performer on linear/curvature data —
+unsurprising in hindsight, since more basis complexity than the true
+relationship needs only adds estimation variance for no benefit.
+
+**The mandatory diagnostic (U-shape power, the one result this charter
+could not skip) is a genuine null result, reported plainly**: both
+estimators reach essentially identical power (`.30` detection limit,
+full power `1.000` at every tested curvature `>= 0.3`) on the
+U-shape/inverted-U fixture. **This is not a failure of the structured
+estimator — it is a correction to an implicit assumption this
+charter's own background section did not fully examine**: CMIknn was
+never blind to nonlinear dependence the way a Fisher-z/partial-
+correlation test structurally is. CMIknn is *already* a fully
+nonparametric estimator with no functional-form assumption at all, so
+a zero-linear-correlation quadratic relationship is not a special
+weak point for it specifically — only for the *parametric* baseline
+this whole mi-native track was built to replace. The structured
+estimator's real, demonstrated advantage is **efficiency on
+plausible-shape data**, not **capability CMIknn structurally lacked**.
+That distinction was implicit in this session's own earlier
+explanation of why CMIknn pays a sample-efficiency tax on linear data
+(a general-purpose nonparametric method vs. a shape-exploiting one),
+but this charter is what actually tested and confirmed it rather than
+assuming it.
+
+Rationale: both results are exactly the kind Stage 7d's own charter
+treated as fully reportable either way (see its own "Consequences"
+section, second and third cases) — a real efficiency gain was found on
+one axis, and a genuine null was found on the other, without needing
+either result to look more dramatic than the data supports.
+
+Consequences: the structured-density estimator (`degree` chosen per
+`N`/expected effect shape — `degree=1` for linear/near-linear, `degree
+=2` for suspected curvature, both calibrated and available; higher
+degrees add no benefit on the DGPs tested here) is recorded as a
+genuine candidate replacement for CMIknn in any future composition
+charter, strictly on efficiency grounds for Gaussian-linear/mild-
+curvature data — not on a nonlinear-detection capability claim, which
+this charter found no evidence for relative to CMIknn specifically
+(both detect U-shaped dependence equally well). `docs/
+validated_operating_ranges.md` should record this estimator and its
+detection limits as a new, separately-tracked entry alongside CMIknn's
+own `k_CMI=80` line, since the two are not (yet) merged into one
+pipeline recommendation — that composition decision is separate,
+larger future work, per the charter's own explicit non-goals.

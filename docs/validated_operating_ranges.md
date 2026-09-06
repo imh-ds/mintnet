@@ -900,6 +900,23 @@ permutations, a different estimator, or a copula-transform
 preprocessing step) — `k_CMI` retuning alone is a closed question with
 a documented, bounded gain. See D-061.
 
+**Stage 7d (D-062) — structured conditional-density estimator: a
+genuine efficiency win on linear/mild-curvature data, no advantage on
+U-shaped data.** Head-to-head against the CMIknn baseline (`k_CMI=80`)
+on the identical 13-condition DGP grid (linear, monotonic-curvature,
+U-shape): the structured-density estimator (`degree` calibrated,
+`{1,2,3,4}` all pass Stage A) strictly beats or ties CMIknn's own
+detection limit on every linear/curvature cell (e.g. `.08` vs `.12` at
+`N=1500/3000` for linear; `degree=1` is usually the best choice for
+this kind of data). On the U-shape/inverted-U diagnostic, both
+estimators are statistically indistinguishable (`.30` detection limit,
+full power at curvature `>=0.3` for both) — CMIknn was never blind to
+nonlinear dependence the way a Fisher-z test is, so this is a genuine
+null result, not a shortfall. **Not yet a pipeline recommendation**:
+this is a standalone estimator characterization, tracked separately
+from CMIknn's own `k_CMI=80` line above — composing either estimator
+into the DPI pipeline is separate future work. See D-062.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
