@@ -48,11 +48,14 @@ module, which implements the formula exactly as specified.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import PolynomialFeatures
+
+from mintnet.mi.local_permutation import restricted_permutation, z_neighbors
 
 ArrayLike = Sequence[float] | np.ndarray
 
@@ -183,3 +186,103 @@ def estimate_structured_cmi(
     log_density_m0 = _cross_fitted_log_density(design_m0, y_s, folds, ridge_lambda)
     log_density_m1 = _cross_fitted_log_density(design_m1, y_s, folds, ridge_lambda)
     return float(np.mean(log_density_m1 - log_density_m0))
+
+
+@dataclass(frozen=True)
+class StructuredLocalPermutationResult:
+    statistic: float
+    p_value: float
+    null_distribution: tuple[float, ...]
+
+
+def _fold_seed(rng: np.random.Generator) -> int:
+    return int(rng.integers(0, 2**31 - 1))
+
+
+def local_permutation_test(
+    x: ArrayLike,
+    y: ArrayLike,
+    z: ArrayLike | None = None,
+    *,
+    degree: int = 2,
+    ridge_lambda: float = 1.0,
+    cv_folds: int = 5,
+    k_perm: int = 3,
+    permutations: int = 199,
+    symmetrize: bool = True,
+    rng: np.random.Generator,
+) -> StructuredLocalPermutationResult:
+    """Test X independent-of Y given Z via `estimate_structured_cmi` and
+    the same local-permutation null (`mintnet.mi.local_permutation`)
+    already validated for CMIknn -- reusing, not re-deriving, the null
+    construction isolates a head-to-head comparison against CMIknn to
+    the estimator itself. `z=None`: ordinary (global) permutation,
+    valid for the unconditional case, matching
+    `mintnet.mi.cmiknn.local_permutation_test`'s own convention.
+
+    **Symmetrization** (`symmetrize=True`, the default): population
+    MI/CMI is symmetric in X and Y, but `estimate_structured_cmi`'s own
+    plug-in construction is not, in general, symmetric at any finite
+    `N` (see that function's own docstring) -- fitting Y as the
+    modeled outcome and X as the added predictor is not guaranteed to
+    give the same finite-sample estimate as the reverse. Rather than
+    make an arbitrary, undisclosed choice of which variable plays which
+    role, the reported statistic here is the average of both
+    orderings' own CMI estimates, in the spirit of the Generalized
+    Covariance Measure test's own symmetric construction. This is still
+    a valid permutation-test statistic (validity requires only that the
+    same statistic function is applied consistently to the observed and
+    every permuted dataset, not that the statistic itself be symmetric)
+    -- it costs roughly double the model fits per replicate, disclosed
+    here since it directly affects a future evidence runner's own
+    compute-cost measurement. Pass `symmetrize=False` for the cheaper,
+    single-orientation statistic if a future charter's own timing
+    measurement makes that tradeoff necessary.
+
+    **Fixed cross-fitting folds across the whole test**: the K-fold
+    split for each orientation is derived once, from `rng`, before the
+    observed statistic or any permutation replicate is computed, and
+    reused identically (via a freshly re-seeded `np.random.Generator`
+    per call) for the observed statistic and every null replicate. This
+    isolates the null distribution's own variability to the actual
+    Y-permutation, rather than mixing in fold-assignment randomness as
+    a second, uncontrolled noise source.
+    """
+    x_array = _as_finite_vector(x, "x")
+    y_array = _as_finite_vector(y, "y")
+    if x_array.size != y_array.size:
+        raise ValueError("x and y must have the same length")
+    n = y_array.size
+
+    forward_seed = _fold_seed(rng)
+    backward_seed = _fold_seed(rng) if symmetrize else None
+
+    def statistic(y_values: np.ndarray) -> float:
+        forward = estimate_structured_cmi(
+            x_array, y_values, z, degree=degree, ridge_lambda=ridge_lambda, cv_folds=cv_folds,
+            rng=np.random.default_rng(forward_seed),
+        )
+        if not symmetrize:
+            return forward
+        backward = estimate_structured_cmi(
+            y_values, x_array, z, degree=degree, ridge_lambda=ridge_lambda, cv_folds=cv_folds,
+            rng=np.random.default_rng(backward_seed),
+        )
+        return 0.5 * (forward + backward)
+
+    observed = statistic(y_array)
+    null = np.empty(permutations)
+
+    if z is None:
+        for b in range(permutations):
+            null[b] = statistic(rng.permutation(y_array))
+    else:
+        z_array = _as_conditioning_matrix(z, n)
+        z_s = _standardize_columns(z_array)
+        neighbors = z_neighbors(z_s, k_perm)
+        for b in range(permutations):
+            perm = restricted_permutation(neighbors, rng)
+            null[b] = statistic(y_array[perm])
+
+    p_value = (float(np.sum(null >= observed)) + 1.0) / (permutations + 1.0)
+    return StructuredLocalPermutationResult(statistic=observed, p_value=p_value, null_distribution=tuple(null.tolist()))

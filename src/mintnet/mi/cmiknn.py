@@ -59,6 +59,9 @@ import numpy as np
 from scipy.spatial import cKDTree
 from scipy.special import digamma
 
+from mintnet.mi.local_permutation import restricted_permutation as _restricted_permutation
+from mintnet.mi.local_permutation import z_neighbors as _z_neighbors
+
 ArrayLike = Sequence[float] | np.ndarray
 
 
@@ -139,50 +142,6 @@ def estimate_cmiknn(x: ArrayLike, y: ArrayLike, z: ArrayLike | None = None, *, k
 
     estimate = digamma(k) - np.mean(digamma(n_xz) + digamma(n_yz) - digamma(n_z))
     return float(estimate)
-
-
-def _z_neighbors(z_standardized: np.ndarray, k_perm: int) -> np.ndarray:
-    """Each point's `k_perm` nearest Z-neighbors, self-inclusive,
-    Chebyshev/max-norm distance -- matches Runge/tigramite's own
-    `CMIknn.get_shuffle_significance` exactly (see this module's own
-    docstring, point 1 and 3). Computed once per significance test,
-    not once per permutation replicate, since Z is fixed throughout."""
-    n = z_standardized.shape[0]
-    k = min(k_perm, n)
-    tree = cKDTree(z_standardized)
-    _, neighbor_idx = tree.query(z_standardized, k=k, p=np.inf)
-    if k == 1:
-        neighbor_idx = neighbor_idx[:, None]
-    return neighbor_idx.astype(int)
-
-
-def _restricted_permutation(neighbors: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """Runge/tigramite's own `get_restricted_permutation`: shuffle each
-    point's own (self-inclusive) neighbor list, then visit points in a
-    random order and assign each one the first not-yet-used neighbor
-    from its own shuffled list. If every one of a point's `k_perm`
-    neighbors is already claimed, reuse the last one anyway (an
-    accepted, rare collision) rather than reaching outside the local
-    neighborhood -- the fix for D-055 (a prior version instead fell
-    back to a uniformly random point from the entire dataset, which
-    could be arbitrarily far in Z-space)."""
-    n, k = neighbors.shape
-    shuffled = neighbors.copy()
-    for row in shuffled:
-        rng.shuffle(row)
-
-    order = rng.permutation(n)
-    used = np.zeros(n, dtype=bool)
-    perm = np.empty(n, dtype=int)
-    for i in order:
-        m = 0
-        use = int(shuffled[i, m])
-        while used[use] and m < k - 1:
-            m += 1
-            use = int(shuffled[i, m])
-        perm[i] = use
-        used[use] = True
-    return perm
 
 
 @dataclass(frozen=True)
