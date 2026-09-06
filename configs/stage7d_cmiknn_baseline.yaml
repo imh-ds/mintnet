@@ -1,0 +1,7 @@
+sample_sizes: [750, 1500, 3000]
+replicates: 100
+batch_size: 100
+k_cmi: 80
+k_perm: 3
+permutations: 199
+master_seed: 70600
