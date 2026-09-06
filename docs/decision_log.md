@@ -5093,3 +5093,72 @@ general capability claim. Whether to also charter a direct test of the
 reachable) or to accept the current mechanism's own bounded
 performance on near-null Gaussian effects as a disclosed limitation is
 a separate, not-yet-made executive decision.
+
+## D-061: k_CMI=80 shifts the operating frontier favorably at N in {750,1500}, and comes close on the original hard case, but does not resolve it (mi-native, Stage 7c)
+
+Date: 2026-09-05
+
+Stage 7c's own retuning sweep (`k_CMI in {10,20,30,40,60,80,100}`,
+`k_perm=3` fixed, `R=400`, `168` GitHub Actions shards, zero errors)
+answers D-060's own named next step directly.
+
+**Stage A (calibration filter)**: `k_CMI in {20, 30, 60, 80}` remain
+calibrated on the `weak_edge_triangle` fixture's own null
+(`target_rho=0`) condition at every tested `N`; `{10, 40, 100}` do
+not — including the prior default, `40`, which passed D-056's own
+calibration suite (fork/hub/overlap conditions) but does not pass
+here. The pattern across `{10,20,30,40,60,80,100}` is not cleanly
+monotonic (`40` fails while its neighbors `30` and `60` pass), which
+is reported plainly rather than smoothed into a tidier story — most
+likely a combination of genuine sensitivity to this specific DGP's own
+asymmetric dominant-edge structure (unlike D-056's own calibration
+suite) and the finite precision of a `400`-replicate Wilson-CI check
+applied at a compound multi-cell criterion. This is itself a real,
+disclosable finding: **null calibration does not automatically
+transfer across different conditioning-variable structures**, even at
+fixed `k_perm`/`permutations` — a caveat for any future charter that
+assumes a validated setting generalizes to a new DGP without checking.
+
+**Stage B (frontier comparison), calibrated survivors only:**
+
+| `k_CMI` | `N=750` | `N=1500` | `N=3000` |
+|---|---|---|---|
+| baseline (`40`) | `.20` | `.15` | `.12` |
+| `60` | `.15` (better) | `.15` (tie) | `.12` (tie) |
+| `80` | `.15` (better) | `.12` (better) | `.12` (tie) |
+
+**`k_CMI=80` is the standout**: strictly better or tied at every
+tested `N`, never worse. This is a genuine, calibrated improvement to
+the operating frontier D-060 mapped, not a re-litigation of D-056's
+own settled calibration question (a *different* parameter, checked
+against its *own* null condition, per this charter's own Stage A).
+
+**On the original hard case (`target_rho=0.08`) specifically**: `k_CMI
+=80` at `N=3000` reaches power `.925` at `alpha=.5` — *above* the
+`.90` floor, a real, substantial gain over the baseline's own `.853`
+at the same `alpha`. It still does not count as a resolved detection
+limit, because at `alpha=.5` the null-side pruning requirement
+(indirect-edge TPR `>= .80`, which needs `alpha` small, per D-059's
+own `1-alpha` relationship) fails simultaneously — the same
+structural tension D-059 identified, **narrowed substantially but not
+closed**: the gap between "the smallest alpha with enough power" and
+"the largest alpha with enough pruning" is much smaller at `k_CMI=80`
+than at `40`, but does not yet overlap for this specific effect size.
+
+Rationale: this is exactly the outcome Stage 7c's own charter treated
+as fully reportable either way — a real, useful, calibrated
+improvement was found, without needing to claim it resolves the
+original hard case to be worth adopting.
+
+Consequences: `k_CMI=80` (with `k_perm=3` unchanged) is recorded as
+the new candidate default for any future composition charter at `N in
+{750, 1500}`, where it strictly improves on `40`; at `N=3000` the two
+are equivalent. Per Stage 7c's own consequences section, further
+small-effect-size accessibility (specifically resolving `0.08`) would
+need one of the previously-discussed larger levers (more permutations,
+a different estimator such as RCoT, or a copula-transform
+preprocessing step) — `k_CMI` retuning alone has now been tried and
+has a documented, bounded gain, not an open question anymore.
+`docs/validated_operating_ranges.md` should record `k_CMI=80` as the
+new recommended default alongside `k_perm=3`, with the `N=750`/`1500`
+scope noted explicitly.

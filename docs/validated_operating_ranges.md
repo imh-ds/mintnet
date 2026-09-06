@@ -878,6 +878,28 @@ for its own chosen `N` (e.g. `N=3000` supports `|rho_partial| >=
 .12`) — a bounded, evidence-based constraint, not a general capability
 claim. See D-060.
 
+**Stage 7c (D-061) — new recommended default: `k_CMI=80` (`k_perm=3`
+unchanged), strictly better or tied vs. `k_CMI=40` at every tested
+`N`.** Sweeping `k_CMI in {10,20,30,40,60,80,100}` against the
+`weak_edge_triangle` fixture's own null found `{20,30,60,80}` remain
+calibrated (`{10,40,100}` do not — including the prior default,
+notably; null calibration does not automatically transfer across
+different conditioning-variable structures even at fixed `k_perm`).
+Among calibrated values, `k_CMI=80`'s own detection limit is `.15`/
+`.12`/`.12` at `N=750`/`1500`/`3000` — better than `40`'s own `.20`/
+`.15`/`.12` at the first two, tied at the third. **On the original
+`strong`-fixture edge (`0.08`) specifically**: `k_CMI=80` reaches
+power `.925` at `N=3000`/`alpha=.5` (above the `.90` floor, a real
+gain over `40`'s own `.853`), but still doesn't resolve it — at that
+`alpha`, the null-side pruning requirement fails simultaneously
+(D-059's own structural tension, substantially narrowed, not closed).
+**Recommended default going forward: `k_CMI=80`, `k_perm=3`** for any
+future composition charter at `N in {750,1500}` (equivalent to `40` at
+`N=3000`). Resolving `0.08` itself would need a larger lever (more
+permutations, a different estimator, or a copula-transform
+preprocessing step) — `k_CMI` retuning alone is a closed question with
+a documented, bounded gain. See D-061.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
