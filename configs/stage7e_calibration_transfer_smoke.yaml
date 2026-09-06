@@ -1,0 +1,9 @@
+degrees: [1, 2]
+sample_sizes: [150, 300]
+replicates: 4
+batch_size: 2
+ridge_lambda: 1.0
+cv_folds: 3
+k_perm: 3
+permutations: 19
+master_seed: 70701
