@@ -26,6 +26,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
+import subprocess
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -112,6 +116,46 @@ def ushape_power_comparison(
     return pd.DataFrame(rows)
 
 
+def _git_commit() -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent.parent, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def _read_source_metadata(source_dir: Path) -> dict[str, object] | None:
+    metadata_path = source_dir / "metadata.json"
+    if not metadata_path.is_file():
+        return None
+    return json.loads(metadata_path.read_text(encoding="utf-8"))
+
+
+def _write_provenance(
+    output_dir: Path, structured_density_dir: Path, cmiknn_baseline_dir: Path
+) -> None:
+    """Unlike the two evidence runs this script compares (each written
+    via `aggregate_shards.py`'s own `_write_provenance`), this script
+    produces no new evidence -- it only reads two already-aggregated
+    `raw_metrics.csv` files. Its own `metadata.json` therefore records
+    the commit/environment this *comparison* was run under, plus each
+    source directory's own metadata (git commit, charter hash) verbatim
+    -- so a reader can confirm both inputs came from the same charter
+    lineage without re-deriving it."""
+    metadata = {
+        "git_commit": _git_commit(),
+        "python": sys.version,
+        "platform": platform.platform(),
+        "recorded_at_utc": datetime.now(UTC).isoformat(),
+        "structured_density_source": str(structured_density_dir),
+        "structured_density_source_metadata": _read_source_metadata(structured_density_dir),
+        "cmiknn_baseline_source": str(cmiknn_baseline_dir),
+        "cmiknn_baseline_source_metadata": _read_source_metadata(cmiknn_baseline_dir),
+    }
+    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, default=str) + "\n", encoding="utf-8")
+
+
 def compare(
     structured_density_dir: Path, cmiknn_baseline_dir: Path,
     structured_density_config_path: Path, output_dir: Path,
@@ -131,6 +175,7 @@ def compare(
     detection_limits.to_csv(output_dir / "structured_density_detection_limits.csv", index=False)
     baseline_limits.to_csv(output_dir / "cmiknn_baseline_detection_limits.csv", index=False)
     ushape_power.to_csv(output_dir / "ushape_power_comparison.csv", index=False)
+    _write_provenance(output_dir, structured_density_dir, cmiknn_baseline_dir)
 
     lines = [
         "# Stage 7d Head-to-Head Comparison (mi-native)\n",

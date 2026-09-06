@@ -37,3 +37,8 @@ def test_stage7d_compare_produces_a_report_from_two_smoke_scale_runs(tmp_path: P
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert "calibrated_degrees" in summary
     assert "ushape_power_comparison" in summary
+
+    metadata = json.loads((output_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert "git_commit" in metadata
+    assert metadata["structured_density_source_metadata"] is not None
+    assert metadata["cmiknn_baseline_source_metadata"] is not None
