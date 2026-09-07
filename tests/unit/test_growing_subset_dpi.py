@@ -2,9 +2,10 @@ import math
 
 import numpy as np
 
+from mintnet.confidence import edge_margin
 from mintnet.dpi.multi_conditional import compute_partial_correlation_evidence
 from mintnet.pipeline.growing_subset_dpi import growing_subset_dpi
-from mintnet.simulation.motifs import sample_hub, sample_overlapping_triangles
+from mintnet.simulation.motifs import sample_chain, sample_hub, sample_overlapping_triangles
 
 
 def test_growing_subset_dpi_isolated_edge_passes_through_unconditioned() -> None:
@@ -88,6 +89,80 @@ def test_growing_subset_dpi_recovers_overlapping_triangle_structure() -> None:
         for j in range(i + 1, 5):
             expected = (i, j) in true_edges
             assert bool(result.adjacency[i, j]) == expected, f"pair ({i},{j})"
+
+
+def test_growing_subset_dpi_confidence_defaults_to_raw_margin_when_motif_family_omitted() -> None:
+    rng = np.random.default_rng(1)
+    data = sample_hub(2000, 0.5, 3, rng)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    alpha = 0.01
+
+    result = growing_subset_dpi(data, flagged, alpha)
+
+    for pair, p_value in result.decisive_p_value.items():
+        expected = edge_margin(p_value, alpha, retained=bool(result.adjacency[pair]))
+        if math.isnan(expected):
+            assert math.isnan(result.confidence[pair])
+        else:
+            assert result.confidence[pair] == expected
+
+
+def test_growing_subset_dpi_confidence_uses_the_recalibration_curve_when_motif_family_is_known() -> None:
+    """Passing motif_family="chain" at a validated N must produce a
+    confidence value that differs from raw margin for a mid-range
+    decision -- exactly the case D-066/D-067 addressed -- while a
+    near-certain decision (margin close to 1) stays close to raw
+    margin either way, since both curves agree there."""
+    rng = np.random.default_rng(4)
+    data = sample_chain(3000, 0.5, rng)
+    flagged = np.ones((3, 3), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    alpha = 0.2  # lenient enough that the indirect pair's own margin lands mid-range, not at 1
+
+    result = growing_subset_dpi(data, flagged, alpha, motif_family="chain")
+    raw = growing_subset_dpi(data, flagged, alpha)
+
+    indirect_pair = (0, 2)
+    assert not result.adjacency[indirect_pair]  # indirect pair should be pruned
+    raw_margin = raw.confidence[indirect_pair]
+    recalibrated = result.confidence[indirect_pair]
+    assert raw_margin < 0.9  # confirms this case actually lands in D-066's own found-uncalibrated region
+    assert recalibrated != raw_margin
+
+
+def test_growing_subset_dpi_confidence_falls_back_to_raw_margin_outside_validated_n_range() -> None:
+    rng = np.random.default_rng(5)
+    data = sample_chain(100, 0.5, rng)  # below the validated [300, 3000] range
+    flagged = np.ones((3, 3), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    alpha = 0.2
+
+    result = growing_subset_dpi(data, flagged, alpha, motif_family="chain")
+    raw = growing_subset_dpi(data, flagged, alpha)
+
+    for pair in result.confidence:
+        if math.isnan(raw.confidence[pair]):
+            assert math.isnan(result.confidence[pair])
+        else:
+            assert result.confidence[pair] == raw.confidence[pair]
+
+
+def test_growing_subset_dpi_confidence_falls_back_to_raw_margin_for_unknown_motif_family() -> None:
+    rng = np.random.default_rng(1)
+    data = sample_hub(2000, 0.5, 3, rng)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    alpha = 0.01
+
+    result = growing_subset_dpi(data, flagged, alpha, motif_family="hub")
+    raw = growing_subset_dpi(data, flagged, alpha)
+
+    for pair in result.confidence:
+        if math.isnan(raw.confidence[pair]):
+            assert math.isnan(result.confidence[pair])
+        else:
+            assert result.confidence[pair] == raw.confidence[pair]
 
 
 def test_growing_subset_dpi_respects_max_conditioning_size_cap() -> None:

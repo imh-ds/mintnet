@@ -4,6 +4,7 @@ from .margin import edge_margin, edge_margins
 from .recalibration import (
     IsotonicCurve,
     calibrated_margin,
+    default_curves,
     evaluate_recalibrated_ece,
     fit_calibration_curves,
     fit_isotonic_curve,
@@ -16,6 +17,7 @@ __all__ = [
     "edge_margins",
     "IsotonicCurve",
     "calibrated_margin",
+    "default_curves",
     "evaluate_recalibrated_ece",
     "fit_calibration_curves",
     "fit_isotonic_curve",

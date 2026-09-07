@@ -19,6 +19,8 @@ from itertools import combinations
 
 import numpy as np
 
+from mintnet.confidence.margin import edge_margin
+from mintnet.confidence.recalibration import calibrated_margin
 from mintnet.dpi.multi_conditional import compute_partial_correlation_evidence
 from mintnet.pipeline.compose import connected_components
 
@@ -47,22 +49,67 @@ class GrowingSubsetResult:
     # whose every tested subset raised a degenerate-conditioning-set
     # ValueError (no valid evidence obtained).
     decisive_p_value: dict[tuple[int, int], float]
+    # Per candidate edge: a [0, 1] confidence score derived from
+    # decisive_p_value (see docs/stage8a_charter.md's own margin
+    # formula). Ordinal-only (informative, not a literal probability)
+    # unless `motif_family` was passed to growing_subset_dpi AND that
+    # family/N combination has a validated recalibration curve
+    # (docs/stage8b_charter.md, D-067 -- currently chain/fork/triangle/
+    # weak_edge_triangle only, N in [300, 3000]) -- in every other case
+    # this silently falls back to the raw, uncalibrated margin, since
+    # applying a recalibration curve fit on a specific synthetic DGP to
+    # an edge of unknown or different structure would be exactly the
+    # unvalidated generalization both charters explicitly disclaim.
+    # NaN wherever decisive_p_value is NaN.
+    confidence: dict[tuple[int, int], float]
+
+
+def _confidence(p_value: float, alpha: float, *, retained: bool, n: int, motif_family: str | None) -> float:
+    raw_margin = edge_margin(p_value, alpha, retained=retained)
+    if motif_family is None or math.isnan(raw_margin):
+        return raw_margin
+    try:
+        return calibrated_margin(raw_margin, n, motif_family)
+    except ValueError:
+        # Motif family unrecognized or N outside the validated range --
+        # fall back to raw margin rather than raise, since confidence
+        # is a diagnostic, not a value the caller's own decision depends on.
+        return raw_margin
 
 
 def growing_subset_dpi(
-    data: np.ndarray, flagged: np.ndarray, alpha: float, *, max_conditioning_size: int = 4
+    data: np.ndarray,
+    flagged: np.ndarray,
+    alpha: float,
+    *,
+    max_conditioning_size: int = 4,
+    motif_family: str | None = None,
 ) -> GrowingSubsetResult:
     """Prune a candidate edge as soon as any tested conditioning subset
     (drawn from its own connected component, growing from size 1) fails
     to reject independence; retain it only if every subset up to the
     cap rejects. The same OR-rule the Stage 5e PC comparator already
     uses, applied to MINT's own screened graph instead of a from-scratch
-    complete graph."""
+    complete graph.
+
+    `motif_family` is optional and defaults to None (no recalibration
+    attempted -- every edge's own `confidence` is the raw, ordinal-only
+    margin). Only pass it when the caller genuinely knows the DGP an
+    edge's own local structure matches one of D-067's own fitted
+    labels (`chain`, `fork`, `triangle`, `weak_edge_triangle`) -- e.g.
+    a Stage 8-style evidence runner working with a known synthetic
+    fixture, not an arbitrary real or composed network, where no such
+    label is knowable. Passing it for real data would apply a curve
+    fit on a specific synthetic null to an edge that may not resemble
+    it at all -- exactly the generalization both Stage 8a and 8b
+    charters disclaim as a non-goal."""
     p = flagged.shape[0]
+    n = data.shape[0]
     final = flagged.copy()
     sizes: dict[tuple[int, int], int] = {}
     cap_reached: dict[tuple[int, int], bool] = {}
     decisive_p_value: dict[tuple[int, int], float] = {}
+    confidence: dict[tuple[int, int], float] = {}
 
     node_to_component: dict[int, frozenset[int]] = {}
     for component in connected_components(flagged):
@@ -81,6 +128,7 @@ def growing_subset_dpi(
                 sizes[(i, j)] = 0
                 cap_reached[(i, j)] = False
                 decisive_p_value[(i, j)] = math.nan
+                confidence[(i, j)] = math.nan
                 continue
 
             cap = min(len(pool), max_conditioning_size)
@@ -110,11 +158,16 @@ def growing_subset_dpi(
             final[i, j] = final[j, i] = not pruned
             sizes[(i, j)] = reached_size
             cap_reached[(i, j)] = (not pruned) and (len(pool) > max_conditioning_size)
-            decisive_p_value[(i, j)] = triggering_p_value if pruned else max_p_value
+            resolved_p_value = triggering_p_value if pruned else max_p_value
+            decisive_p_value[(i, j)] = resolved_p_value
+            confidence[(i, j)] = _confidence(
+                resolved_p_value, alpha, retained=not pruned, n=n, motif_family=motif_family
+            )
 
     return GrowingSubsetResult(
         adjacency=final,
         conditioning_size_used=sizes,
         cap_reached=cap_reached,
         decisive_p_value=decisive_p_value,
+        confidence=confidence,
     )

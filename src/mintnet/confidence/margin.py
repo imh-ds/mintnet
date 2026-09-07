@@ -8,8 +8,13 @@ literal probability until then.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
-from mintnet.pipeline.growing_subset_dpi import GrowingSubsetResult
+if TYPE_CHECKING:
+    # Deferred: growing_subset_dpi.py imports from mintnet.confidence at
+    # module level to compute its own default confidence field, so a
+    # real (non-type-checking) import here would be circular.
+    from mintnet.pipeline.growing_subset_dpi import GrowingSubsetResult
 
 
 def edge_margin(p_value: float, alpha: float, *, retained: bool) -> float:

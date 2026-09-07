@@ -12,11 +12,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
+
+# D-067's own validated fitted artifact: isotonic curves per
+# (motif_family, N), fit on Stage 8a's development replicates
+# (0-2499), held-out-validated on 2500-4999 (docs/decision_log.md
+# D-067). Only chain/fork/triangle/weak_edge_triangle at
+# N in {300,500,750,1000,1500,3000} are covered -- see calibrated_margin.
+_DEFAULT_CURVES_PATH = Path(__file__).parent / "fitted" / "chain_fork_margin_curves.json"
 
 
 @dataclass(frozen=True)
@@ -69,13 +77,24 @@ def fit_calibration_curves(
     return curves
 
 
+@lru_cache(maxsize=1)
+def default_curves() -> dict[tuple[str, int], IsotonicCurve]:
+    """D-067's own validated fitted artifact (see the module docstring
+    and docs/decision_log.md). Loaded once, cached for the process."""
+    return load_curves(_DEFAULT_CURVES_PATH)
+
+
 def calibrated_margin(
-    margin: float, n: int, motif_family: str, curves: dict[tuple[str, int], IsotonicCurve]
+    margin: float, n: int, motif_family: str, curves: dict[tuple[str, int], IsotonicCurve] | None = None
 ) -> float:
     """Recalibrated probability for a single edge decision. Snaps to
     the nearest tested N a curve exists for -- does not interpolate
     between tested N values (unvalidated at any untested N) -- and
-    raises outside the tested N range or for an unknown motif family."""
+    raises outside the tested N range or for an unknown motif family.
+    Defaults to D-067's own validated fitted curves when `curves` is
+    not given explicitly (tests and refitting pass their own)."""
+    if curves is None:
+        curves = default_curves()
     available_ns = sorted({tested_n for family, tested_n in curves if family == motif_family})
     if not available_ns:
         raise ValueError(f"no fitted calibration curve for motif family {motif_family!r}")
