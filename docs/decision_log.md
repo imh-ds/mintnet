@@ -5563,3 +5563,78 @@ extrapolation) or for a motif this mapping was never fit for.
 score as the recommended path for chain/fork's own prune decision
 within `N in [300, 3000]`, with raw margin remaining the ordinal-only
 fallback outside that range or for un-recalibrated mechanisms.
+
+## D-068: Stage 8c composed-tier margin-calibration transfer — PROCEED (true-edge gate); false-edge case does NOT transfer cleanly, a qualitatively different and more severe failure mode, but a fresh recalibration curve still fixes it (main, Stage 8c)
+
+Date: 2026-09-07
+
+`docs/stage8c_charter.md`'s own transfer check ran cleanly: 14 GitHub
+Actions shards (`chain_fork_hub`/`overlap` x 7 `N`), zero errors,
+`R=2000` per cell, 28,000 replicates exploded into 333,485 scored edge
+decisions.
+
+**True-edge gate (the charter's own only gated question): PROCEED,
+convincingly.** ECE ranges from `~1e-11` (`chain_fork_hub`) to
+`.0011` (`overlap`'s own worst cell) across every tested `N` — tighter
+than any isolated-tier fixture D-066 measured, and zero monotonicity
+violations anywhere. Composition (screening noise, cascading
+interactions) does not degrade raw margin's own true-edge calibration
+— if anything, composed-network true edges are dominant, high-power
+signals that make this case even cleaner than in isolation.
+
+**False-edge case (descriptive, not gated, per the charter's own
+framing): does not transfer cleanly — a different, more severe failure
+mode than D-066 found, not the same one at larger scale.** ECE ranges
+`.35`-`.46` across `(dgp, N)` (D-066's own chain/fork raw-margin range
+in isolation was `.11`-`.15`), and **every single tested cell shows a
+genuine monotonicity violation** (D-066 found none). Inspecting the
+bin table directly (not assumed from the ECE number): margin is
+**not** dominated by a single high-confidence bin the way isolated
+fixtures were (bin counts are roughly even across all ten deciles for
+both DGPs — a structurally different margin distribution, not just a
+different calibration curve) and the top bin (margin `~0.95`) is
+**less** reliable than several middle bins — `chain_fork_hub`/`N=1750`:
+bin `9` accuracy `.782` vs. bins `0`-`8` ranging `.88`-`.93`;
+`overlap`/`N=1750`: bin `9` accuracy `.866` vs. bins `0`-`8` ranging
+`.93`-`.95`. A real reversal — the most "confidently pruned" decisions
+are measurably *less* trustworthy than moderately-confident ones, the
+opposite of what margin's own formula assumes. Mechanism not
+diagnosed here (plausibly related to this project's own documented
+composed-network cascading effects, D-042/D-043, but that is a
+hypothesis, not confirmed by this charter).
+
+**Exploratory sub-question (question 2, fully descriptive, no gate):
+a freshly-fit recalibration curve — built directly on this charter's
+own composed-tier evidence, its own development/validation split,
+never reusing D-067's own chain/fork curve (which has no valid
+motif-family label to apply to a composed network's edges) — still
+brings false-edge ECE down to `.003`-`.017` across every `(dgp, N)`
+cell**, despite the raw relationship being non-monotonic going in.
+Isotonic regression does not require its input to already be
+monotonic to produce a well-calibrated, monotonic output (it fits the
+best monotonic approximation via pool-adjacent-violators) — so this
+result shows the *recalibration method* generalizes to the harder
+composed setting, even though the specific isolated-fixture curve
+(D-067) could never have been validly applied here and the raw
+relationship it would need to correct is qualitatively worse.
+
+Consequences: **PROCEED stands** for the one thing this charter
+actually gated — raw margin's true-edge calibration is now confirmed
+to survive composition, not just an artifact of isolated 3-node
+fixtures. The false-edge finding is a genuine, disclosed negative
+result at the "does it transfer" question — it does not, in a more
+concerning way than D-066 alone would have predicted — but is
+immediately followed by an encouraging, non-gating positive result
+(the recalibration *method* still works, freshly fit in-context). Two
+concrete, disclosed, not-yet-chartered options: (a) a future charter
+validating and deploying a composed-tier-specific false-edge
+recalibration mapping (mirroring Stage 8b's own dev/val discipline,
+but fit and validated on composed evidence throughout, never
+transplanting an isolated-fixture curve); (b) a diagnostic charter into
+*why* the high-margin reversal occurs before attempting to fix it,
+since (a) alone would correct the symptom without explaining it.
+`docs/validated_operating_ranges.md` should record margin's true-edge
+calibration as confirmed for both isolated and composed settings, and
+the false-edge case as confirmed *not* to transfer as previously
+characterized — a distinct, more severe composed-tier finding, not a
+restatement of D-066.

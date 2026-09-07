@@ -980,6 +980,31 @@ ordinal-only fallback outside that range, for `N` values the mapping
 was never fit for, or for mechanisms (CMIknn, structured-density) this
 recalibration was never extended to. See D-067.
 
+**Stage 8c (D-068) — margin calibration transfer to the composed
+tier: true-edge case PROCEEDs (confirmed, not just an isolated-fixture
+artifact); false-edge case does NOT transfer cleanly.** On Stage 6a's
+own composed `p=15` networks (`chain_fork_hub`, `overlap`), raw
+margin's true-edge calibration is confirmed at `N in
+{400,500,600,750,1000,1500,1750}` — ECE `.0000`-`.0011`, tighter than
+any isolated-tier fixture, zero monotonicity violations. **Recommended
+default**: raw margin (`edge_margin`/`growing_subset_dpi`'s own default
+`confidence`, `motif_family=None`) can be trusted as an approximately
+calibrated true-edge confidence estimate in both isolated (D-066) and
+composed (D-068) settings. The false-edge (prune) case is a different
+story in composition than in isolation: ECE `.35`-`.46` (materially
+worse than D-066's own `.11`-`.15`), with genuine monotonicity
+violations everywhere tested — the highest-margin decisions are
+actually *less* reliable than moderately-confident ones, not more.
+**Do not use raw margin as even an ordinal ranking signal for
+composed-network prune decisions** — it does not merely under-inform
+there the way it did for isolated chain/fork, it points in a
+misleading direction at the high end. D-067's own chain/fork curve
+must not be applied to composed-network edges (no valid motif-family
+label). A freshly-fit, composed-tier-specific recalibration curve did
+bring this case within tolerance (`.003`-`.017`) as a descriptive,
+non-deployed finding — a candidate for a future charter, not yet
+validated for production use. See D-068.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
