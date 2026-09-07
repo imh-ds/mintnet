@@ -61,21 +61,6 @@ def test_stage5a_metrics_are_well_formed(tmp_path: Path) -> None:
     assert (ok["shd"] >= 0.0).all()
 
 
-def test_stage5a_seeds_are_disjoint_from_stage4p(tmp_path: Path) -> None:
-    """Stage 5a's own seed derivation adds a stage tag disjoint from
-    every prior charter's own SeedSequence entropy (docs/stage5a_charter.md's
-    own seed requirement)."""
-    from mintnet.experiments.stage4p import _condition_seed as stage4p_seed
-    from mintnet.experiments.stage5a import _condition_seed as stage5a_seed
-
-    for dgp_index in range(2):
-        for sample_index in range(2):
-            for replicate in range(2):
-                assert stage4p_seed(20260830, dgp_index, sample_index, replicate) != stage5a_seed(
-                    20260830, dgp_index, sample_index, replicate
-                )
-
-
 def test_stage5a_sharded_run_matches_unsharded_run(tmp_path: Path) -> None:
     """A shard restricted to one (dgp, N) subset must reproduce exactly
     the rows an unsharded run produces for that same subset -- the

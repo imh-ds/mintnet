@@ -11,7 +11,6 @@ from .motifs import (
     sample_weak_edge_triangle,
     triangle_precisions,
 )
-from .screening_network import TRUE_PAIR_INDICES, sample_screening_network
 
 __all__ = [
     "sample_chain",
@@ -23,6 +22,4 @@ __all__ = [
     "sample_ushape_triangle",
     "sample_weak_edge_triangle",
     "triangle_precisions",
-    "sample_screening_network",
-    "TRUE_PAIR_INDICES",
 ]
