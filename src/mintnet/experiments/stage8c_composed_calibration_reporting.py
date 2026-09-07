@@ -27,7 +27,12 @@ def explode_edges(raw: pd.DataFrame) -> pd.DataFrame:
     """One row per (dgp, n, replicate, edge) -- only from replicates
     that ran successfully; a replicate whose own screening/pruning
     itself errored contributes no edge rows (its failure is still
-    visible in `raw`'s own `status` column)."""
+    visible in `raw`'s own `status` column).
+
+    `conditioning_size_used`/`cap_reached` were added to the edge
+    schema for Stage 8d's own diagnostic use (docs/stage8d_charter.md);
+    `.get(..., None)` keeps this working against evidence generated
+    before that enrichment (e.g. D-068's own already-recorded run)."""
     rows: list[dict[str, object]] = []
     for record in raw.loc[raw["status"] == "ok"].itertuples(index=False):
         for edge in json.loads(record.edges_json):
@@ -37,6 +42,8 @@ def explode_edges(raw: pd.DataFrame) -> pd.DataFrame:
                     "i": edge["i"], "j": edge["j"], "is_true_edge": edge["is_true_edge"],
                     "decisive_p_value": edge["decisive_p_value"], "margin": edge["margin"],
                     "retained": edge["retained"], "correct": edge["correct"], "status": "ok",
+                    "conditioning_size_used": edge.get("conditioning_size_used"),
+                    "cap_reached": edge.get("cap_reached"),
                 }
             )
     return pd.DataFrame(rows)

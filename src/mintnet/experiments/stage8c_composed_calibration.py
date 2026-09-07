@@ -192,6 +192,12 @@ def _run_one_replicate(dgp: str, dgp_index: int, n: int, sample_index: int, repl
                         "i": i, "j": j, "is_true_edge": is_true_edge,
                         "decisive_p_value": p_value, "margin": margin, "retained": retained,
                         "correct": bool(retained == is_true_edge),
+                        # Already computed by growing_subset_dpi at zero extra
+                        # cost; carried through for Stage 8d's own diagnostic
+                        # use (docs/stage8d_charter.md) -- not used by Stage
+                        # 8c's own gate/reporting itself.
+                        "conditioning_size_used": result.conditioning_size_used[(i, j)],
+                        "cap_reached": bool(result.cap_reached[(i, j)]),
                     }
                 )
         status, error = "ok", ""
