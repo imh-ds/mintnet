@@ -917,6 +917,25 @@ this is a standalone estimator characterization, tracked separately
 from CMIknn's own `k_CMI=80` line above — composing either estimator
 into the DPI pipeline is separate future work. See D-062.
 
+**Stage 7e (D-063/D-064) — structured-density composition into the
+growing-subset DPI mechanism: `degree=1` confirmed calibrated on
+Stage 7's own real fixtures, but the isolation-tier gate still
+REASSESSes — narrowly, not by the wide margin CMIknn left.** The
+calibration-transfer check confirmed `degree=1` (and `degree=3`) hold
+on chain/fork's own genuine null; `degree=1` clearly outperforms
+`degree=3` on the `strong` triangle's hardest edge (D-063). The
+isolation-tier evidence run itself REASSESSed on Stage 1b's own frozen
+9-value alpha grid (chain/fork TPR passes everywhere; `strong`
+triangle FPR fails at the selected pair), but the full alpha range
+shows chain/fork TPR and `strong` FPR now cross almost on top of each
+other around `alpha~0.15`-`0.25` at `N=1500` (missing the `.80` floor
+by only `.008`-`.020`) — the closest this project has come to a
+feasible simultaneous window on this diagnostic case across every
+prior attempt (D-059 through D-064). **This is an open, actively
+narrowing question, not a closed negative result**: a fine-grained
+alpha sweep in the `.10`-`.30` range is the concrete, well-motivated
+next step, not a dead end. See D-064.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

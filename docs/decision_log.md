@@ -5299,3 +5299,60 @@ calibrated survivors on the charter's own hardest historical case.
 Stage 7e's main run (isolation-tier gate, then composed-tier
 comparison) is now unblocked to proceed with `degree=1`, per the
 charter's own required sequencing.
+
+## D-064: Stage 7e isolation-tier evidence — REASSESS again, but the gap is dramatically narrower than CMIknn's own, not the same wide gap in different clothes (mi-native, Stage 7e)
+
+Date: 2026-09-06
+
+Stage 7e's own isolation-tier evidence run (`degree=1` per D-063,
+Stage 1b's own frozen 9-value alpha grid, `R=500`, `18` GitHub Actions
+shards, zero errors across `81,000` rows) retries Stage 7's own
+isolation gate directly. **Result: REASSESS** — development selected
+alpha pair `(0.05, 0.1)`; validation failed on `triangle
+true_edge_prune_fpr` (the `strong` family's own weakest edge). Chain
+and fork's own indirect-edge pruning TPR passed comfortably at both
+tested alphas, every `N`, every strength (`0.856`-`0.972`).
+
+**This is not the same finding as D-059 wearing a different estimator
+— the structural gap has narrowed dramatically, even though the
+frozen 9-point grid doesn't happen to land inside it.** Examining the
+full alpha range (not just the selected pair) makes this concrete:
+
+| `alpha` | chain/fork TPR (all strengths, `N=1500`) | `strong` triangle FPR (`N=1500`) |
+|---|---|---|
+| `.10` | `.896`-`.928` (pass) | `.046` (pass) |
+| `.20` | `.780`-`.840` (2 of 6 cells just below `.80`) | `.030` (pass) |
+| `.30` | `.680`-`.748` (fail) | `.020` (pass) |
+
+**The two curves now cross almost on top of each other, around
+`alpha~0.15`-`0.25`**, rather than being separated by the wide,
+unbridgeable gap D-059 found (there, `strong`'s own FPR only cleared
+`.10` at `alpha=.5`, by which point chain/fork TPR had already
+collapsed to `.543`). At `N=1500` specifically, chain/fork's own worst
+cells at `alpha=.20` (`.780`, `.792`) miss the `.80` floor by only
+`.008`-`.020` — the closest this project's own mi-native track has
+ever come to a simultaneously-feasible window on this exact
+diagnostic case, across every prior estimator/tuning attempt (D-059
+through D-063). At `N=750`, the gap is real but still visibly
+narrower than D-059's own (`strong` FPR reaches `.091`, just at the
+floor, at `alpha=.20`, where chain's own weakest cell is `.768`).
+
+Rationale: Stage 1b's own frozen 9-value grid (`.50` to `.0001`, sparse
+above `.10`) was inherited unchanged from Stage 1/Stage 7 for direct
+comparability, not because it was expected to resolve a crossover this
+narrow — the grid simply has no point between `.10` and `.20` to test
+whether a working alpha exists in between, and this evidence run was
+never designed to answer that finer question.
+
+Consequences: **REASSESS stands** — this charter's own frozen gate is
+not met, and no production change is authorized. But unlike D-059,
+this REASSESS comes with a specific, well-motivated next step already
+implied by the evidence itself: a fine-grained alpha sweep (mirroring
+Stage 7b's own 50-value grid, `.01` to `.50` step `.01`) specifically
+in the `.10`-`.30` range, at `N=1500`, to determine whether a genuine
+operating point exists in the narrow window the coarse grid stepped
+over. This is a smaller, more targeted charter than Stage 7b's own
+full frontier-mapping effort, since the region of interest is now
+known rather than open-ended. `docs/validated_operating_ranges.md`
+should record this as an open, actively narrowing question, not a
+closed negative result.
