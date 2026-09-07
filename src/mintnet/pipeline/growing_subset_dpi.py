@@ -13,6 +13,7 @@ MINT's own passthrough-unconditioned false positives.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from itertools import combinations
 
@@ -36,6 +37,16 @@ class GrowingSubsetResult:
     # (a disclosed bound, see docs/stage6a_charter.md's own non-goals;
     # reported so it is never silently absorbed into "retain").
     cap_reached: dict[tuple[int, int], bool]
+    # Per candidate edge: the p-value the final decision actually
+    # turned on (see docs/stage8a_charter.md). For a pruned edge, the
+    # p-value that triggered the prune. For a retained edge with a
+    # non-empty pool, the MAXIMUM p-value among every subset tested --
+    # the weakest piece of evidence among those that all had to reject
+    # for retention to hold, i.e. the one closest to overturning it.
+    # NaN for an isolated edge (no test ever ran) or a retained edge
+    # whose every tested subset raised a degenerate-conditioning-set
+    # ValueError (no valid evidence obtained).
+    decisive_p_value: dict[tuple[int, int], float]
 
 
 def growing_subset_dpi(
@@ -51,6 +62,7 @@ def growing_subset_dpi(
     final = flagged.copy()
     sizes: dict[tuple[int, int], int] = {}
     cap_reached: dict[tuple[int, int], bool] = {}
+    decisive_p_value: dict[tuple[int, int], float] = {}
 
     node_to_component: dict[int, frozenset[int]] = {}
     for component in connected_components(flagged):
@@ -68,11 +80,14 @@ def growing_subset_dpi(
                 final[i, j] = final[j, i] = True
                 sizes[(i, j)] = 0
                 cap_reached[(i, j)] = False
+                decisive_p_value[(i, j)] = math.nan
                 continue
 
             cap = min(len(pool), max_conditioning_size)
             pruned = False
             reached_size = 0
+            triggering_p_value = math.nan
+            max_p_value = math.nan
             for size in range(1, cap + 1):
                 reached_size = size
                 for subset in combinations(pool, size):
@@ -82,8 +97,12 @@ def growing_subset_dpi(
                         # Degenerate conditioning set: inconclusive, not
                         # evidence of independence -- try the next subset.
                         continue
+                    max_p_value = evidence.p_value if math.isnan(max_p_value) else max(
+                        max_p_value, evidence.p_value
+                    )
                     if evidence.p_value > alpha:
                         pruned = True
+                        triggering_p_value = evidence.p_value
                         break
                 if pruned:
                     break
@@ -91,5 +110,11 @@ def growing_subset_dpi(
             final[i, j] = final[j, i] = not pruned
             sizes[(i, j)] = reached_size
             cap_reached[(i, j)] = (not pruned) and (len(pool) > max_conditioning_size)
+            decisive_p_value[(i, j)] = triggering_p_value if pruned else max_p_value
 
-    return GrowingSubsetResult(adjacency=final, conditioning_size_used=sizes, cap_reached=cap_reached)
+    return GrowingSubsetResult(
+        adjacency=final,
+        conditioning_size_used=sizes,
+        cap_reached=cap_reached,
+        decisive_p_value=decisive_p_value,
+    )

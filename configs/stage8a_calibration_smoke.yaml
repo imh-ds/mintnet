@@ -1,0 +1,6 @@
+sample_sizes: [300, 3000]
+replicates: 5
+batch_size: 5
+master_seed: 80100
+ece_tolerance: 0.10
+bin_count: 10

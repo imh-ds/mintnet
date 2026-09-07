@@ -1,5 +1,8 @@
+import math
+
 import numpy as np
 
+from mintnet.dpi.multi_conditional import compute_partial_correlation_evidence
 from mintnet.pipeline.growing_subset_dpi import growing_subset_dpi
 from mintnet.simulation.motifs import sample_hub, sample_overlapping_triangles
 
@@ -15,6 +18,47 @@ def test_growing_subset_dpi_isolated_edge_passes_through_unconditioned() -> None
     assert result.adjacency[0, 1] and result.adjacency[1, 0]
     assert result.conditioning_size_used[(0, 1)] == 0
     assert not result.cap_reached[(0, 1)]
+    assert math.isnan(result.decisive_p_value[(0, 1)])
+
+
+def test_growing_subset_dpi_decisive_p_value_for_pruned_edge_is_the_triggering_test() -> None:
+    """A pruned edge's decisive_p_value must be exactly the p-value the
+    OR-rule search stopped on, not some other subset's own p-value."""
+    rng = np.random.default_rng(1)
+    data = sample_hub(2000, 0.5, 3, rng)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    result = growing_subset_dpi(data, flagged, alpha=0.01)
+
+    for pair in ((1, 2), (1, 3), (2, 3)):
+        assert not result.adjacency[pair]
+        # pool is sorted ascending and node 0 (the hub) is always its
+        # smallest member for these pairs, so subset (0,) is always the
+        # first -- and, since conditioning on the true hub immediately
+        # reveals independence, the only -- subset tested.
+        expected = compute_partial_correlation_evidence(data, pair[0], pair[1], (0,)).p_value
+        assert result.decisive_p_value[pair] == expected
+        assert result.decisive_p_value[pair] > 0.01
+
+
+def test_growing_subset_dpi_decisive_p_value_for_retained_edge_is_the_maximum_tested() -> None:
+    """A retained edge's decisive_p_value must be the largest p-value
+    among every subset actually tested (the weakest evidence for
+    independence, i.e. the one closest to overturning retention), not
+    the first or the smallest."""
+    rng = np.random.default_rng(2)
+    data = sample_overlapping_triangles(3000, rng)
+    flagged = np.ones((5, 5), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    result = growing_subset_dpi(data, flagged, alpha=0.01)
+
+    true_edges = {(0, 1), (0, 2), (1, 2), (2, 3), (2, 4), (3, 4)}
+    for pair in true_edges:
+        assert result.adjacency[pair]
+        assert not math.isnan(result.decisive_p_value[pair])
+        assert result.decisive_p_value[pair] <= 0.01
 
 
 def test_growing_subset_dpi_prunes_indirect_hub_edges_at_size_one() -> None:
