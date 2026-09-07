@@ -34,8 +34,18 @@ def bin_margins(raw: pd.DataFrame, bin_count: int) -> pd.DataFrame:
     return scored
 
 
+_BIN_TABLE_COLUMNS = ("motif", "n", "bin", "bin_low", "bin_high", "count", "mean_margin", "empirical_accuracy", "ci_low", "ci_high")
+
+
 def bin_table(scored: pd.DataFrame, bin_count: int) -> pd.DataFrame:
-    """Per (motif, n, bin): mean margin, empirical accuracy, Wilson CI, count."""
+    """Per (motif, n, bin): mean margin, empirical accuracy, Wilson CI, count.
+    Returns a properly-columned (if empty) frame when `scored` has no
+    rows at all -- a real possibility for a sparse (motif, n) cell in a
+    caller with data-dependent candidate counts (e.g. Stage 8c's own
+    composed-network edges) -- so downstream groupby calls never see a
+    bare, columnless DataFrame."""
+    if scored.empty:
+        return pd.DataFrame(columns=_BIN_TABLE_COLUMNS)
     edges = np.linspace(0.0, 1.0, bin_count + 1)
     rows: list[dict[str, object]] = []
     for (motif, n), group in scored.groupby(["motif", "n"]):

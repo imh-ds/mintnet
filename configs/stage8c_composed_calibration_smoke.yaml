@@ -1,0 +1,11 @@
+sample_sizes: [400, 1750]
+strength: 0.5
+screening_alpha: 0.001
+max_conditioning_size: 4
+replicates: 5
+batch_size: 5
+master_seed: 80200
+development_replicates: [0, 2]
+validation_replicates: [3, 4]
+ece_tolerance: 0.10
+bin_count: 10
