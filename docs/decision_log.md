@@ -5441,3 +5441,86 @@ record `N>=1500` as the currently defensible range for this
 composition, with `N=750` named as the specific, unresolved
 limitation — not the broader, less precise framing D-064 originally
 gave.
+
+## D-066: Stage 8a Tier-0 margin calibration — REASSESS (recalibration case); well-calibrated on retain-heavy fixtures, systematically uninformative in the low-to-mid range for chain/fork's prune decision (main, Stage 8a)
+
+Date: 2026-09-07
+
+`docs/stage8a_charter.md`'s own calibration check ran cleanly on the
+first attempt: 84 GitHub Actions shards (14 conditions x 6 `N`), zero
+errors, `R=5000` per cell, 1,260,000 scored edge-decisions. **Monotonicity
+holds everywhere tested — zero violations at any `(motif, N)` cell.**
+Numeric calibration (ECE against the predeclared `0.10` tolerance)
+does not:
+
+| motif | ECE range across `N` |
+|---|---|
+| `chain` | `.111` (`N=300`) to `.146` (`N=3000`) |
+| `fork` | `.113` (`N=300`) to `.146` (`N=3000`) |
+| `triangle` | `.017` (`N=300`) down to `.002` (`N=3000`) |
+| `weak_edge_triangle` | `.037` (`N=300`) down to `.030` (`N=3000`) |
+
+Per this charter's own predeclared gate: since monotonicity holds
+everywhere but ECE exceeds tolerance on `chain`/`fork`, the outcome is
+**REASSESS (recalibration case)**, not the defect case — margin's own
+formula is not broken, it is simply not numerically calibrated for
+this DGP family.
+
+**Mechanism, confirmed by inspecting the bin table directly (not
+assumed from the ECE number alone)**: `triangle`/`weak_edge_triangle`
+are dominated by high-power true-edge retentions (the vast majority of
+scored decisions land in the `[0.9, 1.0]` margin bin, where margin and
+empirical accuracy already agree closely — e.g. `triangle`/`N=3000`'s
+top bin is `0.999` margin vs `1.000` accuracy on `44,749` of `~45,000`
+scored decisions), so the ECE for these families is low mostly because
+the well-calibrated bulk dominates the count-weighted average, not
+because every bin individually agrees.
+
+`chain`/`fork` look different in a specific, isolable way: **every
+scored decision below margin `0.9` is the indirect pair being pruned**
+(the two adjacent true edges are essentially always confidently
+retained at margin `~1`) — and empirical accuracy across that entire
+sub-`0.9` range sits **roughly flat around `0.92`-`0.93`** at `N=3000`
+(`0.936, 0.932, 0.919, 0.927, 0.925, 0.930, 0.923, 0.925, 0.926` across
+bins `0`-`8`) and around `0.79`-`0.82` at `N=300`, regardless of which
+bin (`0.05` mean margin or `0.85` mean margin score equally). Margin
+predicts a *climbing* reliability across this range; the actual
+pruning test's reliability is close to *constant* there. The `[0.9,
+1.0]` bin is the one place margin and accuracy actually agree well for
+these motifs (`0.998`/`0.996` at `N=3000`).
+
+**Read directly**: for the indirect-edge prune test specifically, the
+p-value's exact distance from `alpha` (below `0.9` margin) carries much
+less information about whether the decision is correct than the
+margin formula assumes — the test's power in this regime is already
+high and roughly uniform across that whole sub-boundary range, so
+margin is not so much *wrong* as *uninformative* there: a real, if
+partial, instance of the same informative-but-uncalibrated distinction
+this charter set out to test in the first place, localized to one
+specific decision type (a null/indirect-independence prune) rather
+than the mechanism as a whole.
+
+Rationale: this is a materially more useful result than a flat REASSESS
+would be — the charter's own predeclared gate structure (monotonicity
+vs. ECE as two separately falsifiable claims, plus per-cell reporting
+rather than one pooled number) is exactly what let this be localized to
+"the prune side of chain/fork's indirect test, below margin `0.9`"
+rather than reported as an undifferentiated failure of the whole
+mechanism.
+
+Consequences: **REASSESS stands** for treating raw margin as a literal
+calibrated probability across the board. Two concrete, disclosed paths
+forward, neither chartered yet: (a) present margin as ordinal/ranking
+information only (its originally-intended, more modest use — flagging
+the weakest edges for researcher attention) rather than a probability,
+which this evidence fully supports doing today, unchanged; (b) a
+follow-up recalibration charter fitting an explicit mapping (e.g.
+isotonic regression, on a development/validation split disjoint from
+this charter's own replicates) specifically for the prune/chain-fork
+case, since the retain-heavy fixtures already look close to identity
+without one. `docs/validated_operating_ranges.md` should record
+raw Tier-0 margin as calibrated (within tolerance) for retain-dominant
+decisions (`triangle`, `weak_edge_triangle`) across the full tested
+`N` range, and explicitly *not* calibrated (informative-only) for the
+chain/fork indirect-edge prune decision at margin `< 0.9` — not a
+blanket calibrated/uncalibrated verdict for the mechanism as a whole.

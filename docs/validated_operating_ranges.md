@@ -944,6 +944,29 @@ composition: `N>=1500` only** — `N=750` is a specific, precisely
 located, unresolved limitation (not yet chartered to fix), not a
 general failure of the mechanism. See D-064/D-065.
 
+**Stage 8a (D-066) — Tier-0 confidence-margin score: calibrated for
+retain-dominant decisions, informative-only (not calibrated) for the
+chain/fork indirect-edge prune decision below margin `0.9`.** Testing
+`growing_subset_dpi`'s (D-053, the only unrestricted-`PROCEED`
+mechanism) own free margin score against known ground truth across
+`N in {300,500,750,1000,1500,3000}`: monotonicity holds everywhere (no
+violations), but Expected Calibration Error exceeds the predeclared
+`0.10` tolerance specifically on `chain`/`fork` (`.111`-`.146` across
+`N`), while `triangle`/`weak_edge_triangle` stay well within it
+(`.002`-`.037`). Root cause, confirmed directly from the bin table: for
+`chain`/`fork`, every scored decision below margin `0.9` is the
+indirect-pair prune, whose empirical accuracy is roughly *flat*
+(`~0.92`-`0.93` at `N=3000`, `~0.79`-`0.82` at `N=300`) across that
+entire sub-boundary range rather than climbing with margin — the test's
+power there is already high and roughly uniform, so the p-value's exact
+distance from `alpha` adds little information in this specific regime.
+**Practical reading**: raw margin can be presented as an approximately
+calibrated confidence estimate, within the tested range, for
+retain-dominant decisions (most edges most mechanisms actually care
+about retaining) — but must be labeled ordinal/ranking-only, not a
+literal probability, for a null/indirect-independence prune decision
+specifically. See D-066.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
