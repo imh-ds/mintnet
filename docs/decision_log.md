@@ -5524,3 +5524,42 @@ decisions (`triangle`, `weak_edge_triangle`) across the full tested
 `N` range, and explicitly *not* calibrated (informative-only) for the
 chain/fork indirect-edge prune decision at margin `< 0.9` — not a
 blanket calibrated/uncalibrated verdict for the mechanism as a whole.
+
+## D-067: Stage 8b chain/fork margin recalibration — PROCEED, isotonic mapping brings held-out validation ECE from D-066's `.111`-`.146` down to `<.005` at every tested N (main, Stage 8b)
+
+Date: 2026-09-07
+
+`docs/stage8b_charter.md`'s own recalibration mapping — one isotonic
+regression per `(motif_family, N)`, fit on Stage 8a's own already-
+collected replicates `0`-`2499` (development), evaluated on replicates
+`2500`-`4999` (validation, never used for fitting) — resolves D-066's
+own finding directly. **Held-out validation ECE for `chain`/`fork`,
+this charter's own gated motifs**:
+
+| N | chain (raw margin, D-066) | chain (recalibrated) | fork (raw margin, D-066) | fork (recalibrated) |
+|---|---|---|---|---|
+| 300 | `.111` | `.0042` | `.113` | `.0040` |
+| 500 | `.119` | `.0023` | `.119` | `.0007` |
+| 750 | `.125` | `.0020` | `.125` | `.0012` |
+| 1000 | `.129` | `.0011` | `.128` | `.0018` |
+| 1500 | `.136` | `.0023` | `.136` | `.0049` |
+| 3000 | `.145` | `.0011` | `.146` | `.0008` |
+
+**Verdict: PROCEED.** Every gated cell clears the `0.10` tolerance by
+roughly two orders of magnitude, on replicates the fitting process
+never saw — the recalibration is not an artifact of fitting and
+evaluating on the same data. `triangle`/`weak_edge_triangle` curves
+were fit for consistency (non-gating, per the charter) and came out
+similarly tight (`.00005`-`.0033`), confirming they were already close
+to the identity line and that fitting a curve for them does no harm.
+
+Consequences: chain/fork's own indirect-edge prune decision now has a
+validated, N-aware recalibrated confidence score
+(`mintnet.confidence.calibrated_margin`), narrowing D-066's own
+practical caveat (raw margin ordinal-only for that decision type) to
+specifically: queries at `N` outside `[300, 3000]` (raises, no
+extrapolation) or for a motif this mapping was never fit for.
+`docs/validated_operating_ranges.md` should record the recalibrated
+score as the recommended path for chain/fork's own prune decision
+within `N in [300, 3000]`, with raw margin remaining the ordinal-only
+fallback outside that range or for un-recalibrated mechanisms.

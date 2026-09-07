@@ -967,6 +967,19 @@ about retaining) — but must be labeled ordinal/ranking-only, not a
 literal probability, for a null/indirect-independence prune decision
 specifically. See D-066.
 
+**Stage 8b (D-067) — chain/fork margin recalibration: PROCEED.** An
+isotonic mapping (`mintnet.confidence.calibrated_margin`), fit per
+`(motif_family, N)` on Stage 8a's own development replicates and
+validated on a disjoint held-out half, brings chain/fork's own
+indirect-edge-prune ECE from D-066's `.111`-`.146` down to `<.005` at
+every tested `N` — on replicates the fit never saw. **Recommended
+default going forward**: use `calibrated_margin` (not raw
+`edge_margin`) for `growing_subset_dpi`'s own chain/fork indirect-edge
+prune decision within `N in [300, 3000]`; raw margin remains the
+ordinal-only fallback outside that range, for `N` values the mapping
+was never fit for, or for mechanisms (CMIknn, structured-density) this
+recalibration was never extended to. See D-067.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
