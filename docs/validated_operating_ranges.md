@@ -925,16 +925,24 @@ calibration-transfer check confirmed `degree=1` (and `degree=3`) hold
 on chain/fork's own genuine null; `degree=1` clearly outperforms
 `degree=3` on the `strong` triangle's hardest edge (D-063). The
 isolation-tier evidence run itself REASSESSed on Stage 1b's own frozen
-9-value alpha grid (chain/fork TPR passes everywhere; `strong`
-triangle FPR fails at the selected pair), but the full alpha range
-shows chain/fork TPR and `strong` FPR now cross almost on top of each
-other around `alpha~0.15`-`0.25` at `N=1500` (missing the `.80` floor
-by only `.008`-`.020`) — the closest this project has come to a
-feasible simultaneous window on this diagnostic case across every
-prior attempt (D-059 through D-064). **This is an open, actively
-narrowing question, not a closed negative result**: a fine-grained
-alpha sweep in the `.10`-`.30` range is the concrete, well-motivated
-next step, not a dead end. See D-064.
+9-value alpha grid (D-064); a same-session, zero-new-evidence
+fine-grained re-analysis (D-065, exploiting the same "compute once,
+threshold many times" p-values already collected) then gave the
+precise, corrected picture D-064's own first pass mischaracterized.
+
+**`N=1500` alone: a genuine, comfortable feasible window exists,
+`alpha` in `[.05, .18]`** — every chain/fork cell clears `.80` TPR and
+`strong`-triangle FPR never exceeds `.077` in this range. **`N=750`
+alone: zero feasible alpha exists anywhere tested** — `strong`-triangle
+FPR only clears `.10` at `alpha>=.19`, while `chain`'s own
+`strength=0.5` cell already drops below `.80` TPR at `alpha=.18` — a
+real, ~`0.01`-wide non-overlap, not a coarse-grid artifact resolvable
+by finer sampling. Since the gate requires one alpha to satisfy both
+tested `N` simultaneously, `N=750` alone forces REASSESS regardless of
+`N=1500`'s own success. **Currently defensible range for this
+composition: `N>=1500` only** — `N=750` is a specific, precisely
+located, unresolved limitation (not yet chartered to fix), not a
+general failure of the mechanism. See D-064/D-065.
 
 ## Maintenance
 

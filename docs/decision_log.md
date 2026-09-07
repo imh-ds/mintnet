@@ -5356,3 +5356,88 @@ full frontier-mapping effort, since the region of interest is now
 known rather than open-ended. `docs/validated_operating_ranges.md`
 should record this as an open, actively narrowing question, not a
 closed negative result.
+
+**Correction (same session, after the fine-grained re-analysis below,
+D-065): this entry's own diagnosis above misattributed the near-miss
+to `N=1500`.** The validation cells that actually failed (`alpha=.05`:
+`.184`; `alpha=.1`: `.148`, both on `strong`/`N=750`) were at `N=750`,
+not `N=1500` — `N=1500`'s own `strong`-triangle FPR was already
+comfortably under `.10` at both selected alphas (`.072`, `.04`). The
+"gap narrowing around `alpha~0.15`-`0.25`" observation itself is
+accurate as a description of `N=1500`'s own internal curves, but it is
+not what was blocking the gate, since a single alpha must satisfy
+*both* tested `N` simultaneously and `N=750` is the actual binding
+constraint. See D-065 for the corrected, fine-grained picture.
+
+## D-065: Fine-grained re-analysis of Stage 7e's own evidence — N=1500 has a genuine feasible window, N=750 has a real, resolution-independent gap (mi-native, Stage 7e)
+
+Date: 2026-09-06
+
+D-064's own significance-test evidence needed no new evidence
+collection to answer the finer-grained question it raised: since
+`compute_structured_density_conditional_independence_evidence` is
+computed once per replicate and every alpha row re-thresholds the
+same stored p-values (verified directly: `nunique()==1` per replicate
+across all 9 original alpha rows), `scripts/stage7e_alpha_refinement.py`
+re-derives retain/prune decisions at a `41`-point grid (`.05` to `.35`,
+step `.01`) purely from the already-collected `raw_metrics.csv`, and
+re-runs Stage 7e's own unmodified `stage1b_reporting` gate logic
+against it. Zero new randomness, zero new compute, and the
+development/validation split protecting against p-hacking was frozen
+in Stage 7e's own charter before this evidence existed.
+
+**Corrected picture (see the correction appended to D-064 above): the
+two `N` values behave completely differently, and conflating them was
+the error.**
+
+**`N=1500`: a genuine, comfortable feasible window exists**, `alpha`
+in `[.05, .18]` — every chain/fork cell (`3` strengths x `2` motifs)
+stays at or above `.80` TPR, and `strong`-triangle FPR stays at or
+below `.077` throughout (it is never the binding constraint at this
+`N`; chain's own weakest cell is). `14` of the `41` tested grid points
+satisfy every criterion simultaneously.
+
+**`N=750`: zero feasible alpha exists anywhere in the tested range —
+a real gap, not a coarse-grid artifact.** The two curves that matter
+here don't overlap even under fine sampling: `strong`-triangle FPR
+only drops to `<=.10` at `alpha>=.19` (`.097`), while `chain`'s own
+`strength=0.5` cell (the weakest of the six chain/fork cells at this
+`N`) drops below `.80` TPR already at `alpha=.18` (`.796`) — a
+genuine, if narrow (`~0.01`-wide), non-overlapping requirement. No
+finer alpha resolution can close this specific gap; it is a real
+property of the estimator's own behavior at `N=750`, not a grid-
+sampling limitation the way the original coarse 9-point grid was for
+this diagnostic question in general.
+
+**Since Stage 1b's own gate requires one alpha (or adjacent pair) to
+satisfy every tested `N` simultaneously, `N=750`'s own gap alone is
+sufficient to force REASSESS, regardless of `N=1500`'s own success.**
+This also explains why the officially selected development pair
+`(.05, .1)` failed validation specifically via the `N=750`/`strong`
+cells (`.184`, `.148`) named in D-064's own original decision.json,
+not via any `N=1500` cell — confirming the corrected attribution.
+
+Rationale: this is a materially more precise diagnosis than D-064's
+own first pass, obtained essentially for free by exploiting the
+"compute once, threshold many times" property this project has relied
+on since Stage 1b — a instructive example of getting a sharper answer
+by re-examining data already in hand before commissioning any new
+evidence collection.
+
+Consequences: **REASSESS stands**, now for a specific, well-localized
+reason: this composition mechanism, at the currently calibrated
+`degree=1`, works cleanly at `N=1500` but not at `N=750`, for the
+`strong`-triangle/`chain`-moderate-strength combination specifically.
+Two concrete, disclosed paths forward, neither chartered yet: (a) scope
+a future composition charter to `N>=1500` only, if that is an
+acceptable restriction for this project's own intended use (an
+explicit, disclosed limitation, not a silent one, mirroring D-057's
+own `|S|=3`-needs-`N>=750` precedent); (b) investigate whether a
+different lever (more permutations, a larger `degree` bracket
+specifically re-tested at `N=750`, or the `k_perm`/`ridge_lambda`
+parameters not yet touched) closes this specific, now precisely
+located `N=750` gap. `docs/validated_operating_ranges.md` should
+record `N>=1500` as the currently defensible range for this
+composition, with `N=750` named as the specific, unresolved
+limitation — not the broader, less precise framing D-064 originally
+gave.
