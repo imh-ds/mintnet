@@ -19,12 +19,25 @@ import numpy as np
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 
-# D-067's own validated fitted artifact: isotonic curves per
-# (motif_family, N), fit on Stage 8a's development replicates
-# (0-2499), held-out-validated on 2500-4999 (docs/decision_log.md
-# D-067). Only chain/fork/triangle/weak_edge_triangle at
-# N in {300,500,750,1000,1500,3000} are covered -- see calibrated_margin.
-_DEFAULT_CURVES_PATH = Path(__file__).parent / "fitted" / "chain_fork_margin_curves.json"
+# Two validated, disjoint-keyed fitted artifacts, merged into one
+# default lookup:
+# - D-067's own isotonic curves per (motif_family, N) for the isolated
+#   3-node fixtures (chain/fork/triangle/weak_edge_triangle), fit on
+#   Stage 8a's development replicates (0-2499), held-out-validated on
+#   2500-4999 (docs/decision_log.md D-067).
+# - D-070's own isotonic curves for the composed-tier false-edge case
+#   (chain_fork_hub/overlap), fit on Stage 8c's development replicates
+#   (0-999), held-out-validated on 1000-1999 (docs/decision_log.md
+#   D-070, docs/stage8e_charter.md). These two DGP names refer to
+#   specific whole-network synthetic constructions, not a general
+#   composed-network label -- see growing_subset_dpi's own docstring
+#   for the scope caveat this implies for any caller passing them.
+# Only these six motif families, at their own respective validated N
+# ranges, are covered -- see calibrated_margin.
+_DEFAULT_CURVES_PATHS = (
+    Path(__file__).parent / "fitted" / "chain_fork_margin_curves.json",
+    Path(__file__).parent / "fitted" / "composed_false_edge_curves.json",
+)
 
 
 @dataclass(frozen=True)
@@ -79,9 +92,13 @@ def fit_calibration_curves(
 
 @lru_cache(maxsize=1)
 def default_curves() -> dict[tuple[str, int], IsotonicCurve]:
-    """D-067's own validated fitted artifact (see the module docstring
-    and docs/decision_log.md). Loaded once, cached for the process."""
-    return load_curves(_DEFAULT_CURVES_PATH)
+    """D-067's and D-070's own validated fitted artifacts, merged (see
+    the module docstring and docs/decision_log.md). Loaded once,
+    cached for the process."""
+    merged: dict[tuple[str, int], IsotonicCurve] = {}
+    for path in _DEFAULT_CURVES_PATHS:
+        merged.update(load_curves(path))
+    return merged
 
 
 def calibrated_margin(

@@ -1019,6 +1019,22 @@ that change is not expected to fix this specific reversal, since the
 evidence argues the trigger is conditioning on *any* additional
 variable, not exhausting the search's own room. See D-069.
 
+**Stage 8e (D-070) — composed-tier false-edge recalibration:
+validated and deployed. PROCEED.** D-068's own exploratory curve is
+now confirmed under a dedicated held-out gate (max validation ECE
+`.0150`, every cell `.0027`-`.0150`, well under `0.10`) and persisted
+as a versioned artifact (`mintnet/confidence/fitted/composed_false_
+edge_curves.json`), merged into `mintnet.confidence.default_curves()`
+alongside D-067's own isolated-fixture curves. **Recommended path**:
+`calibrated_margin(margin, n, "chain_fork_hub")` or `"overlap"` (via
+`growing_subset_dpi`'s own `motif_family` parameter) for the composed-
+tier false-edge case, within `N in [400, 1750]`. **Scope, narrower
+than D-067's own isolated curves**: `chain_fork_hub`/`overlap` name
+specific whole-network synthetic constructions, not a locally
+identifiable substructure — valid only for a caller reproducing or
+closely mirroring those exact fixtures, never for production use on a
+real or arbitrary composed dataset. See D-070.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

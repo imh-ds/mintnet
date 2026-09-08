@@ -5718,3 +5718,43 @@ record that the composed-tier false-edge reversal's trigger condition
 is `conditioning_size_used >= 2`, not specifically reaching the search
 cap — relevant to any future charter that considers raising
 `max_conditioning_size` for an unrelated reason.
+
+## D-070: Stage 8e composed-tier recalibration validation — PROCEED, D-068's own exploratory curve confirmed under a dedicated gate and deployed (main, Stage 8e)
+
+Date: 2026-09-07
+
+`docs/stage8e_charter.md`'s own dedicated re-check of D-068's
+exploratory question 2 — the same per-`(dgp, N)` isotonic curve,
+development-replicate fit, held-out validation-replicate ECE check,
+reusing Stage 8c's own already-collected (enriched) evidence entirely,
+zero new significance-test evidence — confirms it: **max validation
+ECE `.0150`** (`chain_fork_hub`/`N=600`), every other cell between
+`.0027` and `.0119`, all comfortably under the `0.10` tolerance. Status:
+**PROCEED**.
+
+Unlike D-068's own descriptive number, this is now: (a) an explicit
+gate, not just a reported figure; (b) backed by a persisted, versioned
+curve artifact (`mintnet/confidence/fitted/composed_false_edge_curves
+.json`); (c) wired into `growing_subset_dpi`'s own `motif_family`
+parameter, merged into `mintnet.confidence.default_curves()` alongside
+D-067's own isolated-fixture curves (disjoint keys, no collision).
+
+**Scope, stated more narrowly than D-067's own wiring, per this
+charter's own explicit non-goal**: `chain_fork_hub` and `overlap` name
+specific, whole-`p=15`-network synthetic constructions, not a locally
+identifiable substructure a real dataset could plausibly resemble
+edge-by-edge. `growing_subset_dpi`'s own docstring states this
+distinction directly — these two labels are valid only for a caller
+reproducing or closely mirroring the exact synthetic fixtures, never
+for production use on a real or arbitrary composed network.
+
+Consequences: D-068's own open option (a) is resolved — a validated,
+deployed composed-tier recalibration mapping now exists for the
+false-edge case, within its own stated scope. D-069's own mechanism
+question (why `conditioning_size_used >= 2` triggers the reversal)
+remains open and untouched by this charter, exactly as planned — the
+symptom is fixed independent of whether the cause is ever confirmed.
+`docs/validated_operating_ranges.md` should record `calibrated_margin`
+with `motif_family in {"chain_fork_hub", "overlap"}` as validated
+within `N in [400, 1750]`, scoped to callers reproducing those exact
+synthetic fixtures.

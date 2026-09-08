@@ -95,14 +95,26 @@ def growing_subset_dpi(
     `motif_family` is optional and defaults to None (no recalibration
     attempted -- every edge's own `confidence` is the raw, ordinal-only
     margin). Only pass it when the caller genuinely knows the DGP an
-    edge's own local structure matches one of D-067's own fitted
-    labels (`chain`, `fork`, `triangle`, `weak_edge_triangle`) -- e.g.
-    a Stage 8-style evidence runner working with a known synthetic
-    fixture, not an arbitrary real or composed network, where no such
-    label is knowable. Passing it for real data would apply a curve
-    fit on a specific synthetic null to an edge that may not resemble
-    it at all -- exactly the generalization both Stage 8a and 8b
-    charters disclaim as a non-goal."""
+    edge's own local structure matches one of the validated fitted
+    labels below -- e.g. a Stage 8-style evidence runner working with
+    a known synthetic fixture, not an arbitrary real network, where no
+    such label is knowable:
+
+    - `chain`, `fork`, `triangle`, `weak_edge_triangle` (D-067):
+      isolated 3-node fixtures -- a local substructure a real dataset
+      could at least plausibly resemble edge-by-edge.
+    - `chain_fork_hub`, `overlap` (D-070): specific WHOLE-NETWORK
+      (`p=15`) synthetic constructions, not a local substructure at
+      all -- valid only for a caller reproducing or closely mirroring
+      those exact fixtures. No real or arbitrary composed dataset can
+      legitimately claim to *be* one of these DGPs the way three real
+      variables might resemble an isolated chain or fork, so this pair
+      is scoped even more narrowly than the first four.
+
+    Passing any of these for real data would apply a curve fit on a
+    specific synthetic null to an edge that may not resemble it at all
+    -- exactly the generalization the Stage 8 charters disclaim as a
+    non-goal throughout."""
     p = flagged.shape[0]
     n = data.shape[0]
     final = flagged.copy()

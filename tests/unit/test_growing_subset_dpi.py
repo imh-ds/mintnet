@@ -131,6 +131,32 @@ def test_growing_subset_dpi_confidence_uses_the_recalibration_curve_when_motif_f
     assert recalibrated != raw_margin
 
 
+def test_growing_subset_dpi_confidence_uses_the_composed_tier_curve_when_motif_family_matches_it() -> None:
+    """D-070's own composed-tier curves (chain_fork_hub/overlap) are
+    wired in through the exact same motif_family/calibrated_margin
+    path as D-067's own isolated curves -- confirmed here directly
+    against calibrated_margin rather than simulating a full p=15
+    network, since the wiring itself doesn't depend on which motif the
+    edge actually came from."""
+    from mintnet.confidence import calibrated_margin
+
+    rng = np.random.default_rng(6)
+    data = sample_chain(750, 0.5, rng)
+    flagged = np.ones((3, 3), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    alpha = 0.2
+
+    result = growing_subset_dpi(data, flagged, alpha, motif_family="overlap")
+    raw = growing_subset_dpi(data, flagged, alpha)
+
+    for pair, raw_margin in raw.confidence.items():
+        if math.isnan(raw_margin):
+            assert math.isnan(result.confidence[pair])
+            continue
+        expected = calibrated_margin(raw_margin, 750, "overlap")
+        assert result.confidence[pair] == expected
+
+
 def test_growing_subset_dpi_confidence_falls_back_to_raw_margin_outside_validated_n_range() -> None:
     rng = np.random.default_rng(5)
     data = sample_chain(100, 0.5, rng)  # below the validated [300, 3000] range

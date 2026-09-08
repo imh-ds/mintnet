@@ -120,3 +120,14 @@ def test_save_and_load_curves_round_trip() -> None:
         loaded = load_curves(path)
 
     assert loaded == curves
+
+
+def test_default_curves_merges_isolated_and_composed_fitted_artifacts() -> None:
+    from mintnet.confidence.recalibration import default_curves
+
+    curves = default_curves()
+    families = {family for family, _ in curves}
+    # D-067's own isolated fixtures and D-070's own composed-tier fixtures
+    # are disjoint-keyed artifacts merged into one default lookup.
+    assert {"chain", "fork", "triangle", "weak_edge_triangle"} <= families
+    assert {"chain_fork_hub", "overlap"} <= families
