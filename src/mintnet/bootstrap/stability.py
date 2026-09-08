@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from mintnet.pipeline import compose_screen_then_prune
+from mintnet.pipeline.growing_subset_dpi import growing_subset_dpi
 from mintnet.screening import compute_pairwise_screening_evidence, screen_uncorrected
 
 
@@ -71,6 +72,53 @@ def compute_edge_stability(
             continue
         candidate_counts += screened
         final_counts += final
+        successful += 1
+    if successful == 0:
+        raise RuntimeError("every bootstrap resample was degenerate; cannot compute edge stability")
+    return StabilityResult(
+        pi_candidate=candidate_counts / successful,
+        pi_final=final_counts / successful,
+        successful_bootstraps=successful,
+        failed_bootstraps=failed,
+    )
+
+
+def compute_edge_stability_growing_subset(
+    data: np.ndarray,
+    screening_alpha: float,
+    dpi_alpha: float,
+    max_conditioning_size: int,
+    bootstraps: int,
+    rng: np.random.Generator,
+) -> StabilityResult:
+    """The `growing_subset_dpi` analogue of `compute_edge_stability`
+    (docs/stage9a_charter.md) -- same resampling and degenerate-resample
+    handling, `growing_subset_dpi` (`motif_family=None`, matching
+    `stage8c_composed_calibration.py`'s own usage) in place of
+    `compose_screen_then_prune` per resample. Purely additive: does not
+    modify `compute_edge_stability` or any of its own already-validated
+    Stage 3/3b behavior.
+    """
+    if bootstraps < 1:
+        raise ValueError("bootstraps must be at least 1")
+    p = data.shape[1]
+    candidate_counts = np.zeros((p, p))
+    final_counts = np.zeros((p, p))
+    successful = 0
+    failed = 0
+    for _ in range(bootstraps):
+        resample = bootstrap_resample(data, rng)
+        try:
+            evidence = compute_pairwise_screening_evidence(resample)
+            screened = screen_uncorrected(evidence, screening_alpha)
+            result = growing_subset_dpi(
+                resample, screened, dpi_alpha, max_conditioning_size=max_conditioning_size, motif_family=None
+            )
+        except ValueError:
+            failed += 1
+            continue
+        candidate_counts += screened
+        final_counts += result.adjacency
         successful += 1
     if successful == 0:
         raise RuntimeError("every bootstrap resample was degenerate; cannot compute edge stability")

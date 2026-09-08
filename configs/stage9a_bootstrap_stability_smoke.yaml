@@ -1,0 +1,11 @@
+sample_sizes: [1000, 1750]
+strength: 0.5
+screening_alpha: 0.001
+max_conditioning_size: 4
+replicates: 60
+base_master_seed: 80200
+bootstrap_master_seed: 80900
+bootstraps: 10
+max_bootstrapped_replicates_per_cell: 3
+development_replicates: [0, 29]
+validation_replicates: [30, 59]
