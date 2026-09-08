@@ -1,0 +1,6 @@
+sample_sizes: [300, 3000]
+strengths: [0.3, 0.7]
+pool_sizes: [5, 20]
+replicates: 5
+batch_size: 5
+master_seed: 80800
