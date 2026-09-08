@@ -1096,6 +1096,32 @@ candidate (not yet chartered) is a collinearity effect between an added
 screened variable and the separator itself, rather than a relationship
 to `i`/`j` or to nothing at all. See D-073.
 
+**Stage 8i (D-074) — population-level ground truth for D-072's own
+flagged decisive subsets: H6 formally CONFIRMED at 9/5,040 rows, but
+99.82% show EXACTLY zero, and the tiny remainder is fully explained,
+not a new mystery.** An analytic (not sampled) computation of the true
+population partial correlation, using each network's own known
+closed-form covariance structure, against every wrongly-retained false
+edge's own actual decisive conditioning subset: `5,031` of `5,040`
+(`99.82%`) show a population value of exactly `0` (`< 1e-9`). The
+remaining `9` (all `overlap`, `N >= 1000`) are the same small exception
+population D-072 already reported as lacking the pair's own separator
+in their decisive subset — for those specific subsets, a small nonzero
+population value (`~0.067`) is the mathematically correct answer, not
+an anomaly. **Four candidate mechanisms for the composed-tier reversal
+are now eliminated or not confirmed** (true collider: structurally
+absent, D-071/D-072; pseudo-collider via chance correlation: not
+confirmed, D-072; over-conditioning power loss via random decoy:
+eliminated, D-073; population-level conditioning-set error: eliminated
+for the overwhelming majority, this charter) **and none explains
+D-072's own central finding.** Leading untested candidate: a
+"post-screening selection effect" (the added conditioning variables in
+the real evidence were selected by MINT's own screening step for
+showing elevated sample correlation with something, unlike D-073's own
+uniformly random decoys) — not yet chartered. **No change to deployed
+behavior** — D-070's own recalibration mapping remains the production
+answer regardless. See D-074.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

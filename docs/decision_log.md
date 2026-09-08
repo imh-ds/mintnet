@@ -5961,3 +5961,88 @@ the deployed fix regardless. `docs/validated_operating_ranges.md`
 should record all three eliminated/non-confirmed candidate mechanisms
 so a future charter does not re-propose or re-test any of them
 unchanged.
+
+## D-074: Stage 8i population-level ground truth — H6 formally CONFIRMED at 9/5,040 rows, but 99.82% show EXACTLY zero; the tiny remainder is fully explained, not a new mystery (main, Stage 8i)
+
+Date: 2026-09-08
+
+An independent external review (relayed by the user) of D-069 through
+D-073's own work correctly identified a real methodological gap: every
+prior diagnostic charter checked *sample* quantities against synthetic
+or real finite-sample data, never the **population-level** (true,
+DGP-covariance-derived) partial correlation for D-072's own actually-
+flagged decisive subsets. `docs/stage8i_charter.md` closes that gap
+directly, computing it analytically (no new sampling) against D-072's
+own already-collected evidence.
+
+That same review's own separate, specific claim — that
+`growing_subset_dpi`'s own search might skip the correct singleton
+separator by testing a superset first — is refuted directly by the
+code (`src/mintnet/pipeline/growing_subset_dpi.py`): the search is
+exhaustive-by-size, testing every size-1 subset before any size-2
+subset, and a wrongly-retained edge (never pruned) by construction has
+every subset at every size actually tested. This was verified, not
+re-tested empirically, since it follows deterministically from the
+already-committed loop structure.
+
+**H6 (population-level conditioning-set error): formally CONFIRMED per
+the predeclared `0.05` tolerance, but overwhelmingly NOT the story.**
+Of the `5,040` wrongly-retained false edges at `conditioning_size_used
+>= 2` in the real evidence, **`5,031` (99.82%) show a population
+partial correlation of EXACTLY zero** (`< 1e-9`, floating-point
+precision) for their own decisive conditioning subset — a rigorous,
+analytic confirmation (not merely a structural argument) that these
+failures are finite-sample/statistical-test artifacts, with no real
+population-level relationship involved at all. Only **`9`** rows
+(`0.18%`, all `overlap`, all at `N >= 1000`) exceed the tolerance, at a
+consistent magnitude of `~0.067`.
+
+**The 9-row exception is not a new mystery — it is D-072's own already-
+disclosed exception population, now fully explained.** Every one of
+these 9 rows has a decisive subset that does **not** contain the pair's
+own known legitimate separator at all (e.g. pair `(6, 10)` decided by
+subset `(7, 9)`, never touching node `8`) — exactly the small
+complement (`9` of `2,846`) D-072 itself already reported as not
+containing the separator. `overlap`'s own shared-node motif is an
+undirected Gaussian graphical model where node `8` is the *only*
+variable whose removal disconnects the two triangles; a subset like
+`{7, 9}` leaves the path `6-8-10` fully open, so a small residual
+population dependency (`~0.067`) is the mathematically correct value
+there, not an anomaly. **A useful, incidental byproduct of the same
+computation**: `370` of `2,163` correctly-*pruned* false edges at
+`conditioning_size_used >= 2` also show a nonzero population value this
+same way — expected and benign, since a correctly-pruned edge's own
+decisive (triggering) subset only needs to look insignificant in that
+sample, not be a formal population separator. `evaluate_h6` is scoped
+to exclude these (they are not evidence of anything wrong) so they do
+not dilute the wrongly-retained population's own verdict.
+
+**Consequence for the mechanism question.** Four candidate mechanisms
+have now been tested for the composed-tier reversal: true collider
+(D-071, real but structurally absent), pseudo-collider via chance
+correlation (D-072's own H3, not confirmed), over-conditioning power
+loss via a random decoy (D-073, eliminated), and population-level
+conditioning-set error (this charter, eliminated for `99.82%` of the
+relevant population, with the residual `0.18%` fully explained by a
+separate, already-known, and non-mysterious cause). **None of the four
+explains D-072's own central finding.** The external review's own
+remaining, not-yet-tested candidate — a "post-screening selection
+effect," where the added conditioning variables are not random (as in
+D-073) but were selected by MINT's own screening step for showing some
+elevated sample correlation with something in the connected component —
+is now the most promising untested lead, since finite-sample-only
+failure with a mathematically exact-zero population target is
+consistent with a search/selection-driven artifact (repeatedly trying
+combinations drawn from a correlation-biased pool, then reporting only
+the least-damning result) in a way it would not be consistent with any
+of the four eliminated population- or fixed-decoy-based explanations.
+
+Consequences: the composed-tier reversal's own root cause remains open
+after five dedicated diagnostic charters, now with a rigorously
+established, analytically-verified fact (not just a structural
+argument) that it is not a population-level phenomenon for the
+overwhelming majority of cases. No production behavior changes —
+D-070's own recalibration mapping remains the deployed fix regardless.
+`docs/validated_operating_ranges.md` should record this analytic
+confirmation and name the post-screening selection effect as the
+leading, not-yet-chartered next hypothesis.
