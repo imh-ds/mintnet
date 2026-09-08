@@ -1146,6 +1146,23 @@ recalibration mapping remains the validated, working production answer
 for this case regardless of whether the mechanism is ever identified.
 See D-075.
 
+**D-076 — raw decision accuracy by `(is_true_edge, conditioning_size_
+used)`, composed networks: retain 100% at every depth; prune 91% ->
+62.5% -> 9.5% -> 0.8% as depth grows from size 1 to 4.** A direct cut
+on already-collected Stage 8c evidence (no new compute): `growing_
+subset_dpi`'s own retain (presence-of-edge) decision is unconditionally
+reliable at every tested conditioning depth. Its own prune
+(absence-of-edge) decision is reliable only at `conditioning_size_used
+<= 1` (`91.0%`, `93%` of all false-edge cases) and is **actually wrong**
+(not merely miscalibrated), increasingly so, at `>= 2`. **Recommended
+practical policy**: treat any decision (retain or prune) resolved at
+`conditioning_size_used >= 2` as unresolved/needing independent
+verification, not a confident answer either way -- at that depth,
+roughly `17%` of "retained" decisions in this synthetic mixture are
+actually wrongly-retained false edges indistinguishable from true ones
+by margin alone (mechanism transfers to real data; the `17%` figure
+itself does not). See D-076.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

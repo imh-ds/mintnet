@@ -6099,3 +6099,86 @@ operating_ranges.md` should record all six tested/eliminated candidate
 mechanisms and this charter's own explicit decision to stop, so a
 future session does not re-propose any of them, or open a seventh
 speculative charter, without a materially new angle to justify it.
+
+## D-076: Raw decision accuracy, stratified by ground truth and conditioning_size_used — retain is 100% at every depth; prune degrades from 91% to 0.8% as depth grows (main, zero new evidence)
+
+Date: 2026-09-08
+
+A user question ("is the exclusion methodology itself flawed, or just
+its confidence score?") prompted a cut on Stage 8c's own already-
+collected enriched evidence (the same run D-072/D-074 already used, no
+new compute) that none of the six mechanism-diagnosis charters
+(D-069, D-071 through D-075) had explicitly reported: **raw decision
+accuracy** (not margin calibration/ECE) cross-tabulated by
+`(is_true_edge, conditioning_size_used)`.
+
+```
+                          size 0   size 1    size 2   size 3   size 4
+True edge  (retain)         --    100.0%    100.0%   100.0%   100.0%
+                                  (n=135290) (n=1972) (n=79790) (n=6948)
+False edge (prune)         0.0%   91.0%      62.5%     9.5%     0.8%
+                          (n=286) (n=102018) (n=3024) (n=2735) (n=1444)
+```
+
+(`size 0` false edges are isolated components with no conditioning
+pool at all -- structurally unprunable by construction, already
+disclosed in `growing_subset_dpi`'s own docstring, not a new finding.)
+
+**Retain (presence-of-edge) is unconditionally reliable**: exactly
+`100.0%` accuracy at every tested conditioning depth, across very
+large samples (up to `135,290` at size `1`). **Prune (absence-of-edge)
+is reliable only when resolved cheaply**: `91.0%` at size `1` (`93%`
+of all false-edge decisions in this evidence resolve at size `<= 1`),
+then degrades — not merely appears miscalibrated, but is actually
+increasingly wrong — to `62.5%` (size `2`), `9.5%` (size `3`), and
+`0.8%` (size `4`).
+
+**This sharpens, rather than contradicts, D-069's own H2 finding.**
+D-069 measured whether the margin-vs-accuracy *shape* reverses per
+conditioning-size stratum (it does, similarly severely, from size `2`
+onward) — a calibration-shape question. This entry measures the
+*base rate* of correctness per stratum directly, a different and
+complementary statistic: the base rate keeps getting worse through
+size `4`, even though the reversal's own qualitative shape does not
+(D-069's own "no graded worsening" claim was about the shape, not this
+base rate).
+
+**The practical conclusion this data supports, directly answering the
+user's own question**: the exclusion (prune) methodology is not
+uniformly flawed — at conditioning size `<= 1` (the large majority of
+real cases) it is reliable, and no fix is needed there. At conditioning
+size `>= 2`, the *decision itself*, not merely its confidence score, is
+broken. D-070's own recalibration can only make the *reported* number
+honestly reflect this unreliability; recalibration cannot make a
+`0.8%`-accurate decision correct, because there is no genuine residual
+signal in the margin to rescale toward truth at that depth.
+
+**An additional wrinkle, disclosed here for the first time**: a
+"retained" decision at high conditioning depth is not automatically
+safe either. At size `4`, of `8,381` total retained decisions (`6,948`
+true edges, correctly retained, plus `~1,433` of the `1,444` false
+edges, wrongly retained), approximately `17%` are actually false edges
+indistinguishable from true ones by margin alone (both populations
+show high, "confident-looking" margins by construction, since
+retention requires every tested subset to reject independence). This
+specific `17%` figure is an artifact of this synthetic mixture's own
+true/false edge ratio and does not transfer numerically to real data,
+but the underlying mechanism — margin cannot separate these two
+populations at high conditioning depth — does transfer, and means a
+"trust retain, distrust prune" policy is not fully safe at conditioning
+size `>= 2` either.
+
+Consequences: no code or deployed-behavior change from this entry
+alone (a documentation/analysis finding, not a charter). Recommends,
+for any practical use of `growing_subset_dpi`'s own output: treat any
+decision (retain OR prune) resolved at `conditioning_size_used >= 2` as
+unresolved/needing independent verification, not as a confident answer
+either way — a stronger and more precise recommendation than trusting
+retain decisions unconditionally. Motivates, as a separate,
+not-yet-chartered future step, the project's own previously-named but
+unbuilt "Tier-1 bootstrap-stability" extension: since six charters
+failed to explain *why* conditioning size `>= 2` decisions are
+unreliable, a resampling-based instability detector could flag exactly
+these decisions without needing to know the cause. `docs/validated_
+operating_ranges.md` should record this stratified accuracy table
+directly.
