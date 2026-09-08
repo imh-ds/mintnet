@@ -1035,6 +1035,23 @@ identifiable substructure — valid only for a caller reproducing or
 closely mirroring those exact fixtures, never for production use on a
 real or arbitrary composed dataset. See D-070.
 
+**Stage 8f (D-071) — collider-conditioning bias, D-069's own leading
+hypothesis for the composed-tier reversal: CONFIRMED, both H1 and H2,
+18/18 cells each, no exceptions.** A controlled, known-truth
+linear-Gaussian fixture (independent `X1`/`X2`, collider `X3`) shows
+conditioning on a collider alone inflates the rejection rate of a true
+independence far above nominal `alpha(N)` (saturating at `1.0` for
+`strength >= 0.5`), and a size-matched non-collider control (two
+independent decoys, same conditioning-set size) tracks nominal `alpha`
+almost exactly — isolating the bias to the collider's presence, not
+conditioning-set size in general. **Scope**: confirms the mechanism is
+real in a controlled fixture; does **not** establish that this is what
+actually occurs inside `chain_fork_hub`/`overlap`'s own screened
+subsets for any specific false edge (a separate structural-audit
+question, not yet chartered) and does not change any deployed
+behavior — D-070's own recalibration mapping remains the production
+fix regardless. See D-071.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

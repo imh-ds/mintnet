@@ -5758,3 +5758,64 @@ symptom is fixed independent of whether the cause is ever confirmed.
 with `motif_family in {"chain_fork_hub", "overlap"}` as validated
 within `N in [400, 1750]`, scoped to callers reproducing those exact
 synthetic fixtures.
+
+## D-071: Stage 8f collider-conditioning-bias diagnostic — both H1 and H2 CONFIRMED, at every single tested cell, no exceptions (main, Stage 8f)
+
+Date: 2026-09-08
+
+`docs/stage8f_charter.md`'s own direct, controlled-fixture test of
+D-069's leading hypothesis (54 GitHub Actions shards, `R=2000` each,
+zero errors) confirms it cleanly, with none of the mixed or
+cell-dependent results earlier stages in this project's own history
+often produced.
+
+**H1 (collider bias exists): CONFIRMED, 18/18 cells.** Conditioning on
+the sole collider `X3` (`step1` fixture) rejects the true independence
+of `X1`/`X2` far more often than the nominal `alpha(N)` the test
+targets, at every tested `(N, strength)` cell. At `strength in
+{0.5, 0.6}`, the rejection rate is saturated at `1.0` (vs. nominal
+alpha `.069`-`.199` across `N`) at every `N` tested. Even at the
+weakest tested loading (`strength=0.3`), the rate climbs from `.674`
+(`N=300`, alpha `.199`) to `1.0` (`N=3000`, alpha `.069`) — the bias
+strengthens with `N` exactly as a real, non-vanishing effect (not a
+finite-sample artifact) should.
+
+**H2 (collider-specific, not conditioning-size-generic): CONFIRMED,
+18/18 cells.** The `step2_control` fixture (same size-2 conditioning
+set, no collider — two independent decoys) tracks its own nominal
+alpha almost exactly at every cell (e.g. `N=300`: rate `.185`-`.202` vs.
+alpha `.199`; `N=3000`: rate `.062`-`.077` vs. alpha `.069`) — a
+textbook well-calibrated null, confirming conditioning-set size alone
+(degrees-of-freedom loss) does **not** produce the reversal. The
+`step2_collider` fixture (same size-2 set, decoy `W` plus the actual
+collider `X3`), by contrast, reproduces `step1`'s own numbers almost
+exactly (e.g. `strength=0.3`: `.662`-`1.0` across `N`, versus `step1`'s
+own `.674`-`1.0`) — adding an irrelevant second conditioning variable
+barely moves the bias at all. The elevated rejection rate is
+attributable to the collider's presence specifically, not to the size
+of the conditioning set.
+
+**What this does and does not establish.** This charter confirms the
+collider-conditioning mechanism is real, strong, and specifically
+collider-driven in a controlled, known-truth linear-Gaussian setting —
+directly supporting, not merely being consistent with, D-069's own
+"plausibly a collider-conditioning effect" language. Per the charter's
+own explicit non-goal, this does **not** establish that collider
+structure is what actually occurs inside `chain_fork_hub`'s or
+`overlap`'s own screened conditioning subsets for any specific false
+edge — that would require a structural audit of which screened
+candidates are colliders relative to each false edge's own position in
+the known DAG, a separate, heavier, not-yet-chartered effort.
+
+Consequences: D-069's own leading hypothesis for the composed-tier
+false-edge reversal is now directly, not just circumstantially,
+supported. This motivates (but does not itself execute) a future
+structural-audit charter on the real composed networks. It does not
+change any deployed behavior — D-070's own recalibration mapping
+remains the production fix regardless of this charter's own result,
+per the original charter's own explicit non-goal ("no production
+deployment or fix"). `docs/validated_operating_ranges.md` should record
+the collider-conditioning mechanism as confirmed (not merely
+hypothesized) as the composed-tier reversal's most likely cause,
+scoped to the linear-Gaussian setting this project's own
+partial-correlation mechanism assumes.
