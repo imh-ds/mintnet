@@ -1122,6 +1122,30 @@ uniformly random decoys) — not yet chartered. **No change to deployed
 behavior** — D-070's own recalibration mapping remains the production
 answer regardless. See D-074.
 
+**Stage 8j (D-075) — post-screening selection-effect diagnostic: H7 and
+H8 both cleanly NOT CONFIRMED. No further candidate-mechanism charters
+planned for this phenomenon.** A decoy variable selected as the
+"winner" of an implicit screening contest against `K in {5,10,20}`
+candidates (verified to genuinely elevate its own sample correlation
+with the tested pair, `~3x` an unselected decoy's own typical value) —
+produces no detectable difference in false-rejection rate from an
+arbitrary, unselected decoy, at any of `54` tested `(K, N, strength)`
+cells (mean rates `.137`, `.137`, `.138` across baseline/random/
+selected — indistinguishable). **This was the sixth and, per this
+charter's own predeclared framing agreed with the user in advance, last
+planned dedicated diagnostic charter for the composed-tier false-edge
+reversal's own root cause.** Six candidate mechanisms tested across
+Stages 8d/8f-8j (true collider, finite-sample pseudo-collider,
+over-conditioning power loss, population-level conditioning-set error,
+post-screening selection bias, plus D-069's own original cap-reached
+hypothesis) — none explains D-072's own central finding. **The
+composed-tier reversal's own root cause is recorded as a genuinely
+unresolved, open question**, not to be re-chartered without a
+materially new angle. **No change to deployed behavior** — D-070's own
+recalibration mapping remains the validated, working production answer
+for this case regardless of whether the mechanism is ever identified.
+See D-075.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

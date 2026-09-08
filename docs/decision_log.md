@@ -6046,3 +6046,56 @@ D-070's own recalibration mapping remains the deployed fix regardless.
 `docs/validated_operating_ranges.md` should record this analytic
 confirmation and name the post-screening selection effect as the
 leading, not-yet-chartered next hypothesis.
+
+## D-075: Stage 8j post-screening selection-effect diagnostic — H7 and H8 both cleanly NOT CONFIRMED, 0/54 and 1/18 cells respectively; per this charter's own predeclared framing, no further candidate-mechanism charters planned (main, Stage 8j)
+
+Date: 2026-09-08
+
+`docs/stage8j_charter.md`'s own direct, controlled-fixture test of the
+last remaining named candidate from D-074's own consequences (54
+GitHub Actions shards, `R=2000` each, zero errors) is a clean,
+decisive negative.
+
+**H7 (selection, not mere presence, drives the effect): NOT CONFIRMED,
+0/54 cells supporting, all 54 contradicting.** A decoy selected as the
+"winner" of an implicit screening contest against `K in {5, 10, 20}`
+candidates — verified to actually work as intended (mean selected
+correlation with the tested pair `~0.076` vs. `~0.025` for an
+unselected decoy at `K=20`, `N=1000`, a real, roughly `3x` elevation —
+the selection mechanism itself is not the failure) — produces **no
+detectable difference** in false-rejection rate from an arbitrary,
+unselected decoy. Across all `54` tested `(K, N, strength)` cells, mean
+rejection rates were `baseline .1373`, `random_decoy .1368`,
+`selected_decoy .1381` — indistinguishable, with the largest single-cell
+gap (`.027`) consistent with ordinary sampling noise, not a systematic
+effect in either direction.
+
+**H8 (graded with pool size): NOT CONFIRMED, 1/18 cells supporting (by
+chance), 17/18 contradicting** — consistent with H7's own finding that
+there is no effect to begin with, so no scaling with `K` either.
+
+**Consequence, exactly as this charter's own text specified in
+advance.** This is the sixth dedicated diagnostic charter (after
+D-069, D-071 through D-074) to test a candidate mechanism for the
+composed-tier false-edge reversal, and the fifth to be eliminated or
+not confirmed outright. Per this charter's own predeclared Consequences
+section, agreed with the user before evidence existed: **this is the
+point to stop proposing new candidate mechanisms for this specific
+phenomenon.** The composed-tier reversal's own root cause is recorded
+as a genuinely unresolved, open question — not a failure of this
+project's own diagnostic discipline, but an honest limit reached after
+six charters spanning a true collider, a finite-sample pseudo-collider,
+generic over-conditioning power loss, population-level conditioning-set
+error, and now post-screening selection bias, none of which reproduces
+D-072's own central, still-unexplained finding.
+
+Consequences: no further Stage 8 mechanism-diagnosis charters are
+planned for this phenomenon absent a genuinely new angle. D-070's own
+recalibration mapping remains the deployed, working practical fix
+regardless of whether the mechanism is ever identified — the
+composed-tier false-edge case has a validated, safe operating
+procedure even with its own root cause unresolved. `docs/validated_
+operating_ranges.md` should record all six tested/eliminated candidate
+mechanisms and this charter's own explicit decision to stop, so a
+future session does not re-propose any of them, or open a seventh
+speculative charter, without a materially new angle to justify it.
