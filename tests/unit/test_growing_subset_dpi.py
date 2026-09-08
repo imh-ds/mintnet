@@ -62,6 +62,33 @@ def test_growing_subset_dpi_decisive_p_value_for_retained_edge_is_the_maximum_te
         assert result.decisive_p_value[pair] <= 0.01
 
 
+def test_growing_subset_dpi_decisive_conditioning_subset_matches_the_triggering_test() -> None:
+    """decisive_conditioning_subset must name the exact same subset
+    decisive_p_value's own value came from -- for a pruned edge, node
+    0 (the hub), matching the existing decisive_p_value test's own
+    reasoning about which subset the OR-rule tests first."""
+    rng = np.random.default_rng(1)
+    data = sample_hub(2000, 0.5, 3, rng)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    result = growing_subset_dpi(data, flagged, alpha=0.01)
+
+    for pair in ((1, 2), (1, 3), (2, 3)):
+        assert result.decisive_conditioning_subset[pair] == (0,)
+
+
+def test_growing_subset_dpi_decisive_conditioning_subset_is_empty_for_isolated_edge() -> None:
+    rng = np.random.default_rng(0)
+    data = rng.normal(size=(500, 4))
+    flagged = np.zeros((4, 4), dtype=bool)
+    flagged[0, 1] = flagged[1, 0] = True
+
+    result = growing_subset_dpi(data, flagged, alpha=0.001)
+
+    assert result.decisive_conditioning_subset[(0, 1)] == ()
+
+
 def test_growing_subset_dpi_prunes_indirect_hub_edges_at_size_one() -> None:
     rng = np.random.default_rng(1)
     data = sample_hub(2000, 0.5, 3, rng)

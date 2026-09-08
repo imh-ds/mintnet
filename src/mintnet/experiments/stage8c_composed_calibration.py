@@ -198,6 +198,10 @@ def _run_one_replicate(dgp: str, dgp_index: int, n: int, sample_index: int, repl
                         # 8c's own gate/reporting itself.
                         "conditioning_size_used": result.conditioning_size_used[(i, j)],
                         "cap_reached": bool(result.cap_reached[(i, j)]),
+                        # Also already computed at zero extra cost; carried
+                        # through for Stage 8g's own structural-audit use
+                        # (docs/stage8g_charter.md) -- not used here either.
+                        "decisive_conditioning_subset": list(result.decisive_conditioning_subset[(i, j)]),
                     }
                 )
         status, error = "ok", ""

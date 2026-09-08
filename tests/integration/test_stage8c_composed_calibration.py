@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -9,8 +10,26 @@ from mintnet.experiments.stage8c_composed_calibration import (
     load_config,
     run_stage8c,
 )
+from mintnet.experiments.stage8c_composed_calibration_reporting import explode_edges
 
 _SMOKE_CONFIG = Path("configs/stage8c_composed_calibration_smoke.yaml")
+
+
+def test_stage8c_persists_decisive_conditioning_subset_per_edge(tmp_path: Path) -> None:
+    """docs/stage8g_charter.md's own Step 2 enrichment: every edge dict
+    in edges_json must carry decisive_conditioning_subset, and
+    explode_edges must surface it as a tuple column."""
+    config = load_config(_SMOKE_CONFIG)
+    raw = run_stage8c(config, tmp_path / "evidence", write_report=False)
+
+    for edges_json in raw["edges_json"]:
+        for edge in json.loads(edges_json):
+            assert "decisive_conditioning_subset" in edge
+            assert isinstance(edge["decisive_conditioning_subset"], list)
+
+    exploded = explode_edges(raw)
+    assert "decisive_conditioning_subset" in exploded.columns
+    assert exploded["decisive_conditioning_subset"].apply(lambda s: isinstance(s, tuple)).all()
 
 
 def test_stage8c_covers_every_expected_replicate_combination(tmp_path: Path) -> None:

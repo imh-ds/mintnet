@@ -31,11 +31,14 @@ def explode_edges(raw: pd.DataFrame) -> pd.DataFrame:
 
     `conditioning_size_used`/`cap_reached` were added to the edge
     schema for Stage 8d's own diagnostic use (docs/stage8d_charter.md);
-    `.get(..., None)` keeps this working against evidence generated
-    before that enrichment (e.g. D-068's own already-recorded run)."""
+    `decisive_conditioning_subset` was added for Stage 8g's own
+    structural-audit use (docs/stage8g_charter.md). `.get(..., None)`
+    keeps this working against evidence generated before either
+    enrichment (e.g. D-068's own already-recorded run)."""
     rows: list[dict[str, object]] = []
     for record in raw.loc[raw["status"] == "ok"].itertuples(index=False):
         for edge in json.loads(record.edges_json):
+            subset = edge.get("decisive_conditioning_subset")
             rows.append(
                 {
                     "dgp": record.dgp, "n": record.n, "replicate": record.replicate,
@@ -44,6 +47,7 @@ def explode_edges(raw: pd.DataFrame) -> pd.DataFrame:
                     "retained": edge["retained"], "correct": edge["correct"], "status": "ok",
                     "conditioning_size_used": edge.get("conditioning_size_used"),
                     "cap_reached": edge.get("cap_reached"),
+                    "decisive_conditioning_subset": tuple(subset) if subset is not None else None,
                 }
             )
     return pd.DataFrame(rows)
