@@ -3,6 +3,7 @@ import pytest
 
 from mintnet.simulation.motifs import (
     sample_chain,
+    sample_collider,
     sample_measured_fork,
     sample_monotonic_curvature_triangle,
     sample_precision_triangle,
@@ -202,3 +203,40 @@ def test_ushape_triangle_is_standardized_and_seeded():
 def test_ushape_triangle_rejects_curvature_out_of_bounds(curvature):
     with pytest.raises(ValueError, match="curvature must satisfy"):
         sample_ushape_triangle(curvature, 10, np.random.default_rng(1))
+
+
+def test_collider_parents_are_marginally_independent_by_construction():
+    data = sample_collider(200_000, 0.5, np.random.default_rng(5))
+    corr = np.corrcoef(data.T)
+    assert abs(corr[0, 1]) < 0.01
+
+
+@pytest.mark.parametrize("strength", [0.3, 0.5, 0.6])
+def test_collider_conditioning_induces_the_exact_closed_form_partial_correlation(strength):
+    """docs/stage8f_charter.md's own closed-form claim: for independent
+    X1, X2 and collider X3 = strength*X1 + strength*X2 + noise, the
+    conditional correlation Corr(X1, X2 | X3) equals
+    -rho(X1,X3)*rho(X2,X3) / sqrt((1-rho(X1,X3)^2)(1-rho(X2,X3)^2)),
+    strictly nonzero for any strength > 0 -- not merely nonzero due to
+    sampling noise."""
+    data = sample_collider(400_000, strength, np.random.default_rng(9))
+    corr = np.corrcoef(data.T)
+    r13, r23 = corr[0, 2], corr[1, 2]
+    expected = -r13 * r23 / np.sqrt((1 - r13**2) * (1 - r23**2))
+    observed = _partial_correlation_12(data[:, [2, 0, 1]])  # reorder so column 0 is the conditioning var
+    assert abs(observed - expected) < 0.01
+    assert abs(expected) > 0.05
+
+
+def test_collider_is_seeded_and_has_the_expected_shape_and_asymptotic_variance():
+    first = sample_collider(100, 0.5, np.random.default_rng(42))
+    second = sample_collider(100, 0.5, np.random.default_rng(42))
+    assert np.array_equal(first, second)
+    assert first.shape == (100, 3)
+    large = sample_collider(200_000, 0.5, np.random.default_rng(42))
+    assert np.allclose(large.std(axis=0, ddof=1), 1.0, atol=0.02)
+
+
+def test_collider_rejects_strength_at_or_above_one_over_sqrt_two():
+    with pytest.raises(ValueError, match="1/sqrt\\(2\\)"):
+        sample_collider(10, 0.75, np.random.default_rng(1))

@@ -72,6 +72,29 @@ def sample_hub(n: int, strength: float, children: int, rng: np.random.Generator)
     return np.column_stack(columns)
 
 
+def sample_collider(n: int, strength: float, rng: np.random.Generator) -> np.ndarray:
+    """Draw a unit-variance Gaussian collider ``X1, X2 -> X3`` with
+    ``X1`` and ``X2`` drawn independently (``Corr(X1, X2) = 0`` by
+    construction -- a genuinely false, not merely indirect, edge).
+
+    ``strength`` is each parent's own loading onto ``X3`` and must stay
+    below ``1/sqrt(2)`` for ``X3`` to have a real (non-degenerate,
+    positive-variance) noise term at unit variance. See
+    docs/stage8f_charter.md -- conditioning on ``X3`` induces a real,
+    closed-form-nonzero linear correlation between ``X1`` and ``X2``
+    for any ``strength > 0``, the classical collider ("explaining
+    away") effect.
+    """
+    n = _validate_n(n)
+    strength = _validate_strength(strength)
+    if strength >= 1.0 / np.sqrt(2.0):
+        raise ValueError("strength must be below 1/sqrt(2) for X3 to retain a positive-variance noise term")
+    x1 = rng.normal(size=n)
+    x2 = rng.normal(size=n)
+    x3 = strength * x1 + strength * x2 + np.sqrt(1.0 - 2.0 * strength**2) * rng.normal(size=n)
+    return np.column_stack((x1, x2, x3))
+
+
 def _build_overlapping_triangles_precision() -> np.ndarray:
     precision = np.eye(5)
     for i, j in ((0, 1), (0, 2), (1, 2), (2, 3), (2, 4), (3, 4)):
