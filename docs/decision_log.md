@@ -5819,3 +5819,77 @@ the collider-conditioning mechanism as confirmed (not merely
 hypothesized) as the composed-tier reversal's most likely cause,
 scoped to the linear-Gaussian setting this project's own
 partial-correlation mechanism assumes.
+
+## D-072: Stage 8g structural audit — H3 (pseudo-collider) NOT CONFIRMED; Step 5's own validity cross-check FLAGGED, and dominantly so — the real cause looks like an over-conditioning power-loss effect, not any collider variant (main, Stage 8g)
+
+Date: 2026-09-08
+
+`docs/stage8g_charter.md`'s own direct audit of D-071's finite-sample
+pseudo-collider hypothesis (14 GitHub Actions shards re-running Stage
+8c's exact frozen design with `decisive_conditioning_subset` now
+persisted, zero errors; `R=2000` each) produced a genuine surprise —
+not the mechanism this project's own Stage 8f/8d evidence pointed
+toward, but a more direct and, on inspection, more urgent one.
+
+**H3 (finite-sample pseudo-collider): NOT CONFIRMED.** Only 2 of 14
+`(dgp, n)` cells (`overlap` at `N=1500`/`1750`) showed the predicted
+pattern (high chance-correlation subsets showing a higher wrong-
+retention rate than low ones, non-overlapping CIs). Every single
+`chain_fork_hub` cell **contradicted** it — at `N=750`/`1000`, the
+*low*-chance-correlation half was wrongly retained **100%** of the time
+(`CI .96-1.0`), while the *high* half was already lower (`.90`-`.90`).
+The "chance correlation with the tested pair" statistic this charter
+proposed is not what predicts wrong retention in the real evidence.
+
+**Step 5 (validity cross-check): FLAGGED, and not as a rare edge
+case.** Among false edges at `conditioning_size_used >= 2` that are one
+of the project's own named within-motif indirect pairs (the ones with a
+known legitimate separator to check against — `2,846` wrongly-retained
+edges of this kind out of `5,040` total wrongly-retained candidates,
+the remainder being cross-motif/noise pairs with no separator to
+check), **`2,837` (99.7%)** had their own pair's known-correct
+legitimate separator **present inside the decisive (maximum-p-value)
+conditioning subset that still showed `p <= alpha`.** This is not a
+case of the search failing to find or test the right variable — the
+right variable was there, combined with one or more others, and the
+test still rejected independence anyway.
+
+**This reframes the mechanism question again, for the second time in
+two charters.** D-071 confirmed a true collider inflates false
+rejection in isolation; this charter shows that mechanism's own
+proposed real-world fingerprint (chance correlation with unrelated
+pool members) is largely absent from the real data. What dominates
+instead looks like an **over-conditioning power-loss effect**: adding
+one or more additional variables *alongside* an already-correct
+blocking variable degrades the partial-correlation test's own ability
+to detect the true independence it would have found with that variable
+alone — a compounding-conditioning-set phenomenon, not a collider (true
+or pseudo) at all. This charter did not test this new hypothesis
+directly; it surfaced it as the pattern the data actually shows,
+exactly per the charter's own predeclared handling for a Step 5 flag
+("report it prominently... a materially more urgent finding than a
+pseudo-collider explanation").
+
+**What this does not do.** No fix is proposed or deployed — D-070's
+own recalibration mapping remains the production answer regardless.
+D-069's own original mechanism question is, if anything, **more open
+than before**: the leading candidate is no longer "conditioning on
+something spuriously/genuinely collider-like," but "conditioning on
+*anything additional*, even the exactly-correct variable, erodes the
+test's own specificity" — a hypothesis about the significance test's
+own finite-sample behavior under compound conditioning, not about the
+DGP's own graphical structure at all, and not yet tested in a
+controlled fixture the way D-071 tested the collider hypothesis.
+
+Consequences: neither D-069's original hypothesis nor D-071's collider
+mechanism, nor this charter's own pseudo-collider reframing, is now the
+leading explanation — an over-conditioning power-loss effect is. This
+motivates (but does not itself execute) a future controlled-fixture
+charter analogous to Stage 8f's own design: a chain/fork-style fixture
+with a genuine, single correct blocking variable, testing whether
+adding an *additional, entirely unrelated* decoy to that already-
+sufficient conditioning set measurably degrades the test's own
+detection rate at realistic `N`/`alpha(N)` combinations.
+`docs/validated_operating_ranges.md` should record Step 5's own
+dominant-flag finding and retract nothing from D-070's own deployed
+scope — no production behavior changes as a result of this charter.

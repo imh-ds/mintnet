@@ -1052,6 +1052,29 @@ question, not yet chartered) and does not change any deployed
 behavior — D-070's own recalibration mapping remains the production
 fix regardless. See D-071.
 
+**Stage 8g (D-072) — structural audit of `chain_fork_hub`/`overlap`'s
+own screened conditioning subsets: H3 (finite-sample pseudo-collider)
+NOT CONFIRMED; a dominant, unanticipated pattern found instead.**
+Auditing the real evidence directly (not a controlled fixture) shows
+D-071's own collider mechanism's proposed real-world fingerprint
+("chance correlation with unrelated pool members predicts wrong
+retention") largely absent — 12 of 14 `(dgp, n)` cells contradicted it,
+`chain_fork_hub` in every cell. Instead: **99.7%** (`2,837`/`2,846`) of
+wrongly-retained named-indirect-pair false edges at
+`conditioning_size_used >= 2` had their own pair's known-correct
+legitimate separator present *inside* the decisive conditioning subset
+that still showed significance — the search had and used the right
+variable, combined with others, and still failed. **Current leading
+explanation, not yet confirmed in a controlled fixture**: an
+over-conditioning power-loss effect (adding any additional variable,
+even alongside an already-sufficient one, degrades the test's own
+ability to detect the true independence), not a collider of either
+kind. **No change to deployed behavior or scope** — D-070's own
+recalibration mapping remains the production answer regardless; this
+finding motivates, but does not itself execute, a future controlled-
+fixture charter testing the over-conditioning hypothesis directly. See
+D-072.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
