@@ -1075,6 +1075,27 @@ finding motivates, but does not itself execute, a future controlled-
 fixture charter testing the over-conditioning hypothesis directly. See
 D-072.
 
+**Stage 8h (D-073) — over-conditioning power loss via a provably
+independent decoy: NOT CONFIRMED, 18/18 cells, no exceptions. Candidate
+mechanism eliminated.** A controlled fixture (chain's own already-
+correct blocking variable, plus zero to three decoys with exactly zero
+correlation to anything by construction) shows no measurable rise in
+false rejection at any tested `N`/`strength`/decoy-count combination —
+rejection rate tracks nominal `alpha(N)` closely regardless of how many
+independent decoys are added. **Three candidate mechanisms for the
+composed-tier reversal have now been tested and none explains D-072's
+own central finding** (a wrongly-retained edge's own correct separator
+present in the decisive subset alongside something else): a true
+collider (D-071, confirmed real but structurally absent from either
+network), a finite-sample pseudo-collider via chance correlation
+(D-072's own H3, not confirmed), and over-conditioning power loss via a
+purely irrelevant decoy (this charter, eliminated). **No change to
+deployed behavior** — D-070's own recalibration mapping remains the
+production answer regardless. The root cause remains open; the next
+candidate (not yet chartered) is a collinearity effect between an added
+screened variable and the separator itself, rather than a relationship
+to `i`/`j` or to nothing at all. See D-073.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

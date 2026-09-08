@@ -5893,3 +5893,71 @@ detection rate at realistic `N`/`alpha(N)` combinations.
 `docs/validated_operating_ranges.md` should record Step 5's own
 dominant-flag finding and retract nothing from D-070's own deployed
 scope — no production behavior changes as a result of this charter.
+
+## D-073: Stage 8h over-conditioning power-loss diagnostic — H4 cleanly NOT CONFIRMED, 18/18 cells, no exceptions; the candidate mechanism is eliminated (main, Stage 8h)
+
+Date: 2026-09-08
+
+`docs/stage8h_charter.md`'s own direct, controlled-fixture test of
+D-072's leading (but explicitly untested) explanation for its own
+dominant Step 5 finding (72 GitHub Actions shards, `R=2000` each, zero
+errors) gives an unusually clean negative result.
+
+**H4 (adding one provably independent decoy to an already-sufficient
+conditioning set raises false rejection): NOT CONFIRMED, 0/18 cells
+supporting, all 18 contradicting.** At every tested `(N, strength)`
+cell, the rejection rate with `X2` alone (`decoy_count=0`) and with
+`X2` plus one, two, or three independent decoys (`decoy_count=1,2,3`)
+all track the cell's own nominal `alpha(N)` closely and
+indistinguishably — e.g. `N=300` (`alpha=.199`): `.188`-`.211` across
+every `decoy_count`; `N=3000` (`alpha=.069`): `.063`-`.076`. No decoy
+count shows a materially different rate from any other at any `N` or
+`strength`. **H5 (saturation shape) is formally CONFIRMED but vacuous**,
+exactly per the charter's own predeclared caveat: with no effect at all
+to saturate, "does it stop climbing" has nothing to test.
+
+**This eliminates over-conditioning power loss, as tested here, as the
+cause of D-072's own dominant finding.** A provably independent decoy
+variable — zero correlation with anything, by construction, not merely
+by population design — does **not** measurably degrade the Fisher-z
+test's own ability to detect a true independence, even stacked three
+deep, at any tested `N` from `300` to `3000`. Classical test theory's
+own prediction (the standard-error correction for conditioning-set size
+already fully compensates for a truly irrelevant added regressor) holds
+up empirically here; this project's own earlier "finite-sample
+overfitting with more irrelevant regressors" framing (from D-072's own
+consequence section) does not survive contact with a controlled test.
+
+**Where this leaves the mechanism question.** Three candidate
+explanations for the composed-tier false-edge reversal have now been
+tested in controlled isolation: a true collider (D-071, confirmed real
+but structurally absent from either composed network), a finite-sample
+pseudo-collider via chance correlation (D-072's own H3, not confirmed
+against the real evidence), and over-conditioning power loss via a
+purely irrelevant added variable (this charter's H4, cleanly
+eliminated). **None of the three explains D-072's own central finding**
+— that 99.7% of wrongly-retained named-indirect-pair false edges had
+their own correct separator present in the decisive subset alongside
+something else, and still failed. The remaining, not-yet-tested
+possibility this charter's own non-goals flagged in advance: the real
+composed networks' own additional conditioning variables are not
+*provably independent* decoys the way this charter's own `W1`-`W3` are
+— they are other *screened* candidates, which reached the pool
+precisely because MINT's own screening step found **some** correlation
+with something, however weak or spurious. The next candidate mechanism
+is therefore about that variable's own relationship with the
+**separator itself** (a collinearity/multicollinearity effect degrading
+the estimated partial correlation when the added variable is correlated
+with the *conditioning* variable, not with `i`/`j` directly) — a
+distinct, not-yet-chartered hypothesis from anything tested across
+Stages 8f-8h.
+
+Consequences: the composed-tier reversal's own root cause remains
+genuinely open after four dedicated diagnostic charters (D-069, D-071,
+D-072, D-073) — a materially more surprising and harder-to-pin-down
+result than this project's own typical diagnostic outcome. No
+production behavior changes — D-070's own recalibration mapping remains
+the deployed fix regardless. `docs/validated_operating_ranges.md`
+should record all three eliminated/non-confirmed candidate mechanisms
+so a future charter does not re-propose or re-test any of them
+unchanged.
