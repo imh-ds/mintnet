@@ -1005,6 +1005,20 @@ bring this case within tolerance (`.003`-`.017`) as a descriptive,
 non-deployed finding — a candidate for a future charter, not yet
 validated for production use. See D-068.
 
+**Stage 8d (D-069) — the composed-tier reversal's trigger condition:
+`conditioning_size_used >= 2`, not specifically reaching
+`max_conditioning_size`.** Diagnosed directly: at
+`conditioning_size_used=1`, false-edge margin shows no reversal at all
+(flat, D-066-like accuracy across every bin); at `size in {2,3,4}`,
+accuracy falls from high (low margin) to near-zero (high margin) with
+equal severity regardless of how close to the cap the search got — the
+failure is already total at the smallest multi-variable size, not
+graded toward the cap. **Relevant to any future charter considering
+raising `max_conditioning_size`** (for this or an unrelated reason):
+that change is not expected to fix this specific reversal, since the
+evidence argues the trigger is conditioning on *any* additional
+variable, not exhausting the search's own room. See D-069.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

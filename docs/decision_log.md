@@ -5638,3 +5638,83 @@ calibration as confirmed for both isolated and composed settings, and
 the false-edge case as confirmed *not* to transfer as previously
 characterized — a distinct, more severe composed-tier finding, not a
 restatement of D-066.
+
+## D-069: Stage 8d reversal diagnosis — both hypotheses formally CONFIRMED, but the size-stratified evidence revises the mechanism: any multi-variable conditioning (size >= 2), not specifically the max_conditioning_size=4 cap, drives the inversion (main, Stage 8d)
+
+Date: 2026-09-07
+
+Enriched Stage 8c evidence (14 GitHub Actions shards, zero errors,
+identical `R=2000` grid, now carrying `conditioning_size_used`/
+`cap_reached` per edge) let both of this charter's own predeclared
+hypotheses be tested directly.
+
+**H1 (cap-reached): CONFIRMED for `overlap`, inconclusive for
+`chain_fork_hub`, and the effect size is total, not merely "material."**
+Within the reversed top margin bin (`>= 0.9`), every single
+`cap_reached=True` false edge was wrong, at every `(dgp, N)` cell with
+enough data to test (`overlap`, `N in {400,...,1500}`: accuracy `0.0`
+exactly, `29`-`50` cases each, non-overlapping with `cap_reached=False`'s
+own `71`-`90%`). `chain_fork_hub` never accumulated more than `7`
+`cap_reached=True` cases in this bin at any `N` (below this charter's
+own predeclared `min_count=30`) — genuinely too rare there to confirm
+statistically, even though every observed case was also wrong.
+
+**H2 (conditioning-size-graded): CONFIRMED, but the size-stratified
+breakdown revises the leading hypothesis this charter opened with.**
+The reversal is not concentrated near the cap (`size=4`) — it is
+**already fully present at `conditioning_size_used=2`**, the smallest
+multi-variable conditioning set tested, for both DGPs:
+`chain_fork_hub`/size `2`: accuracy falls from `.83` (lowest margin
+bin) to `0.0` (highest); `overlap`/size `2`: `.996` down to `.004`.
+`size=1` (a single conditioning variable — the simplest, most common
+case, `>4,000` scored decisions per bin) shows **no reversal at all** —
+flat, reasonably calibrated-looking accuracy (`chain_fork_hub`
+`.86`-`.88`, `overlap` `.93`-`.95`) across every margin bin, closely
+resembling D-066's own isolated chain/fork pattern. `size=3` and `4`
+show the same near-total inversion as `size=2`, not a worse one —
+there is no graded worsening from `2` to `4`, just a sharp step from
+`1` to `2` that stays roughly equally severe from there.
+
+**This is a materially more precise, and different, mechanism than the
+charter's own leading hypothesis.** "Ran out of search room before
+finding the right blocking subset" (the `cap_reached` story) predicts
+the effect should concentrate at or near the cap and be milder at
+smaller sizes — instead it is already total at the smallest possible
+multi-variable size (`2`) and does not worsen further toward the cap.
+The evidence is more consistent with conditioning on *any* additional
+variable from a real composed network's own screened candidate pool
+being what induces spurious, high-confidence-looking dependence for a
+genuinely false edge — plausibly a collider-conditioning effect
+(conditioning on a common effect of two otherwise-independent causes
+induces exactly this kind of artificial dependence), though this
+charter did not test that mechanism directly and this remains a
+disclosed hypothesis, not a confirmed one.
+
+**Candidate fix (Step 4) not run.** The charter's own predeclared
+condition to attempt it ("if H1 or H2 is confirmed") is technically
+met, but the refined evidence argues against expecting it to help:
+raising `max_conditioning_size` gives the search room to try *larger*
+subsets, but the failure is already complete at the smallest
+multi-variable subset size tested — there is no evidence a bigger cap
+would let the search escape a problem that does not scale with subset
+size in the first place. Running Step 4 as originally conceived risks
+spending compute to confirm a fix that the sharper mechanism already
+argues is unlikely to work, rather than being withheld out of caution
+alone.
+
+Consequences: the composed-tier false-edge reversal has an identified,
+precise trigger condition (`conditioning_size_used >= 2`) but not yet
+a confirmed causal mechanism or a validated fix. Two concrete,
+disclosed, not-yet-chartered options, neither decided here: (a) a
+diagnostic charter testing the collider-conditioning-bias hypothesis
+directly (e.g. a synthetic fixture with a known collider structure,
+checking whether conditioning on it alone reproduces this exact
+inversion); (b) proceed directly to validating and deploying D-068's
+own exploratory composed-tier recalibration curve (already shown
+effective, `.003`-`.017` ECE) as the practical fix, treating the
+mechanism as a secondary question worth understanding but not blocking
+a working correction. `docs/validated_operating_ranges.md` should
+record that the composed-tier false-edge reversal's trigger condition
+is `conditioning_size_used >= 2`, not specifically reaching the search
+cap — relevant to any future charter that considers raising
+`max_conditioning_size` for an unrelated reason.
