@@ -13,8 +13,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from mintnet.bootstrap import compute_edge_stability_growing_subset
 from mintnet.pipeline.growing_subset_dpi import growing_subset_dpi
+
+# Imported lazily inside the function below, not at module level: mintnet.
+# bootstrap.stability imports from mintnet.pipeline (for compose_screen_
+# then_prune/growing_subset_dpi), so an eager import here would close a
+# circular dependency between the two packages. That cycle happens to
+# resolve fine for a normal single-process import, but breaks a spawned
+# multiprocessing worker (n_jobs > 1), which re-imports each module fresh
+# with no cached partial state to fall back on.
 
 # D-076's own boundary: growing_subset_dpi's own prune decisions are
 # reliable at conditioning_size_used <= 1 and genuinely unreliable (not
@@ -62,6 +69,7 @@ def growing_subset_dpi_with_stability_rescue(
     bootstraps: int = 500,
     pi_min: float = 0.90,
     rng: np.random.Generator,
+    n_jobs: int = 1,
 ) -> StabilityRescueResult:
     """Run `growing_subset_dpi` once, then bootstrap ONLY the edges
     whose own `conditioning_size_used >= UNRESOLVED_CONDITIONING_SIZE`
@@ -76,7 +84,18 @@ def growing_subset_dpi_with_stability_rescue(
     stricter than the calibration procedure's own smallest-eligible
     default of `0.70` -- see docs/decision_log.md D-079), not
     re-derived here.
+
+    `n_jobs` (default `1`, sequential) is forwarded to `compute_edge_
+    stability_growing_subset` -- distributes the `bootstraps`-resample
+    compute (D-080's own measured cost: `~80-280s` sequentially per
+    qualifying dataset) across local worker processes when a dataset
+    does qualify. Purely a wall-clock optimization: the resample draw
+    order from `rng` is unaffected by `n_jobs`, so `pi_final` (and
+    therefore every downstream decision this function makes) is
+    bit-for-bit identical regardless of `n_jobs`.
     """
+    from mintnet.bootstrap import compute_edge_stability_growing_subset
+
     p = flagged.shape[0]
     result = growing_subset_dpi(
         data, flagged, alpha, max_conditioning_size=max_conditioning_size, motif_family=motif_family
@@ -96,7 +115,7 @@ def growing_subset_dpi_with_stability_rescue(
 
     if qualifying:
         stability = compute_edge_stability_growing_subset(
-            data, screening_alpha, alpha, max_conditioning_size, bootstraps, rng
+            data, screening_alpha, alpha, max_conditioning_size, bootstraps, rng, n_jobs=n_jobs
         )
         for i, j in qualifying:
             value = float(stability.pi_final[i, j])

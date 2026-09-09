@@ -60,6 +60,57 @@ def test_bootstrap_resample_is_reproducible_given_the_same_rng_state():
     assert np.array_equal(result_a.pi_candidate, result_b.pi_candidate)
 
 
+def test_growing_subset_n_jobs_greater_than_one_matches_the_sequential_result_bit_for_bit():
+    data = _chain_data(500, seed=1)
+    sequential = compute_edge_stability_growing_subset(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=20,
+        rng=np.random.default_rng(2),
+    )
+    parallel = compute_edge_stability_growing_subset(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=20,
+        rng=np.random.default_rng(2), n_jobs=2,
+    )
+
+    assert np.array_equal(sequential.pi_final, parallel.pi_final)
+    assert np.array_equal(sequential.pi_candidate, parallel.pi_candidate)
+    assert sequential.successful_bootstraps == parallel.successful_bootstraps
+    assert sequential.failed_bootstraps == parallel.failed_bootstraps
+
+
+def test_growing_subset_rejects_n_jobs_below_one():
+    data = _chain_data(200, seed=7)
+    with pytest.raises(ValueError, match="n_jobs"):
+        compute_edge_stability_growing_subset(
+            data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=10,
+            rng=np.random.default_rng(8), n_jobs=0,
+        )
+
+
+def test_n_jobs_greater_than_one_matches_the_sequential_result_bit_for_bit():
+    """n_jobs only distributes compute across processes -- the resample
+    draw order from rng is unchanged, so results must be identical."""
+    data = _chain_data(500, seed=1)
+    sequential = compute_edge_stability(
+        data, screening_alpha=0.001, dpi_alpha=0.10, bootstraps=20, rng=np.random.default_rng(2)
+    )
+    parallel = compute_edge_stability(
+        data, screening_alpha=0.001, dpi_alpha=0.10, bootstraps=20, rng=np.random.default_rng(2), n_jobs=2
+    )
+
+    assert np.array_equal(sequential.pi_final, parallel.pi_final)
+    assert np.array_equal(sequential.pi_candidate, parallel.pi_candidate)
+    assert sequential.successful_bootstraps == parallel.successful_bootstraps
+    assert sequential.failed_bootstraps == parallel.failed_bootstraps
+
+
+def test_rejects_n_jobs_below_one():
+    data = _chain_data(200, seed=7)
+    with pytest.raises(ValueError, match="n_jobs"):
+        compute_edge_stability(
+            data, screening_alpha=0.001, dpi_alpha=0.10, bootstraps=10, rng=np.random.default_rng(8), n_jobs=0
+        )
+
+
 def test_growing_subset_pi_matrices_are_symmetric_bounded_and_zero_diagonal():
     data = _chain_data(500, seed=1)
     result = compute_edge_stability_growing_subset(

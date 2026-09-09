@@ -131,3 +131,30 @@ def test_reproducible_given_the_same_rng_state():
     )
     assert np.array_equal(a.final_adjacency, b.final_adjacency)
     assert a.pi_final == b.pi_final
+
+
+def test_n_jobs_greater_than_one_matches_the_sequential_result():
+    """n_jobs is a wall-clock-only knob -- it must not change which
+    edges get rescued or any pi_final value."""
+    rng = np.random.default_rng(7)
+    n = 500
+    x1 = rng.normal(size=n)
+    x2 = rng.normal(size=n)
+    x3 = 0.65 * x1 + 0.65 * x2 + np.sqrt(1 - 2 * 0.65**2) * rng.normal(size=n)
+    x4 = rng.normal(size=n)
+    data = np.column_stack([x1, x2, x3, x4])
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    sequential = growing_subset_dpi_with_stability_rescue(
+        data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
+        bootstraps=40, pi_min=0.90, rng=np.random.default_rng(8),
+    )
+    parallel = growing_subset_dpi_with_stability_rescue(
+        data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
+        bootstraps=40, pi_min=0.90, rng=np.random.default_rng(8), n_jobs=2,
+    )
+
+    assert np.array_equal(sequential.final_adjacency, parallel.final_adjacency)
+    assert sequential.pi_final == parallel.pi_final
+    assert sequential.rescued == parallel.rescued
