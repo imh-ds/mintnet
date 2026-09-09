@@ -1199,6 +1199,35 @@ and shard as many small, independently-capped chunks rather than one
 large sequential cap), and D-079 (the `0.70` -> `0.90` policy revision
 itself, not a new experiment).
 
+**Stage 9b (D-080) — `growing_subset_dpi_with_stability_rescue`
+(`mintnet.pipeline.stability_rescue`): opt-in pipeline feature,
+PROCEED, validated end-to-end on fresh replicates at all 14 `(dgp, N)`
+cells.** Wires D-077/D-078/D-079's own retrospectively-validated
+bootstrap-stability mechanism into one callable function: runs
+`growing_subset_dpi`, bootstraps a dataset once (only if it contains at
+least one `conditioning_size_used >= 2` edge), and flips any qualifying
+edge to pruned if `pi_final < 0.90`, returning full per-edge
+transparency (original decision, final decision, `pi_final`, `rescued`
+flag) rather than a silent correction. Validated on genuinely fresh
+replicates (disjoint seed range, never scored by any prior charter),
+not a re-analysis of old evidence: recall `.993`-`1.0` and removal rate
+`.929`-`1.0` across all `7` tested `N` for both `chain_fork_hub` and
+`overlap`, comfortably clearing this charter's own `>= .95`/`>= .85`
+tolerance and closely matching D-079's own retrospective `.998`/`.988`
+pooled figures. **Scope: `chain_fork_hub`/`overlap`, `strength=0.5`, `N
+in [400, 1750]`, `pi_min=0.90` only** -- no claim for other motifs,
+strengths, or `max_conditioning_size` values. Per-call cost measured
+directly (not assumed): calls with no qualifying edge cost `~0.02s`
+(indistinguishable from plain `growing_subset_dpi`); calls that
+bootstrap (`~11%` of calls in this evidence) cost `81s`-`176s` on
+average (`chain_fork_hub` vs. `overlap`), consistent with D-078's own
+measured range and confirming cost is not well predicted by `N` alone.
+**Not authorized for production deployment or as any pipeline's
+default behavior** -- default `growing_subset_dpi` behavior is
+unchanged; a caller must explicitly opt in, and the `B=500`
+per-qualifying-dataset cost remains an unresolved practical concern for
+any downstream integration. See D-080.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates

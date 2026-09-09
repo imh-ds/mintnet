@@ -6418,3 +6418,80 @@ Consequences: `docs/validated_operating_ranges.md` should record
 stability filter threshold for `growing_subset_dpi`'s own
 `conditioning_size_used >= 2` decisions, with the same non-deployment
 caveat as D-077/D-078.
+
+## D-080: Stage 9b — `growing_subset_dpi_with_stability_rescue` wired and validated end-to-end on fresh replicates: PROCEED, all 14 `(dgp, N)` cells pass (main, Stage 9b)
+
+Date: 2026-09-09
+
+D-077 through D-079 validated the bootstrap-stability rescue
+mechanism entirely retrospectively, by re-analyzing evidence Stage 8c
+had already generated for an unrelated purpose. Nothing a caller could
+actually invoke existed yet. This charter (1) implemented
+`mintnet.pipeline.stability_rescue.growing_subset_dpi_with_stability_
+rescue` — one function that runs `growing_subset_dpi`, identifies every
+edge with `conditioning_size_used >= 2`, bootstraps the dataset once
+(not once per edge) only when at least one such edge exists, and
+returns a fully transparent `StabilityRescueResult` (original decision,
+final decision, `pi_final`, and a `rescued` flag — no silent
+correction) — and (2) validated it end-to-end on **fresh, disjoint
+replicates** (`base_master_seed=81000`, `bootstrap_master_seed=81100`,
+never used by any prior charter), not a re-scoring of old evidence.
+
+**Dispatch, applying every lesson D-078 paid for.** `1,000` replicates
+per `(dgp, N)` cell, `7` `N` values, `2` DGPs, each cell's own
+`max_bootstrapped_replicates_per_cell=30` cap reached via `5`
+independently-capped `200`-replicate chunks (`--replicate-range`) —
+the same chunked-shard design D-078 introduced — dispatched as `70`
+GitHub Actions shards up front, timing measured under the real thread-
+limited environment *before* sizing anything. Result: all `70` shards
+succeeded, all `14,000` rows `status="ok"`, and the generic aggregator
+validated cleanly against the full config grid without the D-078-style
+scope mismatch (this dispatch was never `--dgps`-restricted, so
+`expected_row_count`'s own full-grid assumption was correct here).
+
+**Result: PROCEED at every tested cell, 0 failing, 0 inconclusive.**
+
+```
+dgp             n     true_retained  recall  wrongly_retained  removal
+chain_fork_hub  400     158          1.000     70              1.000
+chain_fork_hub  500     214          1.000     86               .977
+chain_fork_hub  600     174          1.000     75              1.000
+chain_fork_hub  750     258          1.000    109               .982
+chain_fork_hub 1000     180          1.000     84              1.000
+chain_fork_hub 1500     204          1.000     91               .989
+chain_fork_hub 1750     216          1.000     84              1.000
+overlap         400     923           .993     51               .941
+overlap         500     912           .997     50              1.000
+overlap         600     918          1.000     50               .980
+overlap         750     924          1.000     45              1.000
+overlap        1000     916          1.000     36               .972
+overlap        1500     928          1.000     28               .929
+overlap        1750     922          1.000     34              1.000
+```
+
+Every cell clears this charter's own predeclared tolerance (recall
+`>= .95`, removal `>= .85`, `min_count=10`) with wide margin — recall
+`.993`-`1.0`, removal `.929`-`1.0` — and lands close to D-079's own
+retrospective figures (`.998`/`.988` pooled), confirming the wired
+function's own end-to-end behavior on data it has never seen scored
+before, not just the underlying statistic computed carefully by hand.
+
+**Step 3 — per-call cost, measured directly (not assumed).** Calls with
+no qualifying edge (`12,426`/`14,000`, `~89%`) cost `~0.02s` — indis-
+tinguishable from plain `growing_subset_dpi`. Calls that do bootstrap
+(`1,574`/`14,000`, `~11%`) cost, on average, `81s` (`chain_fork_hub`)
+to `176s` (`overlap`, max `1,115s`) — consistent with D-078's own
+measured range and confirming, again, that cost is highly variable and
+not well predicted by `N` alone.
+
+Consequences: `growing_subset_dpi_with_stability_rescue` is now a
+documented, opt-in pipeline feature within its tested scope
+(`chain_fork_hub`/`overlap`, `strength=0.5`, `N in [400, 1750]`,
+`pi_min=0.90`) — default `growing_subset_dpi` behavior is completely
+unchanged; a caller must explicitly opt in. **Still not authorized for
+production deployment or as any pipeline's default behavior** — the
+`B=500` per-qualifying-dataset cost this charter measures remains a
+real, unresolved practical concern for any downstream integration,
+exactly as `docs/stage9b_charter.md`'s own non-goals state.
+`docs/validated_operating_ranges.md` should record this function's own
+existence and tested scope as a new entry.
