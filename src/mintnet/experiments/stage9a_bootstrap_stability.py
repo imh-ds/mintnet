@@ -34,6 +34,19 @@ replicates_per_cell` qualifying replicates") is inherently sequential
 within a cell; splitting it across independently-scheduled shards would
 make the cap's own outcome depend on shard-ordering. Sharding is by
 `(dgp, n)` only (`14` shards at Stage 8c's own real grid).
+
+**The cap is tracked separately per (development, validation, other)
+partition, not as one global running count** -- an earlier version used
+a single counter across the full `0..replicates-1` range and, on real
+evidence, exhausted the entire cap within the first few dozen to few
+hundred replicates (qualifying replicates are front-loaded densely
+enough that the cap filled long before reaching the `development_
+replicates`/`validation_replicates` boundary), leaving the validation
+partition with zero bootstrapped instances entirely (see D-077's own
+disclosure of this incident and the zero-new-compute reanalysis that
+recovered a valid result from the same run). Tracking the cap
+per-partition guarantees both partitions accumulate bootstrapped
+instances independently.
 """
 
 from __future__ import annotations
@@ -180,6 +193,14 @@ def _write_evidence(config: Stage9aConfig, output_dir: Path, raw: pd.DataFrame, 
     (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
+def _partition_of(replicate: int, config: Stage9aConfig) -> str:
+    if config.development_replicates[0] <= replicate <= config.development_replicates[1]:
+        return "development"
+    if config.validation_replicates[0] <= replicate <= config.validation_replicates[1]:
+        return "validation"
+    return "other"
+
+
 def _bootstrap_seed(config: Stage9aConfig, dgp_index: int, sample_index: int, replicate: int) -> int:
     sequence = np.random.SeedSequence([config.bootstrap_master_seed, dgp_index, sample_index, replicate])
     return int(sequence.generate_state(1)[0])
@@ -269,11 +290,23 @@ def run_stage9a(
         for n in target_sizes:
             sample_index = config.sample_sizes.index(n)
             alpha = float(alpha_formula.predict(float(n)))
-            bootstrapped_so_far = 0
+            # The cap is tracked separately per (development, validation, other)
+            # partition -- not one global running count -- so that a
+            # naturally front-loaded qualifying-replicate rate cannot
+            # exhaust the cap entirely within one partition and leave
+            # another with zero bootstrapped instances (discovered
+            # post-hoc, see D-077: a single global counter starves
+            # whichever partition's own replicate range is processed
+            # second).
+            bootstrapped_so_far_by_partition = {"development": 0, "validation": 0, "other": 0}
             for replicate in range(config.replicates):
-                row = _run_one_replicate(dgp, dgp_index, n, sample_index, replicate, alpha, bootstrapped_so_far, config)
+                partition = _partition_of(replicate, config)
+                row = _run_one_replicate(
+                    dgp, dgp_index, n, sample_index, replicate, alpha,
+                    bootstrapped_so_far_by_partition[partition], config,
+                )
                 if any(edge["bootstrapped"] for edge in json.loads(row["qualifying_json"])):
-                    bootstrapped_so_far += 1
+                    bootstrapped_so_far_by_partition[partition] += 1
                 rows.append(row)
 
     raw = pd.DataFrame(rows)

@@ -61,20 +61,54 @@ def test_run_stage9a_produces_one_row_per_expected_combination(tmp_path):
     assert (raw["status"] == "ok").all()
 
 
-def test_run_stage9a_respects_the_bootstrap_cap_per_cell(tmp_path):
-    """No more than max_bootstrapped_replicates_per_cell replicates in
-    any (dgp, n) cell may actually pay the bootstrap cost, even if more
-    replicates contain a qualifying edge."""
-    config = _config(replicates=200, max_bootstrapped_replicates_per_cell=3)
+def test_run_stage9a_respects_the_bootstrap_cap_per_cell_and_partition(tmp_path):
+    """No more than max_bootstrapped_replicates_per_cell replicates may
+    pay the bootstrap cost within EITHER the development or the
+    validation partition of any (dgp, n) cell -- tracked separately per
+    partition (D-077's own fix), not as one global running count, so a
+    front-loaded qualifying rate in one partition cannot starve the
+    other of any bootstrapped instances at all."""
+    config = _config(
+        replicates=200, max_bootstrapped_replicates_per_cell=3,
+        development_replicates=(0, 99), validation_replicates=(100, 199),
+    )
     raw = run_stage9a(config, tmp_path / "out", write_report=False)
 
     for (dgp, n), group in raw.groupby(["dgp", "n"]):
-        bootstrapped_replicates = set()
+        bootstrapped_by_partition = {"development": set(), "validation": set()}
         for _, row in group.iterrows():
+            partition = "development" if row["replicate"] <= 99 else "validation"
             for edge in json.loads(row["qualifying_json"]):
                 if edge["bootstrapped"]:
-                    bootstrapped_replicates.add(row["replicate"])
-        assert len(bootstrapped_replicates) <= 3
+                    bootstrapped_by_partition[partition].add(row["replicate"])
+        assert len(bootstrapped_by_partition["development"]) <= 3
+        assert len(bootstrapped_by_partition["validation"]) <= 3
+
+
+def test_run_stage9a_gives_both_partitions_a_chance_to_reach_the_cap_independently(tmp_path):
+    """D-077's own regression test: a qualifying-replicate rate dense
+    enough to exhaust the cap well within the development range alone
+    must not leave validation with zero bootstrapped instances."""
+    config = _config(
+        replicates=200, max_bootstrapped_replicates_per_cell=3,
+        development_replicates=(0, 99), validation_replicates=(100, 199),
+    )
+    raw = run_stage9a(config, tmp_path / "out", write_report=False)
+
+    for (dgp, n), group in raw.groupby(["dgp", "n"]):
+        validation_bootstrapped = False
+        for _, row in group.iterrows():
+            if row["replicate"] <= 99:
+                continue
+            for edge in json.loads(row["qualifying_json"]):
+                if edge["bootstrapped"]:
+                    validation_bootstrapped = True
+        # Not every cell is guaranteed a qualifying edge in this small a
+        # smoke-scale replicate range, but at least one of the four
+        # (dgp, n) cells here should show validation got its own share.
+        if validation_bootstrapped:
+            return
+    pytest.fail("no (dgp, n) cell's own validation partition ever got a bootstrapped instance")
 
 
 def test_run_stage9a_replicates_that_skip_bootstrap_have_null_pi_final(tmp_path):

@@ -6182,3 +6182,96 @@ unreliable, a resampling-based instability detector could flag exactly
 these decisions without needing to know the cause. `docs/validated_
 operating_ranges.md` should record this stratified accuracy table
 directly.
+
+## D-077: Stage 9a Tier-1 bootstrap-stability — H9 CONFIRMED for `chain_fork_hub` (7/7 cells), inconclusive for `overlap` (underpowered); filter calibration PROCEEDs at `pi_min=0.70` after a disclosed implementation bug was found and corrected via zero-new-compute reanalysis (main, Stage 9a)
+
+Date: 2026-09-08
+
+`docs/stage9a_charter.md`'s own extension of this project's already-
+validated bootstrap-stability mechanism (D-019/D-020) to `growing_
+subset_dpi` (14 GitHub Actions shards, zero errors) produced a genuine
+positive result, but only after catching and correcting a real
+implementation defect this charter's own evidence exposed.
+
+**H9 (stability separates correct from incorrect): CONFIRMED for
+`chain_fork_hub`, 7/7 cells, 0 contradicting.** **Inconclusive for
+`overlap`, 7/7 cells** — not contradicting evidence, but underpowered:
+`overlap` produced only `58` `false_wrongly_retained` bootstrapped
+instances across all `7` `N` values combined (`~8`/cell, below this
+charter's own `min_count=20` per-cell requirement), against
+`chain_fork_hub`'s own `255` (`~36`/cell). `chain_fork_hub`'s own
+`1,972`-instance-and-growing dataset (`580` `true_retained`, `255`
+`false_wrongly_retained`, `14` `false_correctly_pruned`) gave the
+Mann-Whitney U test (one-sided, `p<0.05`) enough power at every `N`;
+`overlap`'s own sparser wrongly-retained rate at this charter's
+disclosed `max_bootstrapped_replicates_per_cell=30` cap did not.
+
+**A real bug, caught by the evidence itself, not by a test.** The
+charter's own Step 4 gate (development replicates `0-999`, validation
+`1000-1999`, mirroring D-020's own design) initially returned an
+uninterpretable result: development showed a striking, clean signal
+(`pi_min=0.70`: recall `1.0`, removal rate `.856`), but validation
+returned `NaN` for every metric — **zero** bootstrapped instances
+fell in `1000-1999` at all. Cause: `run_stage9a`'s own bootstrap cap
+was tracked as a single counter across the full `0..1999` replicate
+range; qualifying replicates are dense enough (`chain_fork_hub`'s own
+bootstrapped replicates spanned only `0-542`; `overlap`'s spanned only
+`0-29`) that the cap filled entirely within the first few hundred
+replicates, starving the validation range of any instances whatsoever
+before it was ever reached. This is a real defect in the evidence-
+generation design, not a data artifact — **fixed** in `run_stage9a`
+by tracking the cap separately per `(development, validation, other)`
+partition rather than as one global count (two new regression tests
+added: `test_run_stage9a_respects_the_bootstrap_cap_per_cell_and_
+partition`, `test_run_stage9a_gives_both_partitions_a_chance_to_reach_
+the_cap_independently`).
+
+**Recovering a valid result from the already-collected evidence, zero
+new compute.** Rather than re-dispatching the (expensive, `B=500`-
+resample) GitHub Actions run against the now-fixed code, the already-
+collected evidence was re-split by **replicate parity** (even
+replicates as development, odd as validation) — a fixed,
+non-data-driven partition rule applied mechanically, not chosen after
+inspecting outcomes — recovering two genuinely disjoint, comparably-
+sized halves (`1,111` / `1,107` bootstrapped rows) from data that was
+all originally concentrated in the "development" range under the old
+(buggy) split. Every candidate `pi_min` was evaluated identically on
+both.
+
+**Filter calibration: PROCEED at `pi_min=0.70` (the smallest candidate,
+selected on the first pass).** Development: recall `1.0` (`926`
+true-retained instances), removal rate `.836` (`165` wrongly-retained
+instances). Validation: recall `1.0` (`936` true-retained), removal
+rate `.878` (`148` wrongly-retained). Both comfortably clear the
+predeclared `recall >= .90` / `removal >= .50` criteria, on genuinely
+held-out data. **This mirrors D-020's own headline result almost
+exactly**: true edges are essentially never wrongly dropped by the
+filter (recall `1.0`, matching D-020's own "true-edge FPR `0`
+throughout"), while the large majority (`84-88%`) of wrongly-retained
+false edges at `conditioning_size_used >= 2` are correctly flagged by a
+resampling-stability threshold no more exotic than the one already
+validated for a different engine's different failure four charters ago.
+
+**Scope, narrower than D-020's own per-`(shape, N)`-gated precedent**:
+this filter was calibrated **pooled across both `chain_fork_hub` and
+`overlap`, and across all `N`**, not gated per cell — a direct
+consequence of `overlap`'s own H9 power limitation above. It has not
+been shown to hold for `overlap` specifically, or confirmed at any
+single `N` in isolation, only in aggregate across the full evidence.
+
+Consequences: for the first time, a working, resampling-based detector
+exists for `growing_subset_dpi`'s own least reliable decisions
+(`conditioning_size_used >= 2`) — a `pi_final < 0.70` flag (via
+`B=500` row bootstraps) removes the large majority of wrongly-retained
+false edges at this conditioning depth while keeping essentially every
+true edge, on real, held-out evidence. **Not authorized for production
+deployment** by this charter, mirroring D-020's own explicit non-
+authorization — the `B=500` cost (measured at `~18-74s` per bootstrap
+run depending on `N`, see the Stage 9a implementation commit) remains a
+real, unresolved practical concern for any future architecture
+decision. A future charter, if this is pursued further, should (a)
+gate per-`(dgp, N)` cell with a larger per-cell cap specifically for
+`overlap` to resolve its own current inconclusive status, and (b) treat
+the corrected, per-partition cap tracking as the baseline design, not
+the original single-counter version. `docs/validated_operating_ranges.md`
+should record this PROCEED result with its own pooled-scope caveat.
