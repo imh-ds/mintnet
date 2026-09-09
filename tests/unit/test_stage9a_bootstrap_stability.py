@@ -124,6 +124,46 @@ def test_run_stage9a_replicates_that_skip_bootstrap_have_null_pi_final(tmp_path)
     assert saw_a_skip  # sanity: the cap actually bound something in this run
 
 
+def test_run_stage9a_replicate_range_matches_the_corresponding_slice_of_a_full_run(tmp_path):
+    """Restricting to one partition's own replicate range must produce
+    results identical to that same slice of an unrestricted run -- the
+    whole point of splitting development/validation into independent
+    shards (see D-077's own follow-up dispatch)."""
+    config = _config(
+        replicates=60, development_replicates=(0, 29), validation_replicates=(30, 59),
+        max_bootstrapped_replicates_per_cell=5,
+    )
+    full = run_stage9a(config, tmp_path / "full", write_report=False)
+    development_only = run_stage9a(config, tmp_path / "dev", replicate_range=(0, 29), write_report=False)
+    validation_only = run_stage9a(config, tmp_path / "val", replicate_range=(30, 59), write_report=False)
+
+    columns = [c for c in full.columns if c != "elapsed_seconds"]
+    combined = pd.concat([development_only, validation_only], ignore_index=True)
+    full_sorted = full.sort_values(["dgp", "n", "replicate"]).reset_index(drop=True)
+    combined_sorted = combined.sort_values(["dgp", "n", "replicate"]).reset_index(drop=True)
+    pd.testing.assert_frame_equal(full_sorted[columns], combined_sorted[columns])
+
+
+def test_run_stage9a_replicate_range_caps_independently_of_the_other_partition(tmp_path):
+    """A development-only shard's own cap must not be affected by
+    whatever the validation partition would have produced -- each
+    partition-restricted call starts its own fresh per-partition
+    counter, exactly as it would within an unrestricted run."""
+    config = _config(
+        replicates=60, development_replicates=(0, 29), validation_replicates=(30, 59),
+        max_bootstrapped_replicates_per_cell=2,
+    )
+    development_only = run_stage9a(config, tmp_path / "dev", replicate_range=(0, 29), write_report=False)
+
+    for (dgp, n), group in development_only.groupby(["dgp", "n"]):
+        bootstrapped_replicates = set()
+        for _, row in group.iterrows():
+            for edge in json.loads(row["qualifying_json"]):
+                if edge["bootstrapped"]:
+                    bootstrapped_replicates.add(row["replicate"])
+        assert len(bootstrapped_replicates) <= 2
+
+
 def test_run_stage9a_is_deterministic_given_the_same_config_and_seed(tmp_path):
     config = _config()
     first = run_stage9a(config, tmp_path / "a", write_report=False)

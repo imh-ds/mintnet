@@ -271,18 +271,36 @@ def run_stage9a(
     output_dir: Path,
     dgps: tuple[str, ...] | None = None,
     sample_sizes: tuple[int, ...] | None = None,
+    replicate_range: tuple[int, int] | None = None,
     write_report: bool = True,
 ) -> pd.DataFrame:
     """`dgps`/`sample_sizes` restrict which cells run, for a single-cell
     CI shard -- each selected `(dgp, n)` cell always processes its own
-    FULL `0..replicates-1` range in order (no `batches` restriction, see
-    this module's own docstring on why the bootstrap cap requires this),
-    so a shard's own results match an unsharded run's exactly for the
-    cells it covers."""
+    `replicate_range` (inclusive, default the FULL `0..replicates-1`
+    range) in order, so a shard's own results match an unsharded run's
+    exactly for the cells and replicates it covers.
+
+    `replicate_range` exists specifically to let a `(development,
+    validation)` partition pair be dispatched as two INDEPENDENT
+    shards, each paying the bootstrap cost for only its own partition's
+    own cap budget rather than both -- discovered necessary at a large
+    `max_bootstrapped_replicates_per_cell` (see D-077's own follow-up):
+    since each partition's own cap is already tracked independently
+    (D-077's own fix), restricting a single `run_stage9a` call to
+    exactly one partition's own replicate range is safe and produces
+    identical per-replicate results to a full, unsharded run -- it is
+    the SAME per-partition counter, just never asked to also process
+    the other partition's own replicates in the same call. Passing a
+    range that straddles or falls outside both `development_replicates`
+    and `validation_replicates` is allowed (those replicates count
+    toward the "other" partition, same as an unrestricted run) but is
+    not this parameter's own intended use.
+    """
     run_started = time.perf_counter()
     alpha_formula = select_form(fit_candidate_forms())
     target_dgps = dgps if dgps is not None else COMPOSED_SHAPES
     target_sizes = sample_sizes if sample_sizes is not None else config.sample_sizes
+    start_replicate, end_replicate = replicate_range if replicate_range is not None else (0, config.replicates - 1)
 
     rows: list[dict[str, object]] = []
     for dgp in target_dgps:
@@ -299,7 +317,7 @@ def run_stage9a(
             # whichever partition's own replicate range is processed
             # second).
             bootstrapped_so_far_by_partition = {"development": 0, "validation": 0, "other": 0}
-            for replicate in range(config.replicates):
+            for replicate in range(start_replicate, end_replicate + 1):
                 partition = _partition_of(replicate, config)
                 row = _run_one_replicate(
                     dgp, dgp_index, n, sample_index, replicate, alpha,
@@ -326,15 +344,23 @@ def main() -> None:
     parser.add_argument(
         "--sample-sizes", type=str, default=None, help="comma-separated subset of N values (default: all)"
     )
+    parser.add_argument(
+        "--replicate-range", type=str, default=None,
+        help="dash-separated inclusive replicate range, e.g. 0-999 (default: full 0..replicates-1)",
+    )
     parser.add_argument("--no-report", action="store_true", help="skip the descriptive report (use for CI shards)")
     arguments = parser.parse_args()
 
     dgps = tuple(arguments.dgps.split(",")) if arguments.dgps else None
     sample_sizes = tuple(int(v) for v in arguments.sample_sizes.split(",")) if arguments.sample_sizes else None
+    replicate_range = None
+    if arguments.replicate_range:
+        start_text, end_text = arguments.replicate_range.split("-")
+        replicate_range = (int(start_text), int(end_text))
 
     run_stage9a(
         load_config(arguments.config), arguments.output,
-        dgps=dgps, sample_sizes=sample_sizes, write_report=not arguments.no_report,
+        dgps=dgps, sample_sizes=sample_sizes, replicate_range=replicate_range, write_report=not arguments.no_report,
     )
 
 
