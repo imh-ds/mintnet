@@ -6275,3 +6275,96 @@ gate per-`(dgp, N)` cell with a larger per-cell cap specifically for
 the corrected, per-partition cap tracking as the baseline design, not
 the original single-counter version. `docs/validated_operating_ranges.md`
 should record this PROCEED result with its own pooled-scope caveat.
+
+## D-078: Stage 9a follow-up — `overlap`'s own H9 status resolved, CONFIRMED at all 7 `N`, after two miscosted GitHub Actions dispatches and a validation-scope (not data) aggregation failure (main, Stage 9a)
+
+Date: 2026-09-09
+
+D-077's own named follow-up (`overlap`'s own H9 verdict was inconclusive
+per-cell for lack of statistical power) was pursued directly. Getting
+there required diagnosing two real execution-planning failures first —
+recorded here transparently since both are informative beyond this one
+charter.
+
+**Two dispatches failed on cost, not correctness.** A `max_bootstrapped_
+replicates_per_cell=200` re-run (all `7` `N`, single shard per cell)
+and a follow-up partition-split version (`N in {1000,1500,1750}`
+only) were both cancelled after running `5`+ hours without finishing.
+Root cause: the charter's own up-front timing check (D-077's own
+implementation commit) measured bootstrap cost **without** the thread
+limits (`OMP_NUM_THREADS=2` etc.) `sharded_benchmark.yml` actually
+applies to every shard — under those real limits, a single `B=500`
+bootstrap run costs **`100`-`280` seconds, with high per-replicate
+variance not well predicted by `N` at all** (measured directly:
+`N=400` mean `165s`/max `283s` across `5` replicates; `N=1750` mean
+`111s`/max `222s` — smaller `N` was not cheaper). The earlier
+unthrottled measurement was roughly `10x` too optimistic, and assuming
+cost scales with `N` was itself wrong.
+
+**Fix: many small, fixed-size replicate chunks at the original,
+already-safe `cap=30`, not one big cap.** Rather than one shard
+sequentially accumulating up to `200` bootstrapped replicates per
+partition, each partition was split into `5` non-overlapping `200`-
+replicate chunks (`0-199`, `200-399`, ..., `800-999` for development;
+the equivalent `5` chunks for validation), each independently capped
+at `30` (`run_stage9a`'s own new `--replicate-range` parameter, added
+for exactly this) — `5 x 30 = 150` bootstrapped instances accumulate
+per partition via parallel shards, each individual shard bounded at
+`30 x ~283s ~= 2.4` hours worst case, comfortably under GitHub Actions'
+`6`-hour default timeout. `70` shards (`7` `N` `x` `10` chunks)
+dispatched; GitHub's own account-level concurrency limit (`20`
+simultaneous jobs observed) ran them in `~4` waves.
+
+**All 70 shards succeeded; the generic aggregator then failed on a
+validation-scope mismatch, not on the data.** `scripts/aggregate_
+shards.py` computes its own "expected row count" from `runner.
+expected_row_count(config)`, which (like Stage 8a's/8c's own identical
+pattern) always assumes the config's own FULL `dgp` grid
+(`chain_fork_hub` AND `overlap`) — it has no way to know a dispatch was
+deliberately restricted to `--dgps overlap` only. It correctly detected
+`14,000` rows where it expected `28,000` and refused to proceed (exactly
+its own job: catching a genuinely missing shard) — but here the
+"missing" half was never dispatched on purpose, not lost. **Recovered
+without re-running anything**: all `70` shard artifacts were downloaded
+directly (GitHub retains them independent of the aggregate job's own
+success), concatenated locally, and validated against the actually-
+intended combination set (`overlap`, all `7` `N`, `2000` replicates
+each `=14,000` rows) instead of the generic script's hardcoded
+both-`dgp` assumption — exact match, zero missing, zero duplicates,
+every row `status="ok"`. The report was then generated locally via the
+same `stage9a_bootstrap_stability_reporting.write_report` function the
+GitHub Actions aggregate job would have called.
+
+**Result: H9 CONFIRMED for `overlap` at all 7 `N`, 0 contradicting, 0
+inconclusive** — resolving D-077's own open item completely.
+`false_wrongly_retained` median `pi_final` sits at `.54`-`.58` at every
+`N`, clearly separated from `true_retained`'s own `~1.0` — the same
+"intermediate, not high" stability signature D-019 found for a
+different engine's different failure, now confirmed for `overlap`
+specifically, not just pooled with `chain_fork_hub`. **The filter
+calibration also re-ran cleanly with a properly-populated validation
+partition this time** (no D-077-style parity-split workaround needed):
+development recall `1.0` / removal `.848` (`303` wrongly-retained
+instances); validation recall `.9998` / removal `.795` (`283`
+wrongly-retained instances) — both comfortably clear the `>=.90`
+recall / `>=.50` removal criteria. **PROCEED at `pi_min=0.70`**, the
+same threshold D-077's own pooled analysis already selected.
+
+Consequences: `overlap`'s own H9 status is no longer a power
+limitation — the `pi_min=0.70` filter is now supported by dedicated,
+per-`N` evidence for both composed DGPs this project has tested, not
+just `chain_fork_hub` plus a pooled inference. Still **not authorized
+for production deployment** (unchanged from D-077 — the `B=500` cost
+remains a real, unresolved practical concern). Two operational lessons
+worth carrying forward, beyond this charter: (1) **always measure
+compute cost under the exact execution environment a job will actually
+run in** (thread limits included) before sizing any cap or replicate
+count for GitHub Actions dispatch — an unthrottled local measurement is
+not a substitute; (2) **a sharded module's own `expected_row_count`/
+`expected_combinations` should accept the same `dgps`/`sample_sizes`
+restriction its own runner does**, so a deliberately-scoped dispatch
+does not trip the generic aggregator's own full-grid assumption — a
+real, disclosed gap in the shared `aggregate_shards.py` contract,
+worked around here by aggregating locally rather than fixed at the
+source. `docs/validated_operating_ranges.md` should update the D-077
+entry to remove its own `overlap`-inconclusive caveat.

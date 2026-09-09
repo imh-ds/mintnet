@@ -1163,29 +1163,36 @@ actually wrongly-retained false edges indistinguishable from true ones
 by margin alone (mechanism transfers to real data; the `17%` figure
 itself does not). See D-076.
 
-**Stage 9a (D-077) — Tier-1 bootstrap-stability for `growing_subset_
-dpi`'s own `conditioning_size_used >= 2` decisions: PROCEED at
-`pi_min=0.70`, pooled across `chain_fork_hub`/`overlap` and all `N`.**
-Extending D-019/D-020's own already-validated bootstrap edge-stability
-mechanism to `growing_subset_dpi` for the first time: `pi_final`
-(`B=500` row bootstraps) separates wrongly-retained false edges from
-correctly-retained true edges at conditioning depth `>= 2` --
-confirmed with statistical power for `chain_fork_hub` (`7/7` cells);
-`overlap` inconclusive per-cell (underpowered, not contradicted) at
-the evidence volume this charter collected. **A `pi_min=0.70` filter,
-confirmed on genuinely held-out data**: recall `1.0` (true edges never
-wrongly dropped) and removal rate `.836`-`.878` (the large majority of
-wrongly-retained false edges correctly flagged) -- mirroring D-020's
-own "near-zero true-edge cost" result on a different engine's
-different failure mode. **Scope**: calibrated pooled across both DGPs
-and all `N` (not gated per cell, unlike D-020's own precedent) --
-not shown to hold for `overlap` specifically or any single `N` in
-isolation. **Not authorized for production deployment** -- the `B=500`
-cost (`~18-74s` per bootstrap run depending on `N`) remains
-unresolved, mirroring D-020's own explicit non-authorization. See
-D-077 (including a disclosed implementation bug in the original
-development/validation split, found and corrected via zero-new-compute
-reanalysis of the same evidence).
+**Stage 9a (D-077, resolved by D-078) — Tier-1 bootstrap-stability for
+`growing_subset_dpi`'s own `conditioning_size_used >= 2` decisions:
+PROCEED at `pi_min=0.70`, confirmed per-`N` for BOTH `chain_fork_hub`
+and `overlap`.** Extending D-019/D-020's own already-validated
+bootstrap edge-stability mechanism to `growing_subset_dpi` for the
+first time: `pi_final` (`B=500` row bootstraps) separates
+wrongly-retained false edges from correctly-retained true edges at
+conditioning depth `>= 2` -- **H9 CONFIRMED at all 7 tested `N` for
+both DGPs** (D-077 confirmed `chain_fork_hub`; D-078's own follow-up,
+using many small fixed-size replicate-chunk shards instead of one
+large sequential cap, resolved `overlap`'s own earlier per-cell power
+limitation). `false_wrongly_retained`'s own median `pi_final` sits at
+`.54`-`.58` across every `N`, clearly separated from `true_retained`'s
+own `~1.0` -- the same "intermediate, not high" stability signature
+D-019 found for a different engine's different failure. **A
+`pi_min=0.70` filter, confirmed on genuinely held-out data for both
+DGPs**: recall `1.0`/`.9998` and removal rate `.80`-`.88` (the large
+majority of wrongly-retained false edges correctly flagged, true edges
+essentially never wrongly dropped) -- mirroring D-020's own
+"near-zero true-edge cost" result on a different engine's different
+failure mode. **Not authorized for production deployment** -- the
+`B=500` cost (`~100-280s` per bootstrap run under the thread limits a
+real production job would also need, not well-predicted by `N`)
+remains unresolved, mirroring D-020's own explicit non-authorization.
+See D-077 (including a disclosed implementation bug in the original
+development/validation split) and D-078 (resolving `overlap`'s own
+inconclusive status, plus two GitHub Actions cost-planning lessons:
+always measure compute cost under the actual thread-limited execution
+environment, and shard as many small, independently-capped chunks
+rather than one large sequential cap).
 
 ## Maintenance
 
