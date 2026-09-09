@@ -6368,3 +6368,53 @@ real, disclosed gap in the shared `aggregate_shards.py` contract,
 worked around here by aggregating locally rather than fixed at the
 source. `docs/validated_operating_ranges.md` should update the D-077
 entry to remove its own `overlap`-inconclusive caveat.
+
+## D-079: `pi_min` revised from 0.70 to 0.90 — a deliberate policy choice, not a new statistical finding (main, Stage 9a)
+
+Date: 2026-09-09
+
+D-077's and D-078's own `calibrate_pi_min_filter` selects the
+**smallest** candidate `pi_min` (from `{.70, .80, .90, .95}`) that
+clears the predeclared bar (recall `>= .90`, removal rate `>= .50`) on
+development, confirmed on validation — a deliberately lenient,
+stop-at-first-success rule, not a search for the best-performing
+threshold. `pi_min=0.70` was therefore the *first* candidate checked,
+not the *best* one available. The user reviewed the full grid and
+chose `pi_min=0.90` instead, prioritizing catching more wrongly-
+retained edges over minimizing how many edges get flagged at all.
+
+**Recomputed directly on the combined evidence** (D-077's own
+`chain_fork_hub` run, `849` bootstrapped rows, plus D-078's own
+`overlap` run, `13,778` bootstrapped rows — `14,627` total, both
+re-split by replicate parity for a clean, non-data-driven held-out
+check spanning both DGPs):
+
+```
+pi_min  dev recall  dev removal   val recall  val removal
+0.70      1.0000      .8218         .9999        .8509
+0.80       .9997       .9537         .9997        .9487
+0.90       .9978       .9907         .9981        .9878
+0.95       .9957       .9977         .9949        .9927
+```
+
+At `pi_min=0.90`: recall `.998` (development) / `.998` (validation) --
+essentially no true edges lost, a small step down from `0.70`'s own
+exact `1.0`/`.9999` but still comfortably near-perfect -- and removal
+rate `.991`/`.988`, catching virtually all wrongly-retained false
+edges, materially more than `0.70`'s own `.82`/`.85`. Both criteria
+remain comfortably cleared on genuinely held-out data.
+
+This is a **policy revision, not a new experiment or a correction to
+D-077/D-078's own findings** -- the underlying `pi_final` evidence is
+unchanged; only which grid point is treated as "the" selected
+threshold has changed, by explicit user choice. `docs/stage9a_charter.
+md`'s own non-goals already disclosed that no `pi_min` outside `{.70,
+.80, .90, .95}` was tested, and that production deployment is not
+authorized by any of these findings regardless of which grid point is
+selected.
+
+Consequences: `docs/validated_operating_ranges.md` should record
+`pi_min=0.90` (not `0.70`) as the currently-selected Tier-1 bootstrap-
+stability filter threshold for `growing_subset_dpi`'s own
+`conditioning_size_used >= 2` decisions, with the same non-deployment
+caveat as D-077/D-078.

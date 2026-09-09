@@ -1163,36 +1163,41 @@ actually wrongly-retained false edges indistinguishable from true ones
 by margin alone (mechanism transfers to real data; the `17%` figure
 itself does not). See D-076.
 
-**Stage 9a (D-077, resolved by D-078) — Tier-1 bootstrap-stability for
-`growing_subset_dpi`'s own `conditioning_size_used >= 2` decisions:
-PROCEED at `pi_min=0.70`, confirmed per-`N` for BOTH `chain_fork_hub`
-and `overlap`.** Extending D-019/D-020's own already-validated
-bootstrap edge-stability mechanism to `growing_subset_dpi` for the
-first time: `pi_final` (`B=500` row bootstraps) separates
-wrongly-retained false edges from correctly-retained true edges at
-conditioning depth `>= 2` -- **H9 CONFIRMED at all 7 tested `N` for
-both DGPs** (D-077 confirmed `chain_fork_hub`; D-078's own follow-up,
-using many small fixed-size replicate-chunk shards instead of one
-large sequential cap, resolved `overlap`'s own earlier per-cell power
-limitation). `false_wrongly_retained`'s own median `pi_final` sits at
-`.54`-`.58` across every `N`, clearly separated from `true_retained`'s
-own `~1.0` -- the same "intermediate, not high" stability signature
-D-019 found for a different engine's different failure. **A
-`pi_min=0.70` filter, confirmed on genuinely held-out data for both
-DGPs**: recall `1.0`/`.9998` and removal rate `.80`-`.88` (the large
-majority of wrongly-retained false edges correctly flagged, true edges
-essentially never wrongly dropped) -- mirroring D-020's own
-"near-zero true-edge cost" result on a different engine's different
-failure mode. **Not authorized for production deployment** -- the
-`B=500` cost (`~100-280s` per bootstrap run under the thread limits a
-real production job would also need, not well-predicted by `N`)
-remains unresolved, mirroring D-020's own explicit non-authorization.
-See D-077 (including a disclosed implementation bug in the original
-development/validation split) and D-078 (resolving `overlap`'s own
-inconclusive status, plus two GitHub Actions cost-planning lessons:
-always measure compute cost under the actual thread-limited execution
-environment, and shard as many small, independently-capped chunks
-rather than one large sequential cap).
+**Stage 9a (D-077/D-078, threshold revised by D-079) — Tier-1
+bootstrap-stability for `growing_subset_dpi`'s own `conditioning_
+size_used >= 2` decisions: PROCEED at `pi_min=0.90`, confirmed per-`N`
+for BOTH `chain_fork_hub` and `overlap`.** Extending D-019/D-020's own
+already-validated bootstrap edge-stability mechanism to `growing_
+subset_dpi` for the first time: `pi_final` (`B=500` row bootstraps)
+separates wrongly-retained false edges from correctly-retained true
+edges at conditioning depth `>= 2` -- **H9 CONFIRMED at all 7 tested
+`N` for both DGPs** (D-077 confirmed `chain_fork_hub`; D-078's own
+follow-up, using many small fixed-size replicate-chunk shards instead
+of one large sequential cap, resolved `overlap`'s own earlier per-cell
+power limitation). `false_wrongly_retained`'s own median `pi_final`
+sits at `.54`-`.58` across every `N`, clearly separated from
+`true_retained`'s own `~1.0` -- the same "intermediate, not high"
+stability signature D-019 found for a different engine's different
+failure. **`pi_min=0.90` (D-079's own deliberate choice over the
+calibration procedure's own default smallest-eligible `0.70`)**,
+confirmed on genuinely held-out data pooled across both DGPs: recall
+`.998`/`.998` (development/validation -- a small, accepted step down
+from `0.70`'s own `1.0`/`.9999`) and removal rate `.991`/`.988` (the
+large majority, not merely most, of wrongly-retained false edges
+correctly flagged) -- mirroring D-020's own "near-zero true-edge cost"
+result on a different engine's different failure mode, at a materially
+higher catch rate than the calibration procedure's own default
+selection. **Not authorized for production deployment** -- the `B=500`
+cost (`~100-280s` per bootstrap run under the thread limits a real
+production job would also need, not well-predicted by `N`) remains
+unresolved, mirroring D-020's own explicit non-authorization. See D-077
+(including a disclosed implementation bug in the original development/
+validation split), D-078 (resolving `overlap`'s own inconclusive
+status, plus two GitHub Actions cost-planning lessons: always measure
+compute cost under the actual thread-limited execution environment,
+and shard as many small, independently-capped chunks rather than one
+large sequential cap), and D-079 (the `0.70` -> `0.90` policy revision
+itself, not a new experiment).
 
 ## Maintenance
 
