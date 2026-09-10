@@ -191,10 +191,16 @@ def _run_one_replicate(
         # capped, falling back to a plain point-estimate check instead
         # (still cheap, still recorded, just never bootstrapped).
         if bootstrapped_so_far < config.max_bootstrapped_replicates_per_cell:
+            # n_jobs pinned to 1 (not the library's own new "auto" default)
+            # for the same reason as Stage 9a's own identical pin: this
+            # charter's own disclosed per-shard cost (D-080) was measured
+            # sequentially under sharded_benchmark.yml's own thread limits,
+            # and a future re-run should keep matching that disclosure.
             result = growing_subset_dpi_with_stability_rescue(
                 data, flagged, alpha, max_conditioning_size=config.max_conditioning_size, motif_family=None,
                 screening_alpha=config.screening_alpha, bootstraps=config.bootstraps, pi_min=config.pi_min,
                 rng=np.random.default_rng(_bootstrap_seed(config, dgp_index, sample_index, replicate)),
+                n_jobs=1,
             )
         else:
             from mintnet.pipeline.growing_subset_dpi import growing_subset_dpi

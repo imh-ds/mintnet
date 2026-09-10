@@ -69,7 +69,7 @@ def growing_subset_dpi_with_stability_rescue(
     bootstraps: int = 500,
     pi_min: float = 0.90,
     rng: np.random.Generator,
-    n_jobs: int = 1,
+    n_jobs: int | str = "auto",
 ) -> StabilityRescueResult:
     """Run `growing_subset_dpi` once, then bootstrap ONLY the edges
     whose own `conditioning_size_used >= UNRESOLVED_CONDITIONING_SIZE`
@@ -85,14 +85,19 @@ def growing_subset_dpi_with_stability_rescue(
     default of `0.70` -- see docs/decision_log.md D-079), not
     re-derived here.
 
-    `n_jobs` (default `1`, sequential) is forwarded to `compute_edge_
-    stability_growing_subset` -- distributes the `bootstraps`-resample
-    compute (D-080's own measured cost: `~80-280s` sequentially per
-    qualifying dataset) across local worker processes when a dataset
-    does qualify. Purely a wall-clock optimization: the resample draw
-    order from `rng` is unaffected by `n_jobs`, so `pi_final` (and
+    `n_jobs` (default `"auto"`, `min(os.cpu_count(), 8)`) is forwarded to
+    `compute_edge_stability_growing_subset` -- distributes the
+    `bootstraps`-resample compute (D-080's own measured serial cost:
+    `~80-280s` per qualifying dataset; a direct local benchmark measured
+    ~5x faster at `n_jobs=8` -- `~15-25s` -- with diminishing/negative
+    returns beyond `8` from process-spawn overhead, see `bench_stability_
+    rescue_n_jobs.py`) across local worker processes when a dataset does
+    qualify. Pass an explicit int to use a different number of workers
+    (e.g. more than `8` on a machine with more cores), or `1` to force
+    sequential execution. Purely a wall-clock optimization: the resample
+    draw order from `rng` is unaffected by `n_jobs`, so `pi_final` (and
     therefore every downstream decision this function makes) is
-    bit-for-bit identical regardless of `n_jobs`.
+    bit-for-bit identical no matter what `n_jobs` resolves to.
     """
     from mintnet.bootstrap import compute_edge_stability_growing_subset
 

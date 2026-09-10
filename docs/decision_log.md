@@ -6495,3 +6495,89 @@ real, unresolved practical concern for any downstream integration,
 exactly as `docs/stage9b_charter.md`'s own non-goals state.
 `docs/validated_operating_ranges.md` should record this function's own
 existence and tested scope as a new entry.
+
+## D-081: opt-in `n_jobs` parallelism for the bootstrap-resample loop — measured `~5x` at `n_jobs=8`, worse at `16`; `"auto"` becomes the new default (main, engineering, not a gated charter)
+
+Date: 2026-09-09
+
+D-080's own Step 3 measured `growing_subset_dpi_with_stability_rescue`'s
+own real per-call cost (`~80-280s` under GitHub Actions' thread-limited
+environment) but did not address it — `compute_edge_stability`/
+`compute_edge_stability_growing_subset`'s own resample loop was a plain
+sequential Python `for` loop, no internal parallelism at all, so the
+full `B=500` cost fell on a single core regardless of the caller's own
+hardware.
+
+**This is an engineering change, not a new statistical claim, so it is
+recorded here without a gated charter** — `n_jobs` only changes wall-
+clock time; it cannot change any result. `bootstraps` resamples are
+still drawn sequentially from `rng` before any parallel work starts, so
+`pi_final` (and every downstream decision built on it) is bit-for-bit
+identical no matter what `n_jobs` resolves to — proven directly by
+dedicated equivalence tests (`n_jobs=1` vs. `n_jobs=2`), not merely
+assumed from the design.
+
+**Mechanism**: `compute_edge_stability`, `compute_edge_stability_
+growing_subset`, and `growing_subset_dpi_with_stability_rescue` all
+gained an `n_jobs` parameter distributing the per-resample compute (the
+expensive part) across a `ProcessPoolExecutor`.
+
+**Measured on this machine (20 logical cores, unthrottled — i.e. NOT
+the GitHub Actions thread-limited environment D-080's own numbers used),
+using the EXACT DGP/seed/fitted-`alpha` of two real qualifying Stage 9b
+replicates** (`scripts/bench_stability_rescue_n_jobs.py`, not a
+synthetic toy case):
+
+```
+                       n_jobs=1   n_jobs=4   n_jobs=8   n_jobs=16
+chain_fork_hub, N=1750   85.7s      23.9s      15.4s       18.4s
+                                    (3.6x)     (5.6x)      (4.7x)
+overlap, N=1750         101.6s      30.7s      20.1s       22.6s
+                                    (3.3x)     (5.1x)      (4.5x)
+```
+
+**Speedup keeps improving through `n_jobs=8` (~5x), then gets WORSE at
+`n_jobs=16`** — at this per-resample workload size (each resample is
+one full `growing_subset_dpi` search, tens to low-hundreds of
+milliseconds), process-spawn/IPC overhead outweighs the added
+parallelism once roughly half this machine's logical cores are
+committed. This is why `n_jobs="auto"` resolves to `min(os.cpu_count(),
+8)` (`mintnet.bootstrap.stability._AUTO_N_JOBS_CAP`), not the host's
+full core count — an explicit `n_jobs` above `8` remains available to a
+caller who wants to use more cores anyway.
+
+**Default changed from `1` (sequential) to `"auto"`** for all three
+functions above. This differs from D-080's own "purely additive, no
+default-behavior change" framing for `growing_subset_dpi` itself (still
+true and unaffected — plain `growing_subset_dpi` never touches this
+code path at all), but the bootstrap-rescue functions' own default
+*wall-clock* behavior does change: a caller who does not pass `n_jobs`
+now gets automatic local parallelism, not silent single-threading. No
+result changes, only speed. **Stage 9a's and Stage 9b's own experiment
+runners (`stage9a_bootstrap_stability.py`, `stage9b_stability_rescue_
+validation.py`) pin `n_jobs=1` explicitly at their own call sites**,
+deliberately opting out of the new default — their own disclosed
+per-shard timing (D-077/D-078/D-080) was measured and capped
+sequentially under `sharded_benchmark.yml`'s own thread limits, and a
+future re-run of either config should keep matching what was already
+disclosed, not silently get faster (or slower, under contention) in a
+way that invalidates that documentation without a new measurement.
+
+**A real bug was caught and fixed getting here, not merely a
+performance detail**: `mintnet.bootstrap` and `mintnet.pipeline` had a
+latent circular import (each package's own `__init__.py` transitively
+imported the other) that was invisible under normal single-process
+import order but became a `BrokenProcessPool` the moment a spawned
+worker process re-imported both modules from scratch with no cached
+partial state to paper over the cycle. Fixed by deferring `mintnet.
+pipeline.stability_rescue`'s own import of `compute_edge_stability_
+growing_subset` to inside the function body instead of module level —
+breaks the cycle without changing either package's own public API.
+
+Consequences: a local caller with a reasonably modern multi-core
+machine now gets roughly `1-3` minutes for a single qualifying dataset
+(D-080's own `81s`-`176s` GitHub-Actions-measured range) down to
+roughly `15-25` seconds by default, with no code change required and no
+change to any statistical result. `docs/validated_operating_ranges.md`
+should note the `n_jobs="auto"` default and its `8`-worker cap on
+`growing_subset_dpi_with_stability_rescue`'s own entry.

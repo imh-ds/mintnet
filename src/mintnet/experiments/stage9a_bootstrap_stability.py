@@ -236,9 +236,18 @@ def _run_one_replicate(
         will_bootstrap = bool(pairs) and bootstrapped_so_far < config.max_bootstrapped_replicates_per_cell
         stability = None
         if will_bootstrap:
+            # n_jobs pinned to 1 (not the library's own new "auto" default):
+            # this charter's own disclosed per-shard cost (D-077/D-078) was
+            # measured and capped sequentially, under sharded_benchmark.
+            # yml's own OMP_NUM_THREADS=2 etc. -- changing this dispatch's
+            # own parallelism would not change any past finding (results
+            # are bit-for-bit identical regardless of n_jobs) but would
+            # make a future re-run's own wall-clock cost no longer match
+            # what was disclosed, so it stays pinned here deliberately.
             stability = compute_edge_stability_growing_subset(
                 data, config.screening_alpha, alpha, config.max_conditioning_size, config.bootstraps,
                 np.random.default_rng(_bootstrap_seed(config, dgp_index, sample_index, replicate)),
+                n_jobs=1,
             )
 
         for i, j in pairs:

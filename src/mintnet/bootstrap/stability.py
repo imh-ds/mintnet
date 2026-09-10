@@ -4,6 +4,7 @@ screen-then-prune pipeline. See docs/stage3_charter.md.
 
 from __future__ import annotations
 
+import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from itertools import repeat
@@ -35,6 +36,29 @@ class StabilityResult:
     pi_final: np.ndarray
     successful_bootstraps: int
     failed_bootstraps: int
+
+
+# Empirically measured (see benchmarks/bench_stability_rescue_n_jobs.py,
+# docs/decision_log.md's own n_jobs note): speedup from parallelizing the
+# bootstrap resample loop keeps improving up to roughly this many workers
+# on a 20-logical-core machine (~5x at 8 vs. ~3.5x at 4), then gets WORSE
+# past it (16 workers was slower than 8 -- process-spawn/IPC overhead
+# starts to dominate the small per-resample workload). "auto" caps here
+# rather than at the host's full core count.
+_AUTO_N_JOBS_CAP = 8
+
+
+def _resolve_n_jobs(n_jobs: int | str) -> int:
+    """`"auto"` -> `min(os.cpu_count(), _AUTO_N_JOBS_CAP)` (at least `1`,
+    so a core-count of `None`/`0` never breaks anything); an explicit int
+    is used as-is (must be `>= 1`) -- a caller with more than `8` cores
+    who wants to use them all can still pass that number directly.
+    """
+    if n_jobs == "auto":
+        return max(1, min(os.cpu_count() or 1, _AUTO_N_JOBS_CAP))
+    if not isinstance(n_jobs, int) or n_jobs < 1:
+        raise ValueError("n_jobs must be a positive int or 'auto'")
+    return n_jobs
 
 
 def bootstrap_resample(data: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -106,30 +130,32 @@ def compute_edge_stability(
     bootstraps: int,
     rng: np.random.Generator,
     *,
-    n_jobs: int = 1,
+    n_jobs: int | str = "auto",
 ) -> StabilityResult:
     """Run `bootstraps` row-bootstrap resamples of `data` through the frozen
     screen-then-prune pipeline (screening at `screening_alpha`, DPI at
     `dpi_alpha` -- both fixed; only the data varies across resamples) and
     tabulate per-pair candidate/final edge frequency.
 
-    `n_jobs` (default `1`, sequential) distributes the per-resample compute
-    -- the expensive part -- across `n_jobs` worker processes via
-    `ProcessPoolExecutor`. All `bootstraps` resamples are still drawn
+    `n_jobs` (default `"auto"`) distributes the per-resample compute --
+    the expensive part -- across worker processes via `ProcessPoolExecutor`.
+    `"auto"` resolves to `min(os.cpu_count(), 8)` (see `_AUTO_N_JOBS_CAP`'s
+    own measured rationale); pass an explicit int to use exactly that many
+    workers (e.g. more than `8` on a machine with more cores), or `1` to
+    force sequential execution. All `bootstraps` resamples are still drawn
     sequentially from `rng` first, in the same order regardless of
-    `n_jobs`, so results are bit-for-bit identical to the `n_jobs=1` case;
-    only wall-clock time changes.
+    `n_jobs`, so results are bit-for-bit identical no matter what `n_jobs`
+    resolves to -- only wall-clock time changes.
     """
     if bootstraps < 1:
         raise ValueError("bootstraps must be at least 1")
-    if n_jobs < 1:
-        raise ValueError("n_jobs must be at least 1")
+    resolved_n_jobs = _resolve_n_jobs(n_jobs)
     p = data.shape[1]
     resamples = [bootstrap_resample(data, rng) for _ in range(bootstraps)]
-    if n_jobs == 1:
+    if resolved_n_jobs == 1:
         outcomes = (_run_one_compose(resample, screening_alpha, dpi_alpha) for resample in resamples)
         return _aggregate(p, outcomes)
-    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+    with ProcessPoolExecutor(max_workers=resolved_n_jobs) as executor:
         outcomes = list(executor.map(_run_one_compose, resamples, repeat(screening_alpha), repeat(dpi_alpha)))
     return _aggregate(p, outcomes)
 
@@ -142,7 +168,7 @@ def compute_edge_stability_growing_subset(
     bootstraps: int,
     rng: np.random.Generator,
     *,
-    n_jobs: int = 1,
+    n_jobs: int | str = "auto",
 ) -> StabilityResult:
     """The `growing_subset_dpi` analogue of `compute_edge_stability`
     (docs/stage9a_charter.md) -- same resampling and degenerate-resample
@@ -152,22 +178,21 @@ def compute_edge_stability_growing_subset(
     modify `compute_edge_stability` or any of its own already-validated
     Stage 3/3b behavior.
 
-    `n_jobs` (default `1`) has the same meaning and same bit-for-bit-
+    `n_jobs` (default `"auto"`) has the same meaning and same bit-for-bit-
     identical-to-sequential guarantee as `compute_edge_stability`'s own.
     """
     if bootstraps < 1:
         raise ValueError("bootstraps must be at least 1")
-    if n_jobs < 1:
-        raise ValueError("n_jobs must be at least 1")
+    resolved_n_jobs = _resolve_n_jobs(n_jobs)
     p = data.shape[1]
     resamples = [bootstrap_resample(data, rng) for _ in range(bootstraps)]
-    if n_jobs == 1:
+    if resolved_n_jobs == 1:
         outcomes = (
             _run_one_growing_subset(resample, screening_alpha, dpi_alpha, max_conditioning_size)
             for resample in resamples
         )
         return _aggregate(p, outcomes)
-    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+    with ProcessPoolExecutor(max_workers=resolved_n_jobs) as executor:
         outcomes = list(
             executor.map(
                 _run_one_growing_subset,

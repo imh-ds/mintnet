@@ -1,4 +1,5 @@
 import math
+from unittest.mock import patch
 
 import numpy as np
 
@@ -24,7 +25,7 @@ def test_no_qualifying_edges_means_no_bootstrap_and_identical_adjacency():
     flagged[0, 1] = flagged[1, 0] = True
 
     result = growing_subset_dpi_with_stability_rescue(
-        data, flagged, alpha=0.001, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(1)
+        data, flagged, alpha=0.001, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(1), n_jobs=1
     )
 
     assert result.bootstrapped is False
@@ -46,7 +47,7 @@ def test_conditioning_size_one_edges_are_never_individually_bootstrapped():
     np.fill_diagonal(flagged, False)
 
     result = growing_subset_dpi_with_stability_rescue(
-        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(2)
+        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(2), n_jobs=1
     )
 
     for pair in ((1, 2), (1, 3), (2, 3)):
@@ -76,7 +77,7 @@ def test_a_qualifying_edge_below_pi_min_gets_rescued():
 
     result = growing_subset_dpi_with_stability_rescue(
         data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
-        bootstraps=200, pi_min=0.90, rng=np.random.default_rng(8),
+        bootstraps=200, pi_min=0.90, rng=np.random.default_rng(8), n_jobs=1,
     )
 
     assert result.bootstrapped is True
@@ -95,7 +96,7 @@ def test_final_adjacency_never_adds_an_edge_the_original_did_not_have():
     np.fill_diagonal(flagged, False)
 
     result = growing_subset_dpi_with_stability_rescue(
-        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3)
+        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3), n_jobs=1
     )
 
     assert np.all(result.final_adjacency <= result.original_adjacency)
@@ -108,7 +109,7 @@ def test_rescued_is_only_true_where_final_differs_from_original():
     np.fill_diagonal(flagged, False)
 
     result = growing_subset_dpi_with_stability_rescue(
-        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3)
+        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3), n_jobs=1
     )
 
     for pair, was_rescued in result.rescued.items():
@@ -124,10 +125,10 @@ def test_reproducible_given_the_same_rng_state():
     np.fill_diagonal(flagged, False)
 
     a = growing_subset_dpi_with_stability_rescue(
-        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3)
+        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3), n_jobs=1
     )
     b = growing_subset_dpi_with_stability_rescue(
-        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3)
+        data, flagged, alpha=0.01, screening_alpha=0.001, bootstraps=50, rng=np.random.default_rng(3), n_jobs=1
     )
     assert np.array_equal(a.final_adjacency, b.final_adjacency)
     assert a.pi_final == b.pi_final
@@ -148,7 +149,7 @@ def test_n_jobs_greater_than_one_matches_the_sequential_result():
 
     sequential = growing_subset_dpi_with_stability_rescue(
         data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
-        bootstraps=40, pi_min=0.90, rng=np.random.default_rng(8),
+        bootstraps=40, pi_min=0.90, rng=np.random.default_rng(8), n_jobs=1,
     )
     parallel = growing_subset_dpi_with_stability_rescue(
         data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
@@ -158,3 +159,35 @@ def test_n_jobs_greater_than_one_matches_the_sequential_result():
     assert np.array_equal(sequential.final_adjacency, parallel.final_adjacency)
     assert sequential.pi_final == parallel.pi_final
     assert sequential.rescued == parallel.rescued
+
+
+def test_default_n_jobs_is_auto_and_still_matches_explicit_n_jobs_one():
+    """With cpu_count mocked to 1, the default ("auto") call must take
+    the same sequential path as an explicit n_jobs=1 call. Uses the
+    collider fixture (not the hub fixture used above) specifically
+    because it actually triggers a bootstrap -- a fixture that never
+    qualifies would let this test pass without exercising n_jobs
+    resolution at all."""
+    rng = np.random.default_rng(7)
+    n = 500
+    x1 = rng.normal(size=n)
+    x2 = rng.normal(size=n)
+    x3 = 0.65 * x1 + 0.65 * x2 + np.sqrt(1 - 2 * 0.65**2) * rng.normal(size=n)
+    x4 = rng.normal(size=n)
+    data = np.column_stack([x1, x2, x3, x4])
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    with patch("mintnet.bootstrap.stability.os.cpu_count", return_value=1):
+        default_call = growing_subset_dpi_with_stability_rescue(
+            data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
+            bootstraps=40, pi_min=0.90, rng=np.random.default_rng(8),
+        )
+    explicit_call = growing_subset_dpi_with_stability_rescue(
+        data, flagged, alpha=0.2, screening_alpha=0.001, max_conditioning_size=4,
+        bootstraps=40, pi_min=0.90, rng=np.random.default_rng(8), n_jobs=1,
+    )
+
+    assert default_call.bootstrapped is True
+    assert np.array_equal(default_call.final_adjacency, explicit_call.final_adjacency)
+    assert default_call.pi_final == explicit_call.pi_final

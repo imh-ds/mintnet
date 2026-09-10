@@ -1228,6 +1228,24 @@ unchanged; a caller must explicitly opt in, and the `B=500`
 per-qualifying-dataset cost remains an unresolved practical concern for
 any downstream integration. See D-080.
 
+**D-081 -- opt-in local parallelism, `n_jobs="auto"` by default.**
+`growing_subset_dpi_with_stability_rescue` (and the two underlying
+`compute_edge_stability*` functions) now distribute the `B`-resample
+compute across local worker processes; results are bit-for-bit
+identical regardless of `n_jobs` (proven, not assumed), only wall-clock
+time changes. Default is `"auto"`, resolving to `min(os.cpu_count(),
+8)` -- measured directly (not assumed) on a 20-core machine: speedup
+keeps improving through `n_jobs=8` (`~5x`, D-080's own `81s`-`176s`
+serial range dropping to roughly `15s`-`25s`) then gets WORSE at
+`n_jobs=16` (process-spawn overhead dominates at this per-resample
+workload size) -- hence the `8`-worker cap rather than a host's full
+core count. An explicit `n_jobs` above `8` remains available for a
+caller who wants to use more cores anyway; `n_jobs=1` forces sequential
+execution. Stage 9a's and Stage 9b's own experiment runners pin
+`n_jobs=1` explicitly, opting out of the new default so their own
+already-disclosed per-shard GitHub Actions timing stays valid. See
+D-081.
+
 ## Maintenance
 
 Add a row (or update an existing one) whenever a new charter validates
