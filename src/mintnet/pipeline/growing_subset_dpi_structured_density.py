@@ -16,11 +16,13 @@ is modified, and all three remain available for direct comparison.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from itertools import combinations
 
 import numpy as np
 
+from mintnet.confidence.margin import edge_margin
 from mintnet.mi.structured_density import local_permutation_test
 from mintnet.pipeline.compose import connected_components
 
@@ -35,6 +37,22 @@ class StructuredDensityGrowingSubsetResult:
     # Per candidate edge: True if the search-depth cap was reached
     # while the component still had untested larger subsets available.
     cap_reached: dict[tuple[int, int], bool]
+    # Per candidate edge: the p-value the final decision actually
+    # turned on (see docs/stage7f_charter.md, mirroring growing_subset_
+    # dpi.GrowingSubsetResult's own field). For a pruned edge, the
+    # p-value that triggered the prune. For a retained edge with a
+    # non-empty pool, the MAXIMUM p-value among every subset tested --
+    # the weakest piece of evidence among those that all had to reject
+    # for retention to hold. NaN for an isolated edge (no test ever
+    # ran) or a retained edge whose every tested subset raised a
+    # degenerate-conditioning-set ValueError.
+    decisive_p_value: dict[tuple[int, int], float]
+    # Per candidate edge: a [0, 1] confidence score derived from
+    # decisive_p_value via mintnet.confidence.margin.edge_margin --
+    # ordinal-only (informative, not a literal probability); no
+    # recalibration curve is applied (docs/stage7f_charter.md's own
+    # explicit non-goal). NaN wherever decisive_p_value is NaN.
+    confidence: dict[tuple[int, int], float]
     # Diagnostic, not present on growing_subset_dpi's own result: total
     # local_permutation_test calls actually made -- the primary driver
     # of this mechanism's own wall-clock cost.
@@ -79,6 +97,8 @@ def growing_subset_dpi_structured_density(
     final = flagged.copy()
     sizes: dict[tuple[int, int], int] = {}
     cap_reached: dict[tuple[int, int], bool] = {}
+    decisive_p_value: dict[tuple[int, int], float] = {}
+    confidence: dict[tuple[int, int], float] = {}
     n_tests = 0
 
     node_to_component: dict[int, frozenset[int]] = {}
@@ -97,11 +117,15 @@ def growing_subset_dpi_structured_density(
                 final[i, j] = final[j, i] = True
                 sizes[(i, j)] = 0
                 cap_reached[(i, j)] = False
+                decisive_p_value[(i, j)] = math.nan
+                confidence[(i, j)] = math.nan
                 continue
 
             cap = min(len(pool), max_conditioning_size)
             pruned = False
             reached_size = 0
+            triggering_p_value = math.nan
+            max_p_value = math.nan
             for size in range(1, cap + 1):
                 reached_size = size
                 for subset in combinations(pool, size):
@@ -120,8 +144,11 @@ def growing_subset_dpi_structured_density(
                         # Degenerate conditioning set: inconclusive, not
                         # evidence of independence -- try the next subset.
                         continue
+                    if math.isnan(max_p_value) or result.p_value > max_p_value:
+                        max_p_value = result.p_value
                     if result.p_value > alpha:
                         pruned = True
+                        triggering_p_value = result.p_value
                         break
                 if pruned:
                     break
@@ -129,7 +156,11 @@ def growing_subset_dpi_structured_density(
             final[i, j] = final[j, i] = not pruned
             sizes[(i, j)] = reached_size
             cap_reached[(i, j)] = (not pruned) and (len(pool) > max_conditioning_size)
+            resolved_p_value = triggering_p_value if pruned else max_p_value
+            decisive_p_value[(i, j)] = resolved_p_value
+            confidence[(i, j)] = edge_margin(resolved_p_value, alpha, retained=not pruned)
 
     return StructuredDensityGrowingSubsetResult(
-        adjacency=final, conditioning_size_used=sizes, cap_reached=cap_reached, n_significance_tests=n_tests
+        adjacency=final, conditioning_size_used=sizes, cap_reached=cap_reached,
+        decisive_p_value=decisive_p_value, confidence=confidence, n_significance_tests=n_tests,
     )

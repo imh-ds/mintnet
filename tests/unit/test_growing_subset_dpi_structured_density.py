@@ -1,5 +1,8 @@
+import math
+
 import numpy as np
 
+from mintnet.confidence.margin import edge_margin
 from mintnet.pipeline.growing_subset_dpi_structured_density import growing_subset_dpi_structured_density
 from mintnet.simulation.motifs import sample_hub, sample_overlapping_triangles
 
@@ -18,6 +21,8 @@ def test_growing_subset_dpi_structured_density_isolated_edge_passes_through_unco
     assert result.conditioning_size_used[(0, 1)] == 0
     assert not result.cap_reached[(0, 1)]
     assert result.n_significance_tests == 0  # isolated pair: no test needed
+    assert math.isnan(result.decisive_p_value[(0, 1)])
+    assert math.isnan(result.confidence[(0, 1)])
 
 
 def test_growing_subset_dpi_structured_density_prunes_indirect_hub_edges_at_size_one() -> None:
@@ -35,6 +40,39 @@ def test_growing_subset_dpi_structured_density_prunes_indirect_hub_edges_at_size
     for pair in ((1, 2), (1, 3), (2, 3)):
         assert result.conditioning_size_used[pair] == 1
     assert result.n_significance_tests > 0
+
+    # Pruned pairs (D-076-style "insufficient evidence" cases) must show
+    # a decisive_p_value strictly above alpha, and retained pairs must
+    # show one at or below it -- decisive_p_value's own core contract.
+    for pair in ((1, 2), (1, 3), (2, 3)):
+        assert result.decisive_p_value[pair] > 0.05
+    for pair in ((0, 1), (0, 2), (0, 3)):
+        assert result.decisive_p_value[pair] <= 0.05
+
+
+def test_growing_subset_dpi_structured_density_confidence_matches_edge_margin() -> None:
+    """confidence must equal mintnet.confidence.margin.edge_margin
+    applied directly to decisive_p_value -- the same relationship
+    growing_subset_dpi's own Fisher-z engine already guarantees
+    (docs/stage7f_charter.md's own Part B, mirroring that pattern)."""
+    rng = np.random.default_rng(1)
+    data = sample_hub(600, 0.8, 3, rng)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    alpha = 0.05
+
+    result = growing_subset_dpi_structured_density(
+        data, flagged, alpha=alpha, master_seed=2, replicate=0, permutations=19
+    )
+
+    for pair in result.decisive_p_value:
+        retained = bool(result.adjacency[pair])
+        expected = edge_margin(result.decisive_p_value[pair], alpha, retained=retained)
+        if math.isnan(expected):
+            assert math.isnan(result.confidence[pair])
+        else:
+            assert result.confidence[pair] == expected
+            assert 0.0 <= result.confidence[pair] <= 1.0
 
 
 def test_growing_subset_dpi_structured_density_recovers_overlapping_triangle_structure() -> None:

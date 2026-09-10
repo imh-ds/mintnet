@@ -1,0 +1,11 @@
+sample_sizes: [400, 750]
+strengths: [0.3, 0.5, 0.7]
+target_rhos: [0.08, 0.20]
+degree: 1
+ridge_lambda: 1.0
+cv_folds: 5
+k_perm: 3
+permutations: 19
+replicates: 5
+batch_size: 5
+master_seed: 92000
