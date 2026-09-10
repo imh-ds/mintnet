@@ -6581,3 +6581,52 @@ roughly `15-25` seconds by default, with no code change required and no
 change to any statistical result. `docs/validated_operating_ranges.md`
 should note the `n_jobs="auto"` default and its `8`-worker cap on
 `growing_subset_dpi_with_stability_rescue`'s own entry.
+
+## D-082: composed-tier reversal's own root cause (Stage 8d/8f-8j) parked, not abandoned — explicit revisit marker, no new evidence (main/mi-native, administrative)
+
+Date: 2026-09-09
+
+D-075 already recorded the mechanism hunt as "genuinely unresolved...
+not to be re-chartered without a materially new angle" after six
+candidate mechanisms (true collider, finite-sample pseudo-collider,
+over-conditioning power loss, population-level conditioning-set error,
+post-screening selection bias, D-069's own cap-reached hypothesis) all
+failed to explain it. This entry adds no new evidence and changes
+nothing about that verdict — it only records a deliberate scoping
+decision, made explicitly with the user, about what happens next.
+
+**Decision: Stage 8's own mechanism question is set aside for now, by
+choice, not treated as permanently closed.** The practical problem it
+was diagnosing is already handled without needing the mechanism —
+D-076's own stratified-accuracy finding (retain reliable at every
+depth, prune degrading with conditioning size) fed directly into the
+bootstrap-rescue fix (D-077-D-081), independently validated at >99%
+recall/removal on fresh evidence (D-080). Continuing to charter new
+Stage 8 diagnostics without a genuinely new hypothesis would very
+likely reproduce the same null pattern the last six charters did — low
+expected value for the cost of a full charter-and-dispatch cycle.
+
+**What is given up by parking this, stated plainly rather than left
+implicit:** the bootstrap-rescue fix's own guarantee is validated
+per-DGP (`chain_fork_hub`, `overlap`), not derived from a general
+theory of why the miscalibration occurs — a third composed shape would
+need its own empirical validation before the same confidence could be
+extended to it, rather than inheriting it automatically the way a
+solved mechanism would allow.
+
+**Explicit revisit marker**: this remains open work, not dead work.
+Return to it if either condition arises: (a) a materially new
+hypothesis surfaces (from unrelated future work, a different composed
+shape's own behavior, or an outside idea) that the six already-tested
+mechanisms do not cover, or (b) a future stage's own scope depends on
+understanding the general mechanism rather than relying on per-DGP
+validation of the existing rescue fix (e.g. a stage that needs the fix
+to generalize to an untested shape without its own dedicated charter).
+Absent either trigger, no further Stage 8 mechanism charters are
+planned.
+
+Consequences: `docs/validated_operating_ranges.md`'s existing Stage 8
+entries are unchanged (D-075's own "not to be re-chartered without a
+materially new angle" language already captures this); this entry adds
+only the explicit "parked, not abandoned, here is the revisit
+condition" framing the user asked to have on record.
