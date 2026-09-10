@@ -6740,3 +6740,45 @@ charter's own already-collected evidence -- D-065's own "compute once,
 threshold many times" precedent applies here too, zero new significance
 tests needed) would resolve whether check 2 was a genuine near-miss or
 pure noise -- not yet chartered, a candidate for a future Stage 7g.
+
+## D-084: Stage 7g Step 1 — the `N=500->600` dip is decisively noise; the overall confidence-vs-N trend is real and highly significant (mi-native, Stage 7g)
+
+Date: 2026-09-10
+
+Reused Stage 7f's own already-collected raw evidence entirely (zero new
+significance tests, zero new DGP draws) to ask the two questions D-083's
+own strict pointwise check was not designed to answer: is the `N=500
+-> 600` dip statistically distinguishable from noise, and is the
+overall climb across the full `N` range a real, significant trend?
+
+**Mann-Whitney U test, `N=500` vs `N=600` frontier-edge confidence
+(`400` replicates each): `p=0.821`.** Nowhere close to significant --
+the two distributions are, for practical purposes, indistinguishable.
+**Spearman rank correlation, confidence vs. `N` pooled across all `7`
+tested `N` values (`2,800` replicate-level points): `rho=0.213`,
+`p=3.2e-30`.** An extremely significant positive trend, leaving no
+ambiguity that the `46%` overall climb D-083 reported is real. Both
+checks resolved cleanly on the first pass -- **Step 2 (additional
+replicates at `N in {500, 600}`) was not needed.**
+
+Decision: **PROCEED**, per Stage 7g's own predeclared gate exactly as
+written. The `N=500->600` dip D-083 reported is confirmed to be
+ordinary sampling noise on a `400`-replicate cell, not a genuine
+non-monotonic relationship. **D-083's own REASSESS verdict is NOT
+retracted or edited** -- it stands exactly as recorded, correctly
+reporting what its own predeclared strict pointwise rule found. This
+entry adds a second, better-specified verdict on a related but distinct
+question ("is the trend real when tested properly"), consistent with
+this project's own discipline of appending clarifying evidence rather
+than silently rewriting an earlier result.
+
+Consequences: `docs/validated_operating_ranges.md`'s own "not yet
+confirmed to increase monotonically" caveat on the structured-density
+engine's confidence score can be relaxed -- the score's own trend with
+`N` is now supported by a properly-specified statistical test, on top
+of D-083's own already-confirmed informativeness (check 1). The
+confidence score is now a defensible candidate for researcher-facing
+`N`-dependent guidance, though it still requires its own separate
+recalibration charter (mirroring Stage 8b/8c's own arc) before being
+presented as more than an ordinal signal -- unchanged from Stage 7f's
+own explicit non-goal.

@@ -975,15 +975,21 @@ thin (treat `N>=1000` as the comfortable floor for that specific case).
 (`growing_subset_dpi_structured_density`'s own `decisive_p_value`/
 `confidence` fields, mirroring the already-validated Fisher-z engine's
 pattern) — confirmed genuinely informative (correct decisions score
-roughly double the confidence of incorrect ones, at every tested `N`),
-but **not yet confirmed to increase monotonically with `N`** (a
-predeclared strict check found one likely-noise dip, `N=500->600`,
-`1.33%` relative, against an otherwise unambiguous `46%` overall
-increase from `N=400` to `1500`) — reported as REASSESS per the frozen
-gate exactly as specified, not reinterpreted. **Not yet recommended as
-researcher-facing guidance for setting a confidence threshold** until a
-follow-up (not yet chartered) resolves whether that dip reproduces.
-See D-083.
+roughly double the confidence of incorrect ones, at every tested `N`).
+D-083's own strict pointwise monotonicity check found one likely-noise
+dip (`N=500->600`, `1.33%` relative) and REASSESSed on that specific
+rule; **Stage 7g (D-084) then confirmed directly, via a properly-
+specified statistical test on the same already-collected evidence, that
+the dip is decisively ordinary sampling noise** (Mann-Whitney `N=500`
+vs. `600`: `p=.82`) **and the overall trend is real and highly
+significant** (Spearman `rho=.213`, `p=3.2e-30`, pooled across `2,800`
+replicate-level points). D-083's own REASSESS verdict stands unedited
+(it correctly reported what its own predeclared rule found); D-084 adds
+the better-specified answer on top of it. **The confidence score's own
+trend with `N` is now a defensible basis for researcher-facing
+guidance**, though a separate recalibration charter (mirroring Stage
+8b/8c's own arc) is still required before presenting it as more than an
+ordinal signal. See D-083, D-084.
 
 **Stage 8a (D-066) — Tier-0 confidence-margin score: calibrated for
 retain-dominant decisions, informative-only (not calibrated) for the
