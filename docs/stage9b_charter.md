@@ -182,3 +182,21 @@ a direct, end-to-end call on fresh data -- worth understanding why
 before releasing anything as a usable feature, since a caller would be
 relying on the wired function's own real behavior, not the underlying
 statistic's own already-demonstrated validity in isolation.
+
+## Addendum (post-freeze, 2026-09-09 -- does not alter anything above)
+
+This charter's own text above is frozen and unedited; PROCEED was
+recorded in D-080 before this note was added. Recorded here only as a
+pointer, per this project's own "corrections are appended, not silent
+edits" discipline: D-081 (a separate, non-chartered engineering change
+-- `n_jobs` cannot affect any result, only wall-clock time) added
+opt-in local parallelism to `growing_subset_dpi_with_stability_rescue`
+and its own underlying bootstrap functions, defaulting to
+`n_jobs="auto"` (`min(os.cpu_count(), 8)`, measured at `~5x` speedup on
+a 20-core machine). This charter's own Step 3 compute-cost disclosure
+(`~80-280s` per qualifying dataset, measured sequentially under GitHub
+Actions' thread limits) is unaffected and remains the correct sequential
+figure -- D-081 only gives a caller who wants it a documented, opt-in
+way to reduce that wall-clock cost locally. See D-081 in
+`docs/decision_log.md` and its own entry in
+`docs/validated_operating_ranges.md`.
