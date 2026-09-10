@@ -6630,3 +6630,113 @@ entries are unchanged (D-075's own "not to be re-chartered without a
 materially new angle" language already captures this); this entry adds
 only the explicit "parked, not abandoned, here is the revisit
 condition" framing the user asked to have on record.
+
+## D-083: Stage 7f evidence — Part A gives a real, effect-size-conditional accessibility answer (`N=400` sufficient down to `|target_rho|>=0.12`); Part B's confidence score is clearly informative but misses its own strict monotonicity gate by a likely-noise margin (mi-native, Stage 7f)
+
+Date: 2026-09-10
+
+Dispatched as 77 GitHub Actions shards (11 conditions x 7 `N`); one
+shard (`triangle_4`, `N=600`) failed with "the hosted runner lost
+communication with the server" after 1h47m — a GitHub Actions
+infrastructure failure, not a code or data problem. Recovered without
+re-running anything: the other 76 shard artifacts were downloaded
+directly, the one failed cell was re-dispatched alone, and all 77 were
+aggregated locally against the config's own full grid (which this
+dispatch was never `--conditions`-restricted for, unlike D-078's own
+scope-mismatch case) — `30,800`/`30,800` rows, every one `status="ok"`,
+zero data lost.
+
+**Part A: a real, actionable accessibility table, not the single-point
+`N=750` REASSESS this project has cited since D-065.**
+
+```
+n     smallest resolvable |target_rho|
+400   0.12
+500   0.12
+600   0.12
+700   0.12
+750   0.08  (razor-thin: exactly 1 of 31 tested alphas feasible)
+1000  0.08
+1500  0.08
+```
+
+**The headline finding: `N` as low as `400` already works for any
+effect size down to `|target_rho|=0.12`** — comfortably, not
+marginally (`4`-`15` of `31` tested alphas feasible at every `N`x
+`target_rho>=0.12` cell). Only the single most extreme tested effect
+size (`0.08`, D-059/D-065's own deliberately adversarial fixture) needs
+`N>=750`, and even there the window is razor-thin (exactly `1`
+feasible alpha at `N=750`, widening to `12`-`15` by `N=1000`-`1500`) —
+consistent with, not contradicting, D-065's own "closest this project
+has come to a feasible window, missing by `.008`-`.020`" language; a
+different `400`-replicate draw landing on the other side of that
+razor's edge is exactly the kind of outcome a marginal case should
+produce, not evidence D-065 was wrong. **`N=400` genuinely does not
+require `N>=1500` unless a researcher's own weakest plausible true
+effect is near this specific extreme** — the accessibility answer this
+whole charter was chartered to obtain.
+
+**Part B: check 1 (informativeness) passes cleanly; check 2
+(monotonicity) fails the charter's own strict pointwise gate by a
+single, small, almost-certainly-noise step.**
+
+Mean confidence (`edge_margin` at the canonical `alpha=0.10`) for
+correct vs. incorrect decisions, every tested `N`:
+
+```
+n     correct   incorrect
+400    .854       .370
+500    .858       .369
+600    .860       .363
+700    .860       .372
+750    .861       .384
+1000   .866       .394
+1500   .867       .409
+```
+
+**Check 1 (informativeness) PROCEEDs at every `N`** — correct decisions
+score roughly double the confidence of incorrect ones, a wide, clean
+separation, not a marginal one.
+
+Frontier edge (`triangle`'s own weakest tested effect, pair `(1,2)`)
+mean confidence by `N`: `.476 -> .478 -> .471 -> .518 -> .519 -> .597 ->
+.696` (`N=400` through `1500`). **The overall trend is unambiguous** (a
+`46%` relative increase from `N=400` to `1500`) but **one step,
+`N=500->600`, dips by `.0063` (`1.33%` relative)** — enough to fail
+this charter's own predeclared strict pointwise "every consecutive step
+must be non-decreasing" check. **Verdict, per the frozen gate exactly
+as written: REASSESS.**
+
+**This is reported as a REASSESS, not silently reinterpreted as a
+PROCEED, even though a `1.33%` dip on a `400`-replicate cell is a far
+more plausible explanation than a genuine non-monotonic relationship**
+-- reinterpreting a predeclared gate after seeing a result it was not
+designed to accommodate is exactly what this project's own governance
+principle (Section 40, "never reinterpret a failed gate as success
+without explicitly versioning the methodology") exists to prevent.
+Check 1's own clean pass already establishes the confidence score is
+genuinely informative; check 2's own near-miss is a real, disclosed
+gap between what was measured and what a properly-powered trend test
+would likely show, not a contradiction of check 1.
+
+Decision: **Part A's own frontier table is adopted as `mi-native`'s
+current accessibility guidance for the structured-density composition
+mechanism** (no gate on Part A -- descriptive, as chartered). **Part
+B's confidence score is NOT yet documented as trustworthy researcher-
+facing guidance**, per the charter's own predeclared consequence for a
+REASSESS -- it remains available as a diagnostic field (already
+returned by `growing_subset_dpi_structured_density`, harmless to
+inspect) but is not recommended for a researcher's own threshold
+decision until a follow-up resolves whether the `N=500->600` dip
+reproduces.
+
+Consequences: `docs/validated_operating_ranges.md` should replace its
+single-point `N=750`-REASSESS characterization of the structured-
+density composition mechanism with Part A's own full table. A cheap,
+narrowly-scoped follow-up (re-run only the `N=500`/`600` `triangle`
+frontier cells at a higher replicate count, or apply a proper
+statistical trend test instead of a strict pointwise check to this
+charter's own already-collected evidence -- D-065's own "compute once,
+threshold many times" precedent applies here too, zero new significance
+tests needed) would resolve whether check 2 was a genuine near-miss or
+pure noise -- not yet chartered, a candidate for a future Stage 7g.

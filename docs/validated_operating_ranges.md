@@ -939,10 +939,51 @@ FPR only clears `.10` at `alpha>=.19`, while `chain`'s own
 real, ~`0.01`-wide non-overlap, not a coarse-grid artifact resolvable
 by finer sampling. Since the gate requires one alpha to satisfy both
 tested `N` simultaneously, `N=750` alone forces REASSESS regardless of
-`N=1500`'s own success. **Currently defensible range for this
-composition: `N>=1500` only** — `N=750` is a specific, precisely
-located, unresolved limitation (not yet chartered to fix), not a
-general failure of the mechanism. See D-064/D-065.
+`N=1500`'s own success. **Superseded by Stage 7f (D-083) below** — this
+single-point finding was measured at exactly one weak-edge strength
+(`|target_rho|=0.08`); it remains correct at that specific value, but
+should no longer be read as "the composition needs `N>=1500`" in
+general. See D-064/D-065.
+
+**Stage 7f (D-083) — the real accessibility answer: `N` as low as `400`
+already works for any weak-edge effect size `>=0.12`; only the single
+most extreme tested value (`0.08`) needs `N>=750` (razor-thin) or
+`N>=1000` (comfortable).** Replaces D-065's own single-point
+characterization with a full `N x |target_rho|` frontier table:
+
+```
+n     smallest resolvable |target_rho|
+400   0.12
+500   0.12
+600   0.12
+700   0.12
+750   0.08  (razor-thin: 1 of 31 tested alphas feasible)
+1000  0.08
+1500  0.08
+```
+
+**Recommended guidance for a researcher choosing `N`**: if your
+weakest scientifically plausible true edge is `|partial correlation|
+>= 0.12`, `N=400` already suffices for this composition mechanism — a
+substantial accessibility improvement over the blanket `N>=1500`
+D-065 alone would have implied. Only if you specifically expect an
+effect as faint as `0.08` does the `N=750`/`1500` distinction from
+D-064/D-065 still apply, and even then `N=750`'s own window is razor-
+thin (treat `N>=1000` as the comfortable floor for that specific case).
+
+**A continuous per-edge confidence score is now also exposed**
+(`growing_subset_dpi_structured_density`'s own `decisive_p_value`/
+`confidence` fields, mirroring the already-validated Fisher-z engine's
+pattern) — confirmed genuinely informative (correct decisions score
+roughly double the confidence of incorrect ones, at every tested `N`),
+but **not yet confirmed to increase monotonically with `N`** (a
+predeclared strict check found one likely-noise dip, `N=500->600`,
+`1.33%` relative, against an otherwise unambiguous `46%` overall
+increase from `N=400` to `1500`) — reported as REASSESS per the frozen
+gate exactly as specified, not reinterpreted. **Not yet recommended as
+researcher-facing guidance for setting a confidence threshold** until a
+follow-up (not yet chartered) resolves whether that dip reproduces.
+See D-083.
 
 **Stage 8a (D-066) — Tier-0 confidence-margin score: calibrated for
 retain-dominant decisions, informative-only (not calibrated) for the
