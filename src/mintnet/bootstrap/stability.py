@@ -203,3 +203,102 @@ def compute_edge_stability_growing_subset(
             )
         )
     return _aggregate(p, outcomes)
+
+
+def _run_one_growing_subset_structured_density(
+    resample: np.ndarray,
+    resample_index: int,
+    screening_alpha: float,
+    dpi_alpha: float,
+    max_conditioning_size: int,
+    master_seed: int,
+    degree: int,
+    ridge_lambda: float,
+    cv_folds: int,
+    k_perm: int,
+    permutations: int,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """`_run_one_growing_subset`'s own structured-density analogue
+    (docs/stage9c_charter.md). `resample_index` (the bootstrap draw's
+    own position, 0-indexed) stands in for `replicate` in `growing_
+    subset_dpi_structured_density`'s own RNG-seeding contract -- a pure
+    function of already-known quantities, so results are unaffected by
+    `n_jobs` or execution order."""
+    from mintnet.pipeline.growing_subset_dpi_structured_density import growing_subset_dpi_structured_density
+
+    try:
+        evidence = compute_pairwise_screening_evidence(resample)
+        screened = screen_uncorrected(evidence, screening_alpha)
+        result = growing_subset_dpi_structured_density(
+            resample, screened, dpi_alpha, master_seed=master_seed, replicate=resample_index,
+            degree=degree, ridge_lambda=ridge_lambda, cv_folds=cv_folds, k_perm=k_perm,
+            permutations=permutations, max_conditioning_size=max_conditioning_size,
+        )
+    except ValueError:
+        # Degenerate resample (near-zero-variance column): inconclusive,
+        # not evidence of independence -- excluded, matching StabilityResult's
+        # own documented failed_bootstraps handling.
+        return None
+    return screened, result.adjacency
+
+
+def compute_edge_stability_growing_subset_structured_density(
+    data: np.ndarray,
+    screening_alpha: float,
+    dpi_alpha: float,
+    max_conditioning_size: int,
+    bootstraps: int,
+    master_seed: int,
+    degree: int,
+    ridge_lambda: float,
+    cv_folds: int,
+    k_perm: int,
+    permutations: int,
+    rng: np.random.Generator,
+    *,
+    n_jobs: int | str = "auto",
+) -> StabilityResult:
+    """The `growing_subset_dpi_structured_density` analogue of `compute_
+    edge_stability_growing_subset` (docs/stage9c_charter.md) -- same
+    resampling and degenerate-resample handling, the structured-density
+    engine in place of the Fisher-z one per resample. Purely additive.
+
+    Unlike the Fisher-z engine's own near-free per-subset test, a single
+    structured-density search is itself expensive (D-085's own measured
+    `40s`-`264s` per replicate) -- `n_jobs` (default `"auto"`) matters
+    considerably more here, and `bootstraps` should be sized far below
+    the Fisher-z mechanism's own `B=500` default (see docs/stage9c_
+    charter.md's own Step 2 cost-measurement requirement).
+    """
+    if bootstraps < 1:
+        raise ValueError("bootstraps must be at least 1")
+    resolved_n_jobs = _resolve_n_jobs(n_jobs)
+    p = data.shape[1]
+    resamples = [bootstrap_resample(data, rng) for _ in range(bootstraps)]
+    if resolved_n_jobs == 1:
+        outcomes = (
+            _run_one_growing_subset_structured_density(
+                resample, index, screening_alpha, dpi_alpha, max_conditioning_size, master_seed,
+                degree, ridge_lambda, cv_folds, k_perm, permutations,
+            )
+            for index, resample in enumerate(resamples)
+        )
+        return _aggregate(p, outcomes)
+    with ProcessPoolExecutor(max_workers=resolved_n_jobs) as executor:
+        outcomes = list(
+            executor.map(
+                _run_one_growing_subset_structured_density,
+                resamples,
+                range(len(resamples)),
+                repeat(screening_alpha),
+                repeat(dpi_alpha),
+                repeat(max_conditioning_size),
+                repeat(master_seed),
+                repeat(degree),
+                repeat(ridge_lambda),
+                repeat(cv_folds),
+                repeat(k_perm),
+                repeat(permutations),
+            )
+        )
+    return _aggregate(p, outcomes)

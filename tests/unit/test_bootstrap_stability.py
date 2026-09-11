@@ -3,9 +3,14 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from mintnet.bootstrap import compute_edge_stability, compute_edge_stability_growing_subset
+from mintnet.bootstrap import (
+    compute_edge_stability,
+    compute_edge_stability_growing_subset,
+    compute_edge_stability_growing_subset_structured_density,
+)
 from mintnet.bootstrap.stability import _AUTO_N_JOBS_CAP, _resolve_n_jobs
 from mintnet.simulation import sample_chain
+from mintnet.simulation.motifs import sample_hub
 
 # Every test below pins n_jobs=1 explicitly (the library's own default is
 # now "auto", which can spawn worker processes) so the suite stays fast
@@ -244,3 +249,85 @@ def test_compute_edge_stability_default_n_jobs_is_auto_and_still_matches_n_jobs_
     )
 
     assert np.array_equal(default_call.pi_final, explicit_call.pi_final)
+
+
+# -- compute_edge_stability_growing_subset_structured_density (Stage 9c) --
+# Kept deliberately tiny (small N, few permutations, few bootstraps):
+# a single structured-density search is itself expensive (D-085's own
+# measured 40s-264s per replicate on a p=15 network), so these tests use
+# a cheap 4-node motif to stay fast under pytest-xdist.
+
+
+def _hub_data(n: int, seed: int) -> np.ndarray:
+    return sample_hub(n, 0.8, 3, np.random.default_rng(seed))
+
+
+def test_structured_density_stability_pi_matrices_are_symmetric_bounded_and_zero_diagonal():
+    data = _hub_data(300, seed=1)
+    result = compute_edge_stability_growing_subset_structured_density(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=2,
+        master_seed=2, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+        rng=np.random.default_rng(3), n_jobs=1,
+    )
+
+    for matrix in (result.pi_candidate, result.pi_final):
+        assert np.array_equal(matrix, matrix.T)
+        assert np.all(matrix >= 0.0) and np.all(matrix <= 1.0)
+        assert np.all(np.diag(matrix) == 0.0)
+
+
+def test_structured_density_stability_successful_plus_failed_equals_requested_bootstraps():
+    data = _hub_data(300, seed=4)
+    bootstraps = 3
+    result = compute_edge_stability_growing_subset_structured_density(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=bootstraps,
+        master_seed=5, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+        rng=np.random.default_rng(6), n_jobs=1,
+    )
+
+    assert result.successful_bootstraps + result.failed_bootstraps == bootstraps
+    assert result.successful_bootstraps > 0
+
+
+def test_structured_density_stability_rejects_bootstraps_below_one():
+    data = _hub_data(200, seed=7)
+    with pytest.raises(ValueError, match="bootstraps"):
+        compute_edge_stability_growing_subset_structured_density(
+            data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=0,
+            master_seed=8, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+            rng=np.random.default_rng(9), n_jobs=1,
+        )
+
+
+def test_structured_density_stability_is_reproducible_given_the_same_rng_state():
+    data = _hub_data(200, seed=10)
+    result_a = compute_edge_stability_growing_subset_structured_density(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=2,
+        master_seed=11, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+        rng=np.random.default_rng(12), n_jobs=1,
+    )
+    result_b = compute_edge_stability_growing_subset_structured_density(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=2,
+        master_seed=11, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+        rng=np.random.default_rng(12), n_jobs=1,
+    )
+
+    assert np.array_equal(result_a.pi_final, result_b.pi_final)
+    assert np.array_equal(result_a.pi_candidate, result_b.pi_candidate)
+
+
+def test_structured_density_stability_n_jobs_greater_than_one_matches_sequential():
+    data = _hub_data(300, seed=1)
+    sequential = compute_edge_stability_growing_subset_structured_density(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=2,
+        master_seed=2, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+        rng=np.random.default_rng(3), n_jobs=1,
+    )
+    parallel = compute_edge_stability_growing_subset_structured_density(
+        data, screening_alpha=0.001, dpi_alpha=0.10, max_conditioning_size=4, bootstraps=2,
+        master_seed=2, degree=1, ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19,
+        rng=np.random.default_rng(3), n_jobs=2,
+    )
+
+    assert np.array_equal(sequential.pi_final, parallel.pi_final)
+    assert np.array_equal(sequential.pi_candidate, parallel.pi_candidate)

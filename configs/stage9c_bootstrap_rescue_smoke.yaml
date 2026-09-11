@@ -1,0 +1,14 @@
+sample_sizes: [750]
+strength: 0.5
+screening_alpha: 0.001
+max_conditioning_size: 4
+degree: 1
+ridge_lambda: 1.0
+cv_folds: 5
+k_perm: 3
+permutations: 19
+replicates: 5
+base_master_seed: 94000
+bootstrap_master_seed: 94100
+bootstraps: 2
+max_bootstrapped_replicates_per_cell: 2

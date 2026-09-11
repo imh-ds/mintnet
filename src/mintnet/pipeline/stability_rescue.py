@@ -146,3 +146,98 @@ def growing_subset_dpi_with_stability_rescue(
         rescued=rescued,
         bootstrapped=bootstrapped,
     )
+
+
+def growing_subset_dpi_structured_density_with_stability_rescue(
+    data: np.ndarray,
+    flagged: np.ndarray,
+    alpha: float,
+    *,
+    max_conditioning_size: int = 4,
+    screening_alpha: float,
+    bootstraps: int,
+    pi_min: float,
+    master_seed: int,
+    replicate: int,
+    degree: int = 1,
+    ridge_lambda: float = 1.0,
+    cv_folds: int = 5,
+    k_perm: int = 3,
+    permutations: int = 199,
+    bootstrap_rng: np.random.Generator,
+    n_jobs: int | str = "auto",
+) -> StabilityRescueResult:
+    """`growing_subset_dpi_with_stability_rescue`'s own structured-
+    density analogue (docs/stage9c_charter.md) -- identical logic
+    (bootstrap only edges at `conditioning_size_used >=
+    UNRESOLVED_CONDITIONING_SIZE`, flip retain -> pruned below `pi_
+    min`), the structured-density engine (D-063's own `degree=1`
+    default) in place of the Fisher-z one.
+
+    **No default `bootstraps`/`pi_min`** (unlike the Fisher-z version's
+    own `500`/`0.90`): D-085's own cost measurement (`40s`-`264s` per
+    single replicate, since a structured-density search is itself
+    expensive, not a near-free closed-form test) means both must be
+    chosen deliberately for the caller's own compute budget, not
+    inherited from a much cheaper engine's own defaults -- see docs/
+    stage9c_charter.md's own Step 2/Step 3.
+
+    `master_seed`/`replicate` key the ORIGINAL (unbootstrapped) search's
+    own internal RNG, exactly as a plain `growing_subset_dpi_structured_
+    density` call requires; `bootstrap_rng` is the SEPARATE generator
+    that draws the bootstrap resamples themselves (mirrors the Fisher-z
+    version's own single `rng` parameter, split in two here since this
+    engine's own point-estimate call already needs `master_seed`/
+    `replicate` for a different purpose).
+    """
+    from mintnet.bootstrap import compute_edge_stability_growing_subset_structured_density
+    from mintnet.pipeline.growing_subset_dpi_structured_density import growing_subset_dpi_structured_density
+
+    p = flagged.shape[0]
+    result = growing_subset_dpi_structured_density(
+        data, flagged, alpha, master_seed=master_seed, replicate=replicate, degree=degree,
+        ridge_lambda=ridge_lambda, cv_folds=cv_folds, k_perm=k_perm, permutations=permutations,
+        max_conditioning_size=max_conditioning_size,
+    )
+
+    qualifying: list[tuple[int, int]] = [
+        (i, j)
+        for i in range(p)
+        for j in range(i + 1, p)
+        if flagged[i, j] and result.conditioning_size_used[(i, j)] >= UNRESOLVED_CONDITIONING_SIZE
+    ]
+
+    pi_final: dict[tuple[int, int], float] = {}
+    rescued: dict[tuple[int, int], bool] = {}
+    final_adjacency = result.adjacency.copy()
+    bootstrapped = bool(qualifying)
+
+    if qualifying:
+        stability = compute_edge_stability_growing_subset_structured_density(
+            data, screening_alpha, alpha, max_conditioning_size, bootstraps, master_seed, degree,
+            ridge_lambda, cv_folds, k_perm, permutations, bootstrap_rng, n_jobs=n_jobs,
+        )
+        for i, j in qualifying:
+            value = float(stability.pi_final[i, j])
+            pi_final[(i, j)] = value
+            flip = bool(result.adjacency[i, j]) and value < pi_min
+            rescued[(i, j)] = flip
+            if flip:
+                final_adjacency[i, j] = final_adjacency[j, i] = False
+
+    for i in range(p):
+        for j in range(i + 1, p):
+            if not flagged[i, j]:
+                continue
+            if (i, j) not in pi_final:
+                pi_final[(i, j)] = math.nan
+                rescued[(i, j)] = False
+
+    return StabilityRescueResult(
+        original_adjacency=result.adjacency,
+        final_adjacency=final_adjacency,
+        conditioning_size_used=result.conditioning_size_used,
+        pi_final=pi_final,
+        rescued=rescued,
+        bootstrapped=bootstrapped,
+    )

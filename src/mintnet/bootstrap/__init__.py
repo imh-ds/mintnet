@@ -5,6 +5,7 @@ from .stability import (
     bootstrap_resample,
     compute_edge_stability,
     compute_edge_stability_growing_subset,
+    compute_edge_stability_growing_subset_structured_density,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "bootstrap_resample",
     "compute_edge_stability",
     "compute_edge_stability_growing_subset",
+    "compute_edge_stability_growing_subset_structured_density",
 ]
