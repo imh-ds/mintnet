@@ -6782,3 +6782,100 @@ confidence score is now a defensible candidate for researcher-facing
 recalibration charter (mirroring Stage 8b/8c's own arc) before being
 presented as more than an ordinal signal -- unchanged from Stage 7f's
 own explicit non-goal.
+
+## D-085: Stage 7h evidence — both parts REASSESS per their own frozen gates, but the underlying picture is mostly a strong transfer: true-edge retain accuracy is 99.96%, and the SAME retain/prune asymmetry D-076 found for the older engine reappears here too (mi-native, Stage 7h)
+
+Date: 2026-09-11
+
+Dispatched as 168 GitHub Actions shards; one (`overlap` strength `0.7`,
+`N=1000`, batch `3`) was cancelled after hitting the 6-hour job timeout
+exactly (all `167` others succeeded). Recovered without losing any
+already-completed compute: a new `--replicate-range` argument (mirroring
+Stage 9a's own precedent) split the missing `25` replicates into `5`
+smaller `5`-replicate sub-dispatches, all `5` succeeded, and all `172`
+shard artifacts (`167` + `5`) were aggregated locally against the
+config's own full grid -- `4,200`/`4,200` rows, every one `status=
+"ok"`, zero data lost.
+
+**Both gates REASSESS exactly as their own frozen text specifies.
+Neither verdict is reinterpreted here -- both stand as recorded.** The
+evidence behind each is reported in full below, since in both cases
+the literal gate outcome undersells what actually happened.
+
+**Part A (accessibility): REASSESS, triggered by a single small-sample
+cell, against an overall true-edge accuracy of `99.961%` across
+`33,599` decisions.** The failing cell (`overlap`, strength `0.5`,
+`N=400`, `conditioning_size_used=2`) has only `13` decisions and `1`
+miss (`92.3%`, just under the `95%` bar). Of `62` similarly small
+(`<20`-decision) true-edge cells in this evidence, every other one
+shows `100%` accuracy -- this looks like one unlucky draw in a thin
+cell, not a systematic problem. Pooled true-edge accuracy by
+conditioning depth: `1.000` (depth `0`), `.9998` (depth `1`), `.9967`
+(depth `2`), `.9993` (depth `3`), `1.000` (depth `4`) -- **essentially
+replicating D-076's own celebrated near-100% retain-reliability
+finding for the OLDER Fisher-z engine, now confirmed for the
+structured-density engine on real composed networks for the first
+time.** The accessibility win (moderate effect sizes resolvable at low
+`N`) does appear to transfer on the retain side. **A real, disclosed
+design gap in this charter's own Part A gate**: unlike Part B's own
+`min_count` safeguard, `accessibility_gate` has none -- a future
+charter revisiting this question should add one rather than let a
+13-decision cell carry the same weight as a 500-decision one.
+
+**Part B (confidence transfer): REASSESS at every one of `6` tested
+`(dgp, strength)` cells, but not for the reason anticipated.**
+Informativeness (correct decisions score higher confidence than
+incorrect ones) PROCEEDS cleanly everywhere -- `overlap`: `.93` vs.
+`.45` mean confidence; `chain_fork_hub`: `.87`-`.92` vs. `.57`-`.75` --
+wide, clean gaps at every cell, confirming the score's core value
+(separating good from bad decisions within one analysis) transfers to
+composed networks without qualification. **What fails is the trend
+check, and not by a near-miss the way D-083's own isolation-tier dip
+was**: the Spearman correlation between confidence and `N` (among
+`conditioning_size_used >= 2` decisions) is **significantly NEGATIVE**
+at every cell (`rho` from `-.46` to `-.57`, `p` at or indistinguishable
+from `0`, `188`-`4,623` decisions per cell) -- confidence for these
+decisions gets WORSE, not better, as `N` grows, the opposite direction
+from the isolation-tier finding (D-083/D-084). **Leading hypothesis,
+not confirmed here**: a population-composition shift -- screening's
+own selectivity changes with `N`, so the SET of edges that even reach
+`conditioning_size_used >= 2` may shift toward more marginal cases at
+higher `N`, rather than the same fixed population simply resolving
+more confidently (the same kind of population-conflation risk D-072
+investigated for a different composed-tier question). Not yet tested
+directly.
+
+**The retain/prune asymmetry itself reproduces cleanly for this
+estimator, matching D-076's own signature almost exactly in shape**:
+false-edge (prune) accuracy by conditioning depth: `.906` (depth `1`)
+`-> .793` (depth `2`) `-> .332` (depth `3`) `-> .119` (depth `4`) --
+the same catastrophic degradation pattern D-076 found for the Fisher-z
+engine (`.91 -> .625 -> .095 -> .008`), now confirmed for the
+genuinely MI-based structured-density engine too, on real composed
+networks, for the first time. (Depth-`0`, `40` decisions, `0%`
+accuracy: isolated two-node components with no conditioning-set
+members at all, retained unconditionally by construction -- the same
+disclosed passthrough-false-positive gap D-052 already documented for
+the older engine, not a new finding.)
+
+Decision: **Both parts REASSESS, per their own predeclared gates,
+exactly as specified.** Per this charter's own consequences section,
+this is precisely the "Part B REASSESSes, check whether the failure
+matches D-076's own asymmetry" branch, and the answer is yes.
+
+Consequences: `docs/validated_operating_ranges.md` should record (1)
+true-edge retain reliability transfers to the structured-density
+engine on composed networks (`99.96%` overall, matching D-076's own
+finding for the older engine); (2) the confidence score remains
+informative on composed networks but its own relationship with `N` is
+NOT yet understood there (significantly negative, opposite the
+isolation-tier direction) -- not recommended for `N`-dependent
+guidance on composed networks until this is investigated; (3) the SAME
+retain/prune asymmetry D-076 found is confirmed present for this
+estimator too, making Stage 9's own already-validated bootstrap-rescue
+design (`growing_subset_dpi_with_stability_rescue`, proven against
+exactly this signature for the older engine) the natural, well-
+motivated next candidate to adapt -- not yet chartered. A future
+Stage 7h follow-up should also add a `min_count` safeguard to the
+accessibility gate before re-testing Part A, and directly test the
+population-composition hypothesis for Part B's own negative trend.

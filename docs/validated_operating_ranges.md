@@ -989,7 +989,48 @@ the better-specified answer on top of it. **The confidence score's own
 trend with `N` is now a defensible basis for researcher-facing
 guidance**, though a separate recalibration charter (mirroring Stage
 8b/8c's own arc) is still required before presenting it as more than an
-ordinal signal. See D-083, D-084.
+ordinal signal. See D-083, D-084. **This trend-with-`N` finding is
+isolation-tier only — see Stage 7h (D-085) below for the composed-tier
+picture, which does NOT match.**
+
+**Stage 7h (D-085) — first composed-tier run of the structured-density
+engine: true-edge retain reliability transfers cleanly (`99.96%`
+overall); the confidence score remains informative but its trend with
+`N` reverses sign on composed networks; the SAME retain/prune asymmetry
+D-076 found reappears for this estimator too.** Both of this charter's
+own gates REASSESS, exactly as predeclared, but the substance is mostly
+a strong transfer, not a failure:
+
+- **Retain reliability**: `99.96%` accuracy across `33,599` true-edge
+  decisions, at every conditioning depth (`0`-`4`) — essentially
+  identical to D-076's own finding for the OLDER Fisher-z engine, now
+  confirmed for the genuinely MI-based estimator on real composed
+  networks (`chain_fork_hub`/`overlap`, `p=15`) for the first time.
+  Part A's own REASSESS was driven by one `13`-decision cell with a
+  single miss, not a systematic problem — a disclosed gap in that
+  gate's own design (no `min_count` safeguard, unlike Part B's own).
+- **Confidence score informativeness transfers cleanly** (correct
+  decisions score `.87`-`.93` vs. `.45`-`.75` for incorrect ones, every
+  cell) — **but its trend with `N` is significantly NEGATIVE on
+  composed networks** (Spearman `rho` `-.46` to `-.57`, `p` at or
+  indistinguishable from `0`), the opposite direction from the
+  isolation-tier finding above. Leading hypothesis (not yet tested): a
+  population-composition shift, since screening's own selectivity
+  changes with `N`, potentially changing which edges even reach
+  `conditioning_size_used >= 2` rather than the same edges simply
+  resolving more confidently. **Do not apply the isolation-tier
+  confidence-vs-N guidance to composed networks** — they behave
+  oppositely and separately.
+- **The retain/prune asymmetry reproduces almost exactly**: false-edge
+  accuracy by depth `.906 -> .793 -> .332 -> .119` (structured-density,
+  composed), vs. D-076's own `.91 -> .625 -> .095 -> .008` (Fisher-z,
+  composed) — same catastrophic shape, confirmed for a second,
+  genuinely different estimator. Makes Stage 9's own already-validated
+  `growing_subset_dpi_with_stability_rescue` (proven against exactly
+  this signature for the Fisher-z engine) the natural next candidate to
+  adapt for structured-density — not yet chartered.
+
+See D-085.
 
 **Stage 8a (D-066) — Tier-0 confidence-margin score: calibrated for
 retain-dominant decisions, informative-only (not calibrated) for the
