@@ -239,23 +239,34 @@ def run_stage7h(
     conditions: tuple[str, ...] | None = None,
     sample_sizes: tuple[int, ...] | None = None,
     batches: tuple[int, ...] | None = None,
+    replicate_range: tuple[int, int] | None = None,
     write_report: bool = True,
 ) -> pd.DataFrame:
     """`conditions`/`sample_sizes`/`batches` restrict which cells run,
-    for a single-cell CI shard -- replicate ranges are always derived
+    for a single-cell CI shard -- replicate ranges are normally derived
     from `config.batch_size` against the FULL replicate count, and
     seeds key off full-grid quantities only, so a shard's results match
-    an unsharded run's for the same replicates."""
+    an unsharded run's for the same replicates.
+
+    `replicate_range` (inclusive `(start, end)`) overrides `batches`
+    entirely, for a finer-grained recovery dispatch -- e.g. re-running
+    one already-timed-out batch as several smaller sub-ranges without
+    needing a new `config.batch_size`. Not used by a normal dispatch."""
     started = time.perf_counter()
     alpha_formula = select_form(fit_candidate_forms())
     target_conditions = conditions if conditions is not None else _conditions(config)
     target_sizes = sample_sizes if sample_sizes is not None else config.sample_sizes
-    target_batches = batches if batches is not None else tuple(range(_n_batches(config)))
 
     rows: list[dict[str, object]] = []
     for condition in target_conditions:
         for n in target_sizes:
             alpha = float(alpha_formula.predict(float(n)))
+            if replicate_range is not None:
+                start_replicate, end_replicate_inclusive = replicate_range
+                for replicate in range(start_replicate, end_replicate_inclusive + 1):
+                    rows.append(_run_one_replicate(condition, n, replicate, alpha, config))
+                continue
+            target_batches = batches if batches is not None else tuple(range(_n_batches(config)))
             for batch in target_batches:
                 start_replicate = batch * config.batch_size
                 end_replicate = min(start_replicate + config.batch_size, config.replicates)
@@ -292,16 +303,24 @@ def main() -> None:
     parser.add_argument(
         "--batches", type=str, default=None, help="comma-separated subset of batch indices (default: all)"
     )
+    parser.add_argument(
+        "--replicate-range", type=str, default=None,
+        help="'start-end' inclusive, overrides --batches for a finer-grained recovery dispatch",
+    )
     parser.add_argument("--no-report", action="store_true", help="skip the descriptive report (use for CI shards)")
     arguments = parser.parse_args()
 
     conditions = tuple(arguments.conditions.split(",")) if arguments.conditions else None
     sample_sizes = tuple(int(v) for v in arguments.sample_sizes.split(",")) if arguments.sample_sizes else None
     batches = tuple(int(v) for v in arguments.batches.split(",")) if arguments.batches else None
+    replicate_range = None
+    if arguments.replicate_range:
+        start_str, end_str = arguments.replicate_range.split("-")
+        replicate_range = (int(start_str), int(end_str))
 
     run_stage7h(
         load_config(arguments.config), arguments.output,
-        conditions=conditions, sample_sizes=sample_sizes, batches=batches,
+        conditions=conditions, sample_sizes=sample_sizes, batches=batches, replicate_range=replicate_range,
         write_report=not arguments.no_report,
     )
 
