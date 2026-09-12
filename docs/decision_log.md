@@ -6879,3 +6879,90 @@ motivated next candidate to adapt -- not yet chartered. A future
 Stage 7h follow-up should also add a `min_count` safeguard to the
 accessibility gate before re-testing Part A, and directly test the
 population-composition hypothesis for Part B's own negative trend.
+
+## D-086: Stage 9c dispatch — the `overlap` cell REASSESSes on evidence scarcity, not mechanism failure; the sharded-dispatch design itself has two disclosed gaps (no per-shard sharding floor, no incremental evidence writes) surfaced by real GitHub Actions cost (mi-native, Stage 9c)
+
+Date: 2026-09-12
+
+Stage 9c (`docs/stage9c_charter.md`) adapts Stage 9's own bootstrap-
+rescue mechanism to the structured-density engine. Evidence was
+dispatched as two separate GitHub Actions runs, chunked per-DGP per
+Stage 9b's own chunking precedent: `chain_fork_hub` (~7.4% per-
+replicate qualification rate, D-085's own measurement) as 10 40-
+replicate shards; `overlap` (~100% qualification rate) as 24 single-
+replicate shards, already the finest possible grain.
+
+**Both runs lost shards to the 6-hour GitHub-hosted job cap, at very
+different rates.** `chain_fork_hub`: 2/10 shards cancelled (`N=1500`
+replicates `40-79`; `N=750` replicates `80-119`). `overlap`: 8/24
+shards cancelled (33%) -- despite already being single-replicate,
+confirming the per-replicate bootstrap-rescue cost for this DGP is
+itself frequently extreme, not merely expensive on average (matching
+D-085's own disclosed heavy-tail measurement, there for the point
+estimate alone; this charter's own `B=10` resampling compounds it).
+**A real design gap, found via this failure, not anticipated in the
+charter**: `run_stage9c`'s own `_write_evidence` writes
+`raw_metrics.csv` once, after its entire replicate loop completes --
+a cancelled shard discards every already-finished replicate inside it,
+not just the one that was running. `chain_fork_hub`'s 2 cancelled
+shards were recovered by splitting each 40-replicate range into five
+8-replicate sub-shards (mirroring Stage 7h's own `--replicate-range`
+recovery precedent) and re-dispatched (runs `34671807952`,
+`34671814761`); `overlap`'s 8 cancelled shards were **not** re-
+dispatched -- already at the finest possible grain, splitting further
+is not available, and the evidence-sufficiency finding below makes
+doing so unlikely to be worth the cost even if it were.
+
+**`overlap`: REASSESS, on evidence scarcity, not a mechanism failure.**
+Aggregating `overlap`'s 16 successful shards (`101` qualifying edges)
+gives `false_wrongly_retained` counts of `1` (`N=750`) and `0`
+(`N=1500`) -- the category the removal-rate calibration is actually
+built to test -- against this charter's own `min_count=10` floor.
+This is not caused by the 8 lost shards: at the observed rate (`1` in
+`16` replicates), closing a `9`-`10` instance gap would need on the
+order of `150`-`200` additional qualifying replicates per cell, an
+amount of compute the demonstrated `33%` single-replicate timeout rate
+makes impractical to pursue. This tracks D-085's own finding that
+`overlap` already prunes false edges reliably at shallow conditioning
+depth (`.906` accuracy at depth `1`) -- the mistake this rescue
+mechanism exists to catch is intrinsically rare in the depth range
+these replicates mostly reached, so the calibration data needed to
+validate (or refute) the rescue mechanism for this DGP was never
+available in this evidence, independent of shard losses. **This is
+reported as insufficient evidence, not as a favorable result**: the
+existing, already-validated Fisher-z bootstrap-stability rescue for
+this exact shape (`pi_min=.80`, D-020/D-028) remains the trusted
+option for `overlap` in the meantime; this charter's own question --
+whether an analogous rescue works for the structured-density engine on
+`overlap` specifically -- stays open, not answered favorably.
+
+**`chain_fork_hub`: not yet decided.** Two of ten shards remain in
+recovery as of this entry; the 8 already-successful shards show
+`false_wrongly_retained` counts of `7` (`N=750`) and `7` (`N=1500`),
+close to this charter's own `min_count=10` floor and likely to clear
+it once the recovery shards land. The full calibration/validation
+result for this DGP is deferred to its own decision-log entry once
+recovery completes, per this project's standing discipline against
+folding an incomplete result into a decision already written.
+
+Decision: **`overlap` cell: REASSESS, evidence-scarcity reason
+explicitly recorded per the charter's own gate text ("REASSESS
+otherwise -- including if Step 2's own cost measurement makes even a
+minimally-informative B infeasible... reports that constraint directly
+as its own REASSESS reason"). `chain_fork_hub` cell: deferred, not yet
+decided.**
+
+Consequences: `docs/validated_operating_ranges.md` should record that
+the structured-density engine's own bootstrap-rescue mechanism remains
+unvalidated for the `overlap` shape specifically, with the existing
+Fisher-z rescue (D-020/D-028) as the standing recommendation for that
+shape in the meantime -- this is a scope gap, not a contraindication.
+Two engineering gaps are worth carrying into future sharded-dispatch
+charters regardless of this charter's own final outcome: (1) a
+per-shard evidence writer should flush completed replicates
+incrementally, not only at the end of its own loop, so a job-timeout
+cancellation does not discard already-finished work; (2) chunk sizing
+for a new mechanism should be derived from a direct measurement of
+that mechanism's own worst-case cost (here, the bootstrap-rescue
+layer), not from a prior stage's own pre-rescue point-estimate timing,
+which under-predicted this charter's own real dispersion.
