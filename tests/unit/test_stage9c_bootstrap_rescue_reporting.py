@@ -1,6 +1,10 @@
 import pandas as pd
 
-from mintnet.experiments.stage9c_bootstrap_rescue_reporting import calibrate_and_validate, explode_qualifying
+from mintnet.experiments.stage9c_bootstrap_rescue_reporting import (
+    calibrate_and_validate,
+    calibrate_and_validate_per_cell,
+    explode_qualifying,
+)
 
 
 def _row(dgp, n, replicate, edges):
@@ -75,3 +79,22 @@ def test_calibrate_and_validate_reassesses_below_min_count():
     decision = calibrate_and_validate(exploded, min_count=10)
 
     assert decision.status == "REASSESS"
+
+
+def test_calibrate_and_validate_per_cell_keeps_cells_independent():
+    """A high-volume, easily-calibrated cell must not mask (or rescue)
+    a different (dgp, N) cell's own genuinely under-powered result --
+    the frozen charter's own gate is stated per (dgp, N) cell, not
+    once pooled across every cell in the evidence."""
+    good_edges = [_edge(0, 1, True, True, 2, True, 0.95), _edge(0, 2, False, True, 2, True, 0.10)]
+    sparse_edges = [_edge(0, 1, True, True, 2, True, 0.95)]  # only 1 instance, well below min_count
+
+    rows = [_row("chain_fork_hub", 750, replicate, good_edges) for replicate in range(40)]
+    rows.append(_row("overlap", 750, 0, sparse_edges))
+    raw = pd.DataFrame(rows)
+    exploded = explode_qualifying(raw)
+
+    decisions = calibrate_and_validate_per_cell(exploded, min_recall=0.95, min_removal_rate=0.85, min_count=10)
+
+    assert decisions[("chain_fork_hub", 750)].status == "PROCEED"
+    assert decisions[("overlap", 750)].status == "REASSESS"

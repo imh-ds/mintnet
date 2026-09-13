@@ -109,11 +109,28 @@ def calibrate_and_validate(
     )
 
 
-def write_report(raw: pd.DataFrame, config: "Stage9cConfig", output_dir: Path) -> Stage9cDecision:
+def calibrate_and_validate_per_cell(
+    exploded: pd.DataFrame, min_recall: float = 0.95, min_removal_rate: float = 0.85, min_count: int = 10,
+) -> dict[tuple[str, int], Stage9cDecision]:
+    """The charter's own gate is stated per `(dgp, N)` cell ("at every
+    tested (dgp, N) cell with at least 10 qualifying ... instances"),
+    not once pooled across every cell -- pooling would let a DGP with
+    an easy, high-volume cell (e.g. `overlap`'s ~100% qualification
+    rate) mask a genuinely under-powered or failing cell for a
+    different DGP or `N`. One independent `calibrate_and_validate`
+    call per cell, keyed by `(dgp, n)`."""
+    return {
+        (dgp, int(n)): calibrate_and_validate(group, min_recall, min_removal_rate, min_count)
+        for (dgp, n), group in exploded.groupby(["dgp", "n"])
+    }
+
+
+def write_report(raw: pd.DataFrame, config: "Stage9cConfig", output_dir: Path) -> dict[tuple[str, int], Stage9cDecision]:
     exploded = explode_qualifying(raw)
-    decision = calibrate_and_validate(exploded)
+    decisions = calibrate_and_validate_per_cell(exploded)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     exploded.to_csv(output_dir / "exploded_qualifying.csv", index=False)
-    (output_dir / "decision.json").write_text(json.dumps(asdict(decision), indent=2) + "\n", encoding="utf-8")
-    return decision
+    serializable = {f"{dgp}|{n}": asdict(decision) for (dgp, n), decision in decisions.items()}
+    (output_dir / "decision.json").write_text(json.dumps(serializable, indent=2) + "\n", encoding="utf-8")
+    return decisions

@@ -86,8 +86,8 @@ def test_stage9c_aggregate_shards_reproduces_unsharded_evidence(tmp_path: Path) 
     dedup_columns = ["dgp", "n", "replicate"]
     unsharded_sorted = unsharded.sort_values(dedup_columns).reset_index(drop=True)
     aggregated_sorted = raw.sort_values(dedup_columns).reset_index(drop=True)
-    unsharded_sorted["error"] = unsharded_sorted["error"].replace("", pd.NA).fillna("")
-    aggregated_sorted["error"] = aggregated_sorted["error"].replace("", pd.NA).fillna("")
+    unsharded_sorted["error"] = unsharded_sorted["error"].replace("", pd.NA).fillna("").astype(object)
+    aggregated_sorted["error"] = aggregated_sorted["error"].replace("", pd.NA).fillna("").astype(object)
     pd.testing.assert_frame_equal(
         unsharded_sorted.drop(columns="elapsed_seconds"), aggregated_sorted.drop(columns="elapsed_seconds")
     )
