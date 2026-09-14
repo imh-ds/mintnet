@@ -1032,6 +1032,60 @@ a strong transfer, not a failure:
 
 See D-085.
 
+**Stage 9c (D-086, D-087) — bootstrap-rescue mechanism adapted for the
+structured-density engine: PROCEED for `chain_fork_hub` at both tested
+`N`, REASSESS for `overlap` on evidence scarcity (not a mechanism
+failure).** `growing_subset_dpi_structured_density_with_stability_
+rescue` mirrors Stage 9's own Fisher-z rescue design
+(`growing_subset_dpi_with_stability_rescue`), adapted for this
+estimator's much higher per-resample cost (`B=10`, not `500`).
+
+- **`chain_fork_hub`: PROCEED at `N=750` (`pi_min=0.5`) and `N=1500`
+  (`pi_min=0.6`)**, each independently calibrated and confirmed on
+  held-out (replicate-parity) evidence. `N=750`: development `216`
+  instances (recall `1.000`, removal `94.7%`), validation `174`
+  instances (recall `1.000`, removal `93.75%`). `N=1500`: development
+  `36` instances (recall `1.000`, removal `100%`), validation `46`
+  instances (recall `1.000`, removal `100%`). Validated only at
+  `strength=0.5`, `B=10` bootstraps, `screening_alpha=.001`,
+  `max_conditioning_size=4`. **`pi_min` does NOT interpolate between
+  `N=750` and `N=1500`** — it is selected independently from a fixed
+  discrete grid (`{.50,.60,.70,.80,.90}`) at each tested point, not a
+  fitted continuous function of `N` the way `alpha(N)` is elsewhere in
+  this project. No claim is made for any untested `N` (e.g. `N=1024`)
+  — if a real analysis falls between the tested points, either
+  calibrate directly at that `N` or default to the stricter of the two
+  validated values (`0.6`) as the conservative choice, never
+  interpolate or extrapolate.
+- **`overlap`: REASSESS, on evidence scarcity, not a demonstrated
+  mechanism failure.** The mistake this rescue mechanism exists to
+  catch (a false edge wrongly retained) is intrinsically rare for
+  `overlap` at the conditioning depths its own qualifying replicates
+  mostly reach (consistent with D-085's own high false-edge accuracy
+  at shallow depth) — only `1` such instance observed at `N=750` and
+  `0` at `N=1500` across `16` successful replicates, against this
+  charter's own `min_count=10` floor. Closing that gap would need
+  roughly `150`-`200` additional qualifying replicates per cell, made
+  impractical by `overlap`'s own demonstrated `~33%` single-replicate
+  6-hour job-timeout rate (`B=10` resamples run largely serially on
+  GitHub-hosted runners' `2` vCPUs). **The existing, already-validated
+  Fisher-z bootstrap-stability rescue for this exact shape
+  (`pi_min=.80`, D-020/D-028) remains the standing option for
+  `overlap` in the meantime — this is a scope gap for the structured-
+  density engine specifically, not a contraindication.**
+- Two engineering lessons, independent of either result above: (1) a
+  per-shard evidence writer should flush completed replicates
+  incrementally rather than only at the end of its own loop, so a
+  6-hour job-timeout cancellation does not discard already-finished
+  work; (2) a report-generation function must be exercised on real
+  evidence before a decision is finalized — a bug in `write_report`
+  itself (pooling every `(dgp, N)` cell into one calibration instead of
+  evaluating each independently, contradicting this charter's own gate
+  text) went unnoticed until finalization, and a structurally identical
+  mistake was independently made by hand during interim analysis.
+
+See D-086, D-087.
+
 **Stage 8a (D-066) — Tier-0 confidence-margin score: calibrated for
 retain-dominant decisions, informative-only (not calibrated) for the
 chain/fork indirect-edge prune decision below margin `0.9`.** Testing

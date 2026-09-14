@@ -6966,3 +6966,122 @@ for a new mechanism should be derived from a direct measurement of
 that mechanism's own worst-case cost (here, the bootstrap-rescue
 layer), not from a prior stage's own pre-rescue point-estimate timing,
 which under-predicted this charter's own real dispersion.
+
+## D-087: Stage 9c `chain_fork_hub` cell — PROCEED at both `N=750` and `N=1500`, reached only after fixing a real bug in the report generator itself and correcting a self-inflicted analysis error along the way (mi-native, Stage 9c)
+
+Date: 2026-09-14
+
+Continues D-086. `chain_fork_hub`'s much lower per-replicate
+qualification rate (~7.4%, D-085) meant its own path to a decisive
+result was compute-cheap but recovery-heavy: reaching the charter's
+own `min_count=10`-per-half bar required expanding well past the
+initial 200-replicate-per-`N` batch, ultimately to the full
+`replicates=2000` ceiling the charter's own config already authorized
+for `N=750` (`N=1500` reached a clean result at `400` replicates and
+did not need the full budget). Every dispatch used the smallest
+`--replicate-range` chunking the evidence to that point justified,
+following D-086's own now-standard recovery pattern: **9 separate
+GitHub Actions dispatches, at chunk sizes ranging from 40 replicates
+down to 1**, needed to fully clear `N=750`'s own 2,000-replicate
+range without an uncaught 6-hour job timeout. Every one of the small
+number of shards that did time out (2 at 40-replicate granularity, 1
+at 8-replicate, 1 at 4-replicate, 1 at 2-replicate) was recovered by
+re-dispatching only the missing range at a finer grain -- the same
+mechanism-agnostic recovery procedure used throughout D-086, now
+exercised at real scale (`2,400` total evidence rows across `chain_
+fork_hub`'s two `N` cells, zero data lost to any timeout).
+
+**A real bug was found and fixed in `stage9c_bootstrap_rescue_
+reporting.write_report` itself while preparing to finalize this
+entry**: it called `calibrate_and_validate` once on the FULL `raw`
+DataFrame pooled across every `(dgp, N)` cell, contradicting this
+charter's own explicit gate text ("at every tested `(dgp, N)` cell
+with at least 10 qualifying ... instances"). A high-volume cell
+(`overlap`'s own ~100% qualification rate) could silently mask a
+genuinely under-powered or failing cell for a different DGP or `N`.
+Fixed by adding `calibrate_and_validate_per_cell`, which the module's
+own new unit test (`test_calibrate_and_validate_per_cell_keeps_
+cells_independent`) confirms keeps a high-volume PROCEED-worthy cell
+from contaminating a separate, genuinely sparse REASSESS-worthy one.
+`write_report`/`decision.json` now key by `"dgp|N"` and report one
+decision per cell, matching the charter's own text for the first time.
+
+**A separate, self-inflicted analysis error is disclosed here
+directly, not smoothed over**: partway through this charter's own
+evidence-gathering, `N=750` was reported to the user as PROCEED based
+on a manual aggregation script that accidentally pooled in `chain_
+fork_hub`'s own `N=1500` rows alongside its `N=750` rows (the exact
+same class of mistake the `write_report` bug above represents, just
+made by hand instead of in the shipped code) -- the properly-isolated
+result at that point in time was actually REASSESS, with validation-
+half removal at `83.3%`, just under the `85%` bar. A subsequent, more
+careful line-by-line audit of every shard directory (verifying each
+shard folder's own file contents against its filename, checking for
+duplicate `(dgp, N, replicate)` rows) caught this before it was
+recorded as a decision-log entry, and a proper Wilson confidence
+interval on the pooled removal-rate estimate at that sample size
+(`[0.797, 0.966]`, n=46) showed the true rate was genuinely
+undetermined at that point -- honestly requiring more evidence, not a
+rounding error in either direction. The additional `1,000` replicates
+gathered afterward (reaching the full `2,000` ceiling) resolved this
+ambiguity with a real, no-longer-borderline margin (below).
+
+**Final result, both cells PROCEED, from the fully verified `2,000`/
+`400`-replicate evidence** (`results/generated/stage9c_bootstrap_
+rescue/`): `N=750` selects `pi_min=0.5` (development `216` instances,
+recall `1.000`, removal `94.7%`; validation `174` instances, recall
+`1.000`, removal `93.75%`). `N=1500` selects `pi_min=0.6`
+(development `36` instances, recall `1.000`, removal `100%`;
+validation `46` instances, recall `1.000`, removal `100%`). **Every
+true-retained edge across both cells (`470` total) scored a perfect
+`pi_final=1.0`** (retained in all `10` of `10` bootstrap resamples,
+no exceptions) -- recall stays `1.000` at every candidate `pi_min`
+from `0.5` through `0.9` at both `N`, so the calibration's own choice
+of the SMALLEST eligible threshold (`0.5` at `N=750`, `0.6` at
+`N=1500`) reflects the grid-search procedure's own conservative
+design, not a demonstrated recall cost at higher thresholds in this
+evidence -- a stricter threshold would have cost nothing here, but
+generalizing that to "always pick the strictest available" is not
+supported by only two tested conditions where every true edge
+happened to score perfectly.
+
+**`pi_min` does not interpolate between the two tested `N` values.**
+Unlike the fitted, continuous `alpha(N)` formula elsewhere in this
+project, `pi_min` here is selected from a fixed discrete grid
+(`{.50, .60, .70, .80, .90}`), independently, per tested cell. `N=750`
+and `N=1500` are the only two points with any evidence at all; no
+claim is made about `N=1024` or any other untested value in between
+or outside this range, and this charter's own initial mid-flight
+scare (a validation half sitting at `83.3%`, just under the bar,
+before more data resolved it upward to `93.75%`) is a concrete
+demonstration of how sensitive this calibration can be near a small
+sample -- extrapolating a specific `pi_min` to an untested `N` from
+only two points would repeat exactly the mistake this charter's own
+mid-course correction caught.
+
+Decision: **`chain_fork_hub`: PROCEED at both `N=750` (`pi_min=0.5`)
+and `N=1500` (`pi_min=0.6`), each independently calibrated and
+validated on held-out replicates per the charter's own frozen gate.**
+Combined with D-086's `overlap` REASSESS-on-evidence-scarcity, this
+closes Stage 9c: the structured-density engine's bootstrap-rescue
+mechanism is now validated for one composed-network shape
+(`chain_fork_hub`), with `overlap` remaining an open question for this
+engine specifically (the older Fisher-z engine's own already-validated
+rescue, D-020/D-028, still covers `overlap` in the meantime).
+
+Consequences: `docs/validated_operating_ranges.md` should record
+`growing_subset_dpi_structured_density_with_stability_rescue` as
+validated for `chain_fork_hub` at `N in {750, 1500}`,
+`strength=0.5`, `B=10` bootstraps, with the specific calibrated
+`pi_min` per `N` (not a general rule, not interpolated), and explicitly
+flag `overlap` as unvalidated for this engine (D-086). Two process
+notes for future charters: (1) always run the actual shipped
+report-generation code path on real evidence before finalizing a
+decision, rather than a hand-rolled aggregation script, since the
+`write_report` bug and the manual-analysis error here were the exact
+same mistake made twice, independently, in two different places --
+using one verified, tested path instead of two ad hoc ones would have
+caught it once, not needed a separate audit to catch it a second time;
+(2) a borderline result close to a predeclared bar, on a small sample,
+warrants an explicit confidence-interval check before reporting a
+verdict either way, not just the point estimate.
