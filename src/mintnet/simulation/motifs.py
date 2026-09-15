@@ -118,30 +118,39 @@ def sample_overlapping_triangles(n: int, rng: np.random.Generator) -> np.ndarray
 
 
 ORGANIC_NETWORK_TRUE_EDGES: tuple[tuple[int, int], ...] = (
-    (0, 1), (0, 2), (1, 2), (1, 3), (2, 3),
-    (3, 4), (4, 5),
-    (5, 6), (6, 7), (5, 7),
-    (4, 8), (8, 9),
-    (9, 10), (9, 11), (9, 12),
-    (10, 11), (11, 12),
-    (9, 13),
-    (3, 12),
+    (0, 1), (0, 2), (1, 2),
+    (2, 3), (2, 4), (3, 4),
+    (4, 5), (4, 6), (5, 6),
+    (6, 7), (6, 8), (7, 8),
+    (8, 9), (8, 10), (9, 10),
+    (10, 11), (10, 12), (11, 12),
+    (12, 13), (12, 0), (13, 0),
 )
 ORGANIC_NETWORK_P = 14
 
 
 def _build_organic_network_precision() -> np.ndarray:
-    """docs/stage10a_charter.md's own hand-specified topology: one
-    connected, cyclic 14-node graph (a dense local cluster, two hubs,
-    a broker, a second cluster, a pendant, and a long-range shortcut
-    tying the two ends together), unlike every prior DGP's disjoint
-    motifs. Off-diagonal `-0.15` per true edge keeps every row
-    diagonally dominant (worst case, node 9's degree-5 row sums to
-    `0.75 < 1`) and therefore positive definite without per-edge
-    tuning -- verified at import time, not merely asserted."""
+    """docs/stage10a_charter.md's own topology (D-089's corrected
+    version): a closed ring of 7 overlapping triangles sharing
+    consecutive nodes (`{0,1,2}`, `{2,3,4}`, `{4,5,6}`, `{6,7,8}`,
+    `{8,9,10}`, `{10,11,12}`, `{12,13,0}` -- the last closing the ring
+    back to node 0), giving 7 degree-4 hub nodes alternating with 7
+    degree-2 member nodes, one connected component with genuine cycles.
+    Off-diagonal `-0.25` per true edge -- D-089's own corrected value,
+    reused unchanged from `_TRIANGLE_PRECISIONS`/`_OVERLAPPING_
+    TRIANGLES_PRECISION`'s own already-validated strength, not a new
+    value tuned specifically to make this DGP pass screening. The
+    original `-0.15` (this project's first attempt, sized only to
+    guarantee diagonal dominance) diluted below the screening threshold
+    once spread across a connected structure this much larger than any
+    prior isolated motif -- a general problem with an under-strength
+    edge on a large network, not a defect specific to this topology's
+    shape (D-089 confirms this directly: the original star-hub design
+    ALSO passes once given the same `-0.25` strength). Positive
+    definiteness verified at import time, not merely asserted."""
     precision = np.eye(ORGANIC_NETWORK_P)
     for i, j in ORGANIC_NETWORK_TRUE_EDGES:
-        precision[i, j] = precision[j, i] = -0.15
+        precision[i, j] = precision[j, i] = -0.25
     return precision
 
 
@@ -151,9 +160,10 @@ np.linalg.cholesky(_ORGANIC_NETWORK_PRECISION)  # raises at import time if not p
 
 def sample_organic_network(n: int, rng: np.random.Generator) -> np.ndarray:
     """Draw docs/stage10a_charter.md's own single, densely-interconnected
-    14-node organic-shaped network -- one connected component with
-    cycles, in contrast to every prior DGP's disjoint small motifs.
-    Verified positive definite at import time."""
+    14-node organic-shaped network (D-089's corrected ring-of-triangles
+    topology) -- one connected component with cycles, in contrast to
+    every prior DGP's disjoint small motifs. Verified positive definite
+    at import time."""
     n = _validate_n(n)
     covariance = np.linalg.inv(_ORGANIC_NETWORK_PRECISION)
     data = rng.multivariate_normal(np.zeros(ORGANIC_NETWORK_P), covariance, size=n)

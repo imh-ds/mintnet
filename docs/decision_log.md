@@ -7162,3 +7162,80 @@ before running it, not after a user notices the mismatch -- this is
 the same class of miss as D-087's own note about using one verified
 path instead of an ad hoc one, just at the dispatch-parameter level
 rather than the analysis-script level.
+
+## D-089: Stage 10a Step 1 correction -- the original star-hub topology's screening misses were caused by under-strength edges diluted across a large network, not by the star shape itself; a ring of 7 overlapping triangles at the already-validated edge strength fixes it (mi-native, Stage 10a)
+
+`docs/stage10a_charter.md` (frozen 2026-09-15) specified a 14-node
+single connected network built around two star-shaped hub nodes (one
+degree-4, one degree-5) with off-diagonal partial correlation `-0.15`
+per true edge, sized only to guarantee diagonal dominance (positive
+definiteness), not calibrated to survive screening at scale. A direct
+spot-check (`N=750`, seed `7`, `screening_alpha=0.001`) found 2 of the
+19 true edges -- both touching the degree-4 hub, node 3 -- failed to
+screen in at all: `(2,3)` at `p=0.0014` (barely missing the `0.001`
+cutoff) and `(3,4)` at `p=0.0064` (missing by a wider margin).
+
+**The user's own diagnosis of the likely cause was tested directly,
+not assumed correct or incorrect.** The user proposed that a star-
+shaped hub (one node broadcasting to several otherwise-unrelated
+neighbors) dilutes marginal correlation more than a hub built from
+overlapping triangles (reusing the already-validated `overlap` DGP's
+own shared-node pattern, where node 8's identical degree-4 connectivity
+screens in perfectly). **This hypothesis was tested and found
+incomplete.** A first redesign -- a closed ring of 7 overlapping
+triangles at the SAME `-0.15` strength -- was measured directly and
+still missed 4 of 21 edges, worse than the original star design's 2
+misses. A second test -- the ORIGINAL star-hub topology, unchanged
+in shape, but at `-0.20` instead of `-0.15` -- passed with zero misses
+across every tested pair. **This isolates the true cause: edge
+strength diluted by network size, not topology shape.** `-0.15` was
+never validated at this scale; it was sized only for the diagonal-
+dominance PD guarantee. Confirmed further: the ring-of-triangles
+topology ALSO passes cleanly once given the same corrected strength
+(`-0.20` or `-0.25`), and remains clean across 5 independently-seeded
+resamples at `-0.25` (0 misses of 21 edges each time, worst `p=
+4.3e-19` -- far from borderline).
+
+**Final design (implemented in `mintnet.simulation.motifs.sample_
+organic_network`, additive, replacing the original topology before
+any Step 2/3/4 evidence was gathered against it -- the charter's own
+frozen text is left as the historical record of the first attempt,
+per this project's own "never silently edit a frozen charter" rule)**:
+a closed ring of 7 overlapping triangles (`{0,1,2}, {2,3,4}, {4,5,6},
+{6,7,8}, {8,9,10}, {10,11,12}, {12,13,0}` -- the last closing the ring),
+21 true direct edges, 7 hub nodes at degree 4 alternating with 7
+member nodes at degree 2, off-diagonal `-0.25` per edge -- reused
+UNCHANGED from `_TRIANGLE_PRECISIONS`/`_OVERLAPPING_TRIANGLES_
+PRECISION`'s own already-validated strength, deliberately not a new
+value tuned specifically to make this DGP pass (that would be p-hacking
+the DGP itself, the exact failure mode this project's own confirmatory
+discipline exists to prevent). Verified positive definite at import
+time (`np.linalg.cholesky`, not merely asserted in a docstring). A
+direct re-check confirms all 21 true edges now screen in
+(`screening_alpha=0.001`, same `N=750`, seed `7`); the flagged
+candidate pool also grew from 18 pairs (the original topology) to 51
+(this one) -- expected and desired, since the added cross-triangle
+indirect pairs around the ring are exactly the harder conditioning
+tests this charter exists to stress-test, not noise to eliminate.
+
+Decision: Stage 10a's Step 1 DGP is corrected to the ring-of-triangles
+topology at `-0.25` edge strength; Step 2's cost measurement (dispatched
+sharded by candidate-pair batch, per the charter's own requirement)
+proceeds against this corrected DGP, not the original star-hub one.
+No gate decision is made here -- this entry documents a Step 1
+implementation correction discovered before any gate-relevant evidence
+was gathered, not a PROCEED/REASSESS outcome.
+
+Consequences: `docs/stage10a_charter.md` itself is NOT edited -- its
+frozen Step 1 text describes the original (flawed) topology, and this
+entry is the disclosed record of why it changed, matching this
+project's own established convention (D-086/D-087's own corrections)
+of appending rather than silently rewriting. Process note for future
+charters: when a synthetic DGP's edge strength is chosen only to
+satisfy a mathematical constraint (here, diagonal dominance for
+positive definiteness) rather than validated to survive the actual
+pipeline step that will run on it (here, screening), that is itself a
+disclosed risk worth stating in the charter -- this one was not
+stated, and should have been, before Step 2 uncovered it as a
+practical implementation problem rather than a design decision made in
+advance.
