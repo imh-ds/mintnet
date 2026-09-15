@@ -1,0 +1,35 @@
+name: Stage 9d Step 2 -- full-repeat mechanism cost re-measurement
+
+# One-off, manually-triggered dispatch for a single head-to-head timing
+# measurement (docs/stage9d_charter.md's Step 2), not a gridded
+# evidence-generation run -- does not use sharded_benchmark.yml's
+# matrix contract since there is nothing to shard here (one dataset,
+# one mechanism, one bootstraps value). Standing project requirement:
+# any run expected to take non-trivial wall-clock time must dispatch
+# here, never locally (D-088 discloses an earlier violation of this
+# for this exact measurement).
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      NUMEXPR_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - run: python scripts/stage9d_full_repeat_cost.py --output result.json
+      - run: cat result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage9d-full-repeat-cost
+          path: result.json
+          retention-days: 90
