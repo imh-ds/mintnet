@@ -7239,3 +7239,60 @@ disclosed risk worth stating in the charter -- this one was not
 stated, and should have been, before Step 2 uncovered it as a
 practical implementation problem rather than a design decision made in
 advance.
+
+## D-090: Stage 9d's full-repeat-vs-localized cost comparison is archived, not pursued further; the localized mechanism is evaluated on its own merits going forward (mi-native, Stage 9d)
+
+Two attempts at measuring the existing full-repeat mechanism's exact
+cost (the original unsharded dispatch, then a per-resample-sharded
+retry) both failed to produce a clean number: the unsharded run hit
+GitHub's 6-hour job limit; the sharded retry saw one resample finish
+in 43 minutes and a second exceed 6 hours without finishing, despite
+being nominally the same computation. Sharding by resample count alone
+does not fix this -- D-085 had already measured this exact search's
+own cost on `overlap`-shaped data as a heavy-tailed distribution
+(`mean 377s, max ~14,548s`), and a bootstrap resample (row-duplicated
+data) is if anything more likely to land in that tail, not less. This
+was knowable in advance from information already in this project's own
+decision log and should have informed the sharding design rather than
+being discovered by a second timeout.
+
+**Decision: this comparison is closed, not pursued to a cleaner number.**
+The full-repeat mechanism will never be exposed through `mintnet.api.
+discover`'s own public surface -- it exists only as the prior
+mechanism the localized one replaces, and its own exact cost is no
+longer tracked as a benchmark to beat. The qualitative finding already
+in hand (unbounded, unpredictable cost per resample vs. the localized
+mechanism's consistent 176-393 seconds total, deterministic regardless
+of `n_jobs`) is sufficient to close Step 2's own question; no further
+GitHub Actions time will be spent trying to time the full-repeat
+mechanism precisely.
+
+**Steps 3-4 are reframed accordingly.** Rather than asking whether the
+localized mechanism matches the full-repeat mechanism's own prior
+calibration, `src/mintnet/experiments/stage9d_localized_rescue.py`
+(new, mirrors `stage9c_bootstrap_rescue.py`'s own shardable structure
+and reuses `stage9c_bootstrap_rescue_reporting.py`'s calibration/
+validation logic unchanged) evaluates the localized mechanism entirely
+on its own evidence: does it correctly retain true edges and correctly
+drop false ones, calibrated and validated fresh via `chain_fork_hub`/
+`overlap` at `N in {750, 1500}`, against this project's own standing
+gate (recall `>=0.95`, removal `>=0.85`, per `(dgp, N)` cell). Because
+the localized mechanism's own per-replicate bootstrap cost is now
+cheap (confirmed directly: one real `overlap` replicate at this
+runner's smoke-test settings completed bootstrapping in `59.7s`),
+`max_bootstrapped_replicates_per_cell` is raised from Stage 9c's own
+`10` to `60` -- affordable now in a way it never was for the full-
+repeat mechanism, which is the entire point of Stage 9d existing.
+
+Consequences: no change yet to `docs/validated_operating_ranges.md`
+-- this entry closes the cost-comparison question and records the
+evidence-generation runner's own existence; the actual PROCEED/
+REASSESS gate decision awaits the real evidence run this runner
+produces. Process note: when a charter's own background section
+already discloses a heavy-tailed cost distribution for the mechanism
+under study (D-085, cited in this charter's own text), that disclosure
+should directly shape how any follow-on cost measurement is sharded --
+matching shard count to a nominal unit of work (here, "one resample")
+without checking whether that unit's own tail risk exceeds the job
+time limit on its own is the same class of miss as D-088's original
+one, just one level deeper.
