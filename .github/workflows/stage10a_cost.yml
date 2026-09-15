@@ -1,0 +1,62 @@
+name: Stage 10a Step 2 -- organic_network cost measurement
+
+# REQUIRED before any full evidence run (docs/stage10a_charter.md).
+# Sharded by candidate-pair BATCH from the very first dispatch --
+# learning directly from D-088's own disclosed sharding miss on Stage
+# 9d's cost measurement (a single unsharded job exceeded GitHub's
+# 6-hour job limit and was cancelled with no result). Each shard
+# recomputes the cheap, deterministic screening/connectivity step
+# identically, then only pays for the expensive growing-subset search
+# on its own round-robin subset of the full flagged candidate list --
+# see stage10a_cost_shard.py for why the pool computation must use the
+# FULL candidate graph, not a shard-local subset.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_index: [0, 1, 2, 3, 4, 5]
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      NUMEXPR_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - run: python scripts/stage10a_cost_shard.py --shard-index ${{ matrix.shard_index }} --num-shards 6 --output shard-${{ matrix.shard_index }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage10a-cost-shard-${{ matrix.shard_index }}
+          path: shard-${{ matrix.shard_index }}.json
+          retention-days: 90
+
+  aggregate:
+    needs: shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "stage10a-cost-shard-*"
+          path: shards
+          merge-multiple: true
+      - run: python scripts/aggregate_stage10a_cost_shards.py --shards-glob "shards/*.json" --output result.json
+      - run: cat result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage10a-cost
+          path: result.json
+          retention-days: 90

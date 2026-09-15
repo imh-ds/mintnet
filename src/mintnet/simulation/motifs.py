@@ -117,6 +117,49 @@ def sample_overlapping_triangles(n: int, rng: np.random.Generator) -> np.ndarray
     return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
 
 
+ORGANIC_NETWORK_TRUE_EDGES: tuple[tuple[int, int], ...] = (
+    (0, 1), (0, 2), (1, 2), (1, 3), (2, 3),
+    (3, 4), (4, 5),
+    (5, 6), (6, 7), (5, 7),
+    (4, 8), (8, 9),
+    (9, 10), (9, 11), (9, 12),
+    (10, 11), (11, 12),
+    (9, 13),
+    (3, 12),
+)
+ORGANIC_NETWORK_P = 14
+
+
+def _build_organic_network_precision() -> np.ndarray:
+    """docs/stage10a_charter.md's own hand-specified topology: one
+    connected, cyclic 14-node graph (a dense local cluster, two hubs,
+    a broker, a second cluster, a pendant, and a long-range shortcut
+    tying the two ends together), unlike every prior DGP's disjoint
+    motifs. Off-diagonal `-0.15` per true edge keeps every row
+    diagonally dominant (worst case, node 9's degree-5 row sums to
+    `0.75 < 1`) and therefore positive definite without per-edge
+    tuning -- verified at import time, not merely asserted."""
+    precision = np.eye(ORGANIC_NETWORK_P)
+    for i, j in ORGANIC_NETWORK_TRUE_EDGES:
+        precision[i, j] = precision[j, i] = -0.15
+    return precision
+
+
+_ORGANIC_NETWORK_PRECISION: np.ndarray = _build_organic_network_precision()
+np.linalg.cholesky(_ORGANIC_NETWORK_PRECISION)  # raises at import time if not positive definite
+
+
+def sample_organic_network(n: int, rng: np.random.Generator) -> np.ndarray:
+    """Draw docs/stage10a_charter.md's own single, densely-interconnected
+    14-node organic-shaped network -- one connected component with
+    cycles, in contrast to every prior DGP's disjoint small motifs.
+    Verified positive definite at import time."""
+    n = _validate_n(n)
+    covariance = np.linalg.inv(_ORGANIC_NETWORK_PRECISION)
+    data = rng.multivariate_normal(np.zeros(ORGANIC_NETWORK_P), covariance, size=n)
+    return (data - data.mean(axis=0)) / data.std(axis=0, ddof=1)
+
+
 def triangle_precisions() -> dict[str, np.ndarray]:
     """Return copies of the named positive-definite precision fixtures."""
     return {name: precision.copy() for name, precision in _TRIANGLE_PRECISIONS.items()}

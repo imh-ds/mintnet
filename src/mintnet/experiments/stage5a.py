@@ -46,7 +46,7 @@ import pandas as pd
 import yaml
 
 from mintnet.comparators.ebicglasso import fit_ebicglasso
-from mintnet.experiments import stage2d, stage4l
+from mintnet.experiments import stage2d, stage4l, stage10a
 from mintnet.experiments.stage1j_fit import fit_candidate_forms, select_form
 from mintnet.pipeline import compose_screen_then_prune
 from mintnet.screening import compute_pairwise_screening_evidence, screen_uncorrected
@@ -91,6 +91,11 @@ _DGP_REGISTRY: dict[str, dict[str, object]] = {
         "sample": stage2d._sample_network,
         "p": stage2d.P,
         "true_edges": stage2d.TRUE_DIRECT_EDGES,
+    },
+    "organic_network": {
+        "sample": stage10a._sample_network,
+        "p": stage10a.P,
+        "true_edges": stage10a.TRUE_DIRECT_EDGES,
     },
     "triangle_balanced": {
         "sample": _sample_triangle_balanced,
