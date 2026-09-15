@@ -11,6 +11,7 @@ from .growing_subset_dpi_mi import MIGrowingSubsetResult, growing_subset_dpi_mi
 from .sequential import PairDecision, sequential_screen_and_prune, sequential_screen_and_prune_detailed
 from .stability_rescue import (
     StabilityRescueResult,
+    growing_subset_dpi_structured_density_with_localized_rescue,
     growing_subset_dpi_structured_density_with_stability_rescue,
     growing_subset_dpi_with_stability_rescue,
 )
@@ -29,5 +30,6 @@ __all__ = [
     "MIGrowingSubsetResult",
     "growing_subset_dpi_with_stability_rescue",
     "growing_subset_dpi_structured_density_with_stability_rescue",
+    "growing_subset_dpi_structured_density_with_localized_rescue",
     "StabilityRescueResult",
 ]

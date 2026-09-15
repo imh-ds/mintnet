@@ -7085,3 +7085,80 @@ caught it once, not needed a separate audit to catch it a second time;
 (2) a borderline result close to a predeclared bar, on a small sample,
 warrants an explicit confidence-interval check before reporting a
 verdict either way, not just the point estimate.
+
+## D-088: Stage 9d Step 2 -- the localized bootstrap-rescue mechanism clears the charter's cost gate by more than an order of magnitude, but the measurement itself is an honestly-disclosed lower bound taken at the wrong `n_jobs` setting (mi-native, Stage 9d)
+
+`docs/stage9d_charter.md` (frozen 2026-09-14, commit `f6b36ad`)
+required, as a hard prerequisite before any calibration or evidence
+work, a direct head-to-head timing comparison between the existing
+full-repeat bootstrap-rescue mechanism (`growing_subset_dpi_
+structured_density_with_stability_rescue`) and the new localized
+mechanism (`growing_subset_dpi_structured_density_with_localized_
+rescue`, added this same session), on the same real `overlap`-shaped
+dataset that originally motivated this charter.
+
+**Step 1 (mechanism) was completed first, additively, with tests.**
+`StructuredDensityGrowingSubsetResult` gained a new `decisive_
+conditioning_set` field (resolving a design gap the charter itself did
+not anticipate: which conditioning set to freeze for a retained edge
+tested against multiple subsets -- resolved by freezing the same
+max-p-value subset that `decisive_p_value` already reports, keeping
+the convention internally consistent). `compute_edge_stability_
+localized_structured_density` and `growing_subset_dpi_structured_
+density_with_localized_rescue` were added mirroring the existing
+full-repeat mechanism's own conventions (seeding via the existing
+`_subset_seed`, `_resolve_n_jobs`/`_AUTO_N_JOBS_CAP` from D-081,
+identical bootstrap-resample construction). 11 new unit tests pass;
+the pre-existing growing-subset test suite (6 tests) shows zero
+regressions from the additive `decisive_conditioning_set` field.
+
+**Step 2's measurement, and the deviation in how it was run.** Both
+mechanisms were timed against the identical real `overlap` sample
+(`N=750`, `strength=0.5`, seed `7`, `screening_alpha=0.001`,
+`alpha=0.14`, 6 qualifying pairs at conditioning depth `>=2`,
+`bootstraps=2`, `master_seed=1`). The localized mechanism's own
+bootstrap overhead (total time minus the shared point-estimate cost of
+`334.2s`) was **`59.2s`** for `B=2`. The full-repeat mechanism, run
+under the same conditions, was manually killed after accumulating
+**over 101 CPU-minutes** on a single resample pass that had not yet
+completed even `B=2` -- the run was still actively consuming CPU (not
+hung) when terminated. **This is a lower bound, not a completed
+measurement**: the true full-repeat cost for `B=2` is unknown beyond
+"more than 101 CPU-minutes."
+
+**Both runs used `n_jobs=1`, not the charter's own specified
+`n_jobs="auto"`.** This was caught only when the user directly
+questioned it, not caught proactively -- a real process miss, disclosed
+here rather than smoothed over. The impact on the conclusion is
+bounded and small: the full-repeat mechanism parallelizes across
+bootstrap resamples, and `B=2` caps any `n_jobs="auto"` speedup at
+roughly 2x locally (`_AUTO_N_JOBS_CAP` from D-081 would resolve to
+`min(cpu_count, 8)`, but only 2 resamples exist to distribute across).
+Halving the full-repeat side's cost (to a hypothetical `~50 CPU-
+minutes`) against the localized side's `59.2s` still yields a speedup
+comfortably over `50x` -- the charter's provisional gate is `>=10x`.
+The gate is not sensitive to this deviation, but future evidence
+generation under this charter (Steps 3-4) must not repeat it, and per
+the charter's own text, must run on the sharded GitHub Actions
+workflow rather than local multiprocessing regardless of `n_jobs`.
+
+Decision: **Step 2's gate clears** -- the localized mechanism is
+confirmed, even under a conservative lower-bound reading of an
+incomplete comparison, to be more than an order of magnitude cheaper
+than the full-repeat mechanism on real, dense (`overlap`-like) data.
+Per the charter's own sequencing, this authorizes proceeding to Step 3
+(fresh `pi_min` calibration, development/validation split by replicate
+parity, grid `{.50, .60, .70, .80, .90}`) and Step 4 (recall/removal
+validation on fresh evidence, both DGPs, both `N`, via the sharded
+GitHub Actions workflow) -- not yet executed as of this entry.
+
+Consequences: no change yet to `docs/validated_operating_ranges.md`
+-- this entry closes Step 2 only; the localized mechanism itself
+remains unvalidated for calibration/recall/removal until Steps 3-4
+complete. Process note for future charters: when a charter specifies
+exact run conditions for a required measurement (here, `n_jobs=
+"auto"`), verify the actual dispatched command matches that spec
+before running it, not after a user notices the mismatch -- this is
+the same class of miss as D-087's own note about using one verified
+path instead of an ad hoc one, just at the dispatch-parameter level
+rather than the analysis-script level.

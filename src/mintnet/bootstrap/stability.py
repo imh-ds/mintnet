@@ -242,6 +242,156 @@ def _run_one_growing_subset_structured_density(
     return screened, result.adjacency
 
 
+@dataclass(frozen=True)
+class LocalizedStabilityResult:
+    """Stage 9d's own targeted bootstrap (docs/stage9d_charter.md):
+    unlike `StabilityResult`, this does NOT test candidacy stability
+    under resampling at all -- each qualifying pair's own conditioning
+    set is frozen from the caller's already-completed point estimate
+    (`StructuredDensityGrowingSubsetResult.decisive_conditioning_set`),
+    and only that pair's own direct independence test against that
+    fixed set is re-run per resample; no re-screening, no re-running
+    the growing-subset search. `pi_final` is therefore NOT assumed
+    comparable to `StabilityResult.pi_final` from the full-repeat
+    mechanism (Stage 9c) -- whether it discriminates correct from
+    incorrect decisions as well is the open question this charter
+    exists to test, not a premise. Per-pair (not per-resample) success/
+    failure counts, since a degenerate resample for one pair's own
+    frozen columns does not imply the same for a different pair's own
+    different columns."""
+
+    pi_final: dict[tuple[int, int], float]
+    successful_bootstraps: dict[tuple[int, int], int]
+    failed_bootstraps: dict[tuple[int, int], int]
+
+
+def _run_one_localized_resample(
+    resample: np.ndarray,
+    resample_index: int,
+    qualifying_pairs: list[tuple[int, int]],
+    conditioning_sets: dict[tuple[int, int], tuple[int, ...]],
+    dpi_alpha: float,
+    master_seed: int,
+    degree: int,
+    ridge_lambda: float,
+    cv_folds: int,
+    k_perm: int,
+    permutations: int,
+) -> dict[tuple[int, int], bool | None]:
+    """One resample's worth of Stage 9d's own targeted re-test: every
+    qualifying pair against its OWN frozen conditioning set (from the
+    caller's point estimate), no re-screening, no re-running the
+    growing-subset search -- the entire cost simplification docs/
+    stage9d_charter.md exists to validate. Reuses `_subset_seed` from
+    the full-search module so a resample's own test is seeded exactly
+    as the original decisive test for that same (pair, subset) was,
+    keeping this a pure function of already-known quantities regardless
+    of `n_jobs`/execution order, matching this project's established
+    convention. Returns `True` (rejects independence, retained),
+    `False` (fails to reject, pruned for this resample), or `None` (a
+    degenerate resample for this pair's own columns -- excluded, not
+    counted as pruned, matching `StabilityResult`'s own handling)."""
+    from mintnet.mi.structured_density import local_permutation_test
+    from mintnet.pipeline.growing_subset_dpi_structured_density import _subset_seed
+
+    outcomes: dict[tuple[int, int], bool | None] = {}
+    for i, j in qualifying_pairs:
+        subset = conditioning_sets[(i, j)]
+        seed = _subset_seed(master_seed, resample_index, i, j, subset)
+        rng = np.random.default_rng(seed)
+        x = resample[:, i]
+        y = resample[:, j]
+        z = resample[:, list(subset)]
+        try:
+            result = local_permutation_test(
+                x, y, z, degree=degree, ridge_lambda=ridge_lambda, cv_folds=cv_folds,
+                k_perm=k_perm, permutations=permutations, rng=rng,
+            )
+        except ValueError:
+            outcomes[(i, j)] = None
+            continue
+        outcomes[(i, j)] = result.p_value <= dpi_alpha
+    return outcomes
+
+
+def compute_edge_stability_localized_structured_density(
+    data: np.ndarray,
+    qualifying_pairs: list[tuple[int, int]],
+    conditioning_sets: dict[tuple[int, int], tuple[int, ...]],
+    dpi_alpha: float,
+    bootstraps: int,
+    master_seed: int,
+    degree: int,
+    ridge_lambda: float,
+    cv_folds: int,
+    k_perm: int,
+    permutations: int,
+    rng: np.random.Generator,
+    *,
+    n_jobs: int | str = "auto",
+) -> LocalizedStabilityResult:
+    """docs/stage9d_charter.md's own targeted alternative to
+    `compute_edge_stability_growing_subset_structured_density`: resample
+    the data, but only re-test the SPECIFIC qualifying pairs against
+    their OWN already-discovered `conditioning_sets`, skipping
+    re-screening and re-running the growing-subset search for every
+    other pair. `n_jobs` has the same meaning and same bit-for-bit-
+    identical-to-sequential guarantee as the full-repeat mechanism's
+    own."""
+    if bootstraps < 1:
+        raise ValueError("bootstraps must be at least 1")
+    if not qualifying_pairs:
+        raise ValueError("qualifying_pairs must be non-empty")
+    resolved_n_jobs = _resolve_n_jobs(n_jobs)
+    resamples = [bootstrap_resample(data, rng) for _ in range(bootstraps)]
+    if resolved_n_jobs == 1:
+        per_resample = [
+            _run_one_localized_resample(
+                resample, index, qualifying_pairs, conditioning_sets, dpi_alpha, master_seed,
+                degree, ridge_lambda, cv_folds, k_perm, permutations,
+            )
+            for index, resample in enumerate(resamples)
+        ]
+    else:
+        with ProcessPoolExecutor(max_workers=resolved_n_jobs) as executor:
+            per_resample = list(
+                executor.map(
+                    _run_one_localized_resample,
+                    resamples,
+                    range(len(resamples)),
+                    repeat(qualifying_pairs),
+                    repeat(conditioning_sets),
+                    repeat(dpi_alpha),
+                    repeat(master_seed),
+                    repeat(degree),
+                    repeat(ridge_lambda),
+                    repeat(cv_folds),
+                    repeat(k_perm),
+                    repeat(permutations),
+                )
+            )
+
+    retained_counts = {pair: 0 for pair in qualifying_pairs}
+    successful = {pair: 0 for pair in qualifying_pairs}
+    failed = {pair: 0 for pair in qualifying_pairs}
+    for outcomes in per_resample:
+        for pair, outcome in outcomes.items():
+            if outcome is None:
+                failed[pair] += 1
+                continue
+            successful[pair] += 1
+            if outcome:
+                retained_counts[pair] += 1
+
+    pi_final: dict[tuple[int, int], float] = {}
+    for pair in qualifying_pairs:
+        if successful[pair] == 0:
+            raise RuntimeError(f"every bootstrap resample was degenerate for pair {pair}; cannot compute edge stability")
+        pi_final[pair] = retained_counts[pair] / successful[pair]
+
+    return LocalizedStabilityResult(pi_final=pi_final, successful_bootstraps=successful, failed_bootstraps=failed)
+
+
 def compute_edge_stability_growing_subset_structured_density(
     data: np.ndarray,
     screening_alpha: float,

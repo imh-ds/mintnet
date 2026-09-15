@@ -7,6 +7,7 @@ from mintnet.bootstrap import (
     compute_edge_stability,
     compute_edge_stability_growing_subset,
     compute_edge_stability_growing_subset_structured_density,
+    compute_edge_stability_localized_structured_density,
 )
 from mintnet.bootstrap.stability import _AUTO_N_JOBS_CAP, _resolve_n_jobs
 from mintnet.simulation import sample_chain
@@ -331,3 +332,110 @@ def test_structured_density_stability_n_jobs_greater_than_one_matches_sequential
 
     assert np.array_equal(sequential.pi_final, parallel.pi_final)
     assert np.array_equal(sequential.pi_candidate, parallel.pi_candidate)
+
+
+# -- compute_edge_stability_localized_structured_density (Stage 9d) --
+# Same collider fixture as the full-repeat mechanism's own qualifying-
+# edge test -- reliably reaches conditioning_size_used >= 2 so there is
+# a real, non-empty decisive_conditioning_set to freeze and re-test.
+
+
+def _collider_data(n: int, seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    x1 = rng.normal(size=n)
+    x2 = rng.normal(size=n)
+    x3 = 0.65 * x1 + 0.65 * x2 + np.sqrt(1 - 2 * 0.65**2) * rng.normal(size=n)
+    x4 = rng.normal(size=n)
+    return np.column_stack([x1, x2, x3, x4])
+
+
+def _qualifying_pairs_and_sets(data, alpha=0.2, master_seed=8, permutations=19):
+    from mintnet.pipeline.growing_subset_dpi_structured_density import growing_subset_dpi_structured_density
+
+    p = data.shape[1]
+    flagged = np.ones((p, p), dtype=bool)
+    np.fill_diagonal(flagged, False)
+    result = growing_subset_dpi_structured_density(
+        data, flagged, alpha, master_seed=master_seed, replicate=0, permutations=permutations,
+    )
+    pairs = [
+        (i, j) for i in range(p) for j in range(i + 1, p)
+        if flagged[i, j] and result.conditioning_size_used[(i, j)] >= 2
+    ]
+    sets = {pair: result.decisive_conditioning_set[pair] for pair in pairs}
+    return pairs, sets
+
+
+def test_localized_stability_pi_final_is_bounded_for_every_qualifying_pair():
+    data = _collider_data(500, seed=7)
+    pairs, sets = _qualifying_pairs_and_sets(data)
+    assert pairs, "fixture must actually produce a qualifying pair for this test to mean anything"
+
+    result = compute_edge_stability_localized_structured_density(
+        data, pairs, sets, dpi_alpha=0.2, bootstraps=2, master_seed=8, degree=1, ridge_lambda=1.0,
+        cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+    )
+    for pair in pairs:
+        assert 0.0 <= result.pi_final[pair] <= 1.0
+
+
+def test_localized_stability_successful_plus_failed_equals_bootstraps_per_pair():
+    data = _collider_data(500, seed=7)
+    pairs, sets = _qualifying_pairs_and_sets(data)
+    bootstraps = 3
+
+    result = compute_edge_stability_localized_structured_density(
+        data, pairs, sets, dpi_alpha=0.2, bootstraps=bootstraps, master_seed=8, degree=1,
+        ridge_lambda=1.0, cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+    )
+    for pair in pairs:
+        assert result.successful_bootstraps[pair] + result.failed_bootstraps[pair] == bootstraps
+
+
+def test_localized_stability_rejects_bootstraps_below_one():
+    data = _collider_data(500, seed=7)
+    pairs, sets = _qualifying_pairs_and_sets(data)
+    with pytest.raises(ValueError, match="bootstraps"):
+        compute_edge_stability_localized_structured_density(
+            data, pairs, sets, dpi_alpha=0.2, bootstraps=0, master_seed=8, degree=1, ridge_lambda=1.0,
+            cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+        )
+
+
+def test_localized_stability_rejects_empty_qualifying_pairs():
+    data = _collider_data(500, seed=7)
+    with pytest.raises(ValueError, match="qualifying_pairs"):
+        compute_edge_stability_localized_structured_density(
+            data, [], {}, dpi_alpha=0.2, bootstraps=2, master_seed=8, degree=1, ridge_lambda=1.0,
+            cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+        )
+
+
+def test_localized_stability_is_reproducible_given_the_same_rng_state():
+    data = _collider_data(500, seed=7)
+    pairs, sets = _qualifying_pairs_and_sets(data)
+
+    result_a = compute_edge_stability_localized_structured_density(
+        data, pairs, sets, dpi_alpha=0.2, bootstraps=2, master_seed=8, degree=1, ridge_lambda=1.0,
+        cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+    )
+    result_b = compute_edge_stability_localized_structured_density(
+        data, pairs, sets, dpi_alpha=0.2, bootstraps=2, master_seed=8, degree=1, ridge_lambda=1.0,
+        cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+    )
+    assert result_a.pi_final == result_b.pi_final
+
+
+def test_localized_stability_n_jobs_greater_than_one_matches_sequential():
+    data = _collider_data(500, seed=7)
+    pairs, sets = _qualifying_pairs_and_sets(data)
+
+    sequential = compute_edge_stability_localized_structured_density(
+        data, pairs, sets, dpi_alpha=0.2, bootstraps=2, master_seed=8, degree=1, ridge_lambda=1.0,
+        cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=1,
+    )
+    parallel = compute_edge_stability_localized_structured_density(
+        data, pairs, sets, dpi_alpha=0.2, bootstraps=2, master_seed=8, degree=1, ridge_lambda=1.0,
+        cv_folds=5, k_perm=3, permutations=19, rng=np.random.default_rng(9), n_jobs=2,
+    )
+    assert sequential.pi_final == parallel.pi_final

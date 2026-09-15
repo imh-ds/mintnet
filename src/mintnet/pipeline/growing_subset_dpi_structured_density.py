@@ -57,6 +57,20 @@ class StructuredDensityGrowingSubsetResult:
     # local_permutation_test calls actually made -- the primary driver
     # of this mechanism's own wall-clock cost.
     n_significance_tests: int
+    # Added for docs/stage9d_charter.md: the specific subset (drawn from
+    # `pool`, not necessarily unique -- see below) that produced
+    # `decisive_p_value`. For a pruned edge, the one subset that
+    # triggered the prune. For a RETAINED edge with a non-empty pool,
+    # every subset at the reached size had to reject independence, so
+    # this is only the subset that happened to produce the MAXIMUM
+    # (weakest) p-value among them, matching `decisive_p_value`'s own
+    # convention -- Stage 9d's own targeted re-test necessarily freezes
+    # on this one subset per edge, not the full set of subsets a
+    # retained decision may have actually required; this is disclosed
+    # there as an open question, not assumed equivalent to the original
+    # decision's own full evidence. Empty tuple for an isolated edge (no
+    # test ever ran).
+    decisive_conditioning_set: dict[tuple[int, int], tuple[int, ...]]
 
 
 def _subset_seed(master_seed: int, replicate: int, i: int, j: int, subset: tuple[int, ...]) -> int:
@@ -99,6 +113,7 @@ def growing_subset_dpi_structured_density(
     cap_reached: dict[tuple[int, int], bool] = {}
     decisive_p_value: dict[tuple[int, int], float] = {}
     confidence: dict[tuple[int, int], float] = {}
+    decisive_conditioning_set: dict[tuple[int, int], tuple[int, ...]] = {}
     n_tests = 0
 
     node_to_component: dict[int, frozenset[int]] = {}
@@ -119,13 +134,16 @@ def growing_subset_dpi_structured_density(
                 cap_reached[(i, j)] = False
                 decisive_p_value[(i, j)] = math.nan
                 confidence[(i, j)] = math.nan
+                decisive_conditioning_set[(i, j)] = ()
                 continue
 
             cap = min(len(pool), max_conditioning_size)
             pruned = False
             reached_size = 0
             triggering_p_value = math.nan
+            triggering_subset: tuple[int, ...] = ()
             max_p_value = math.nan
+            max_p_value_subset: tuple[int, ...] = ()
             for size in range(1, cap + 1):
                 reached_size = size
                 for subset in combinations(pool, size):
@@ -146,9 +164,11 @@ def growing_subset_dpi_structured_density(
                         continue
                     if math.isnan(max_p_value) or result.p_value > max_p_value:
                         max_p_value = result.p_value
+                        max_p_value_subset = subset
                     if result.p_value > alpha:
                         pruned = True
                         triggering_p_value = result.p_value
+                        triggering_subset = subset
                         break
                 if pruned:
                     break
@@ -159,8 +179,10 @@ def growing_subset_dpi_structured_density(
             resolved_p_value = triggering_p_value if pruned else max_p_value
             decisive_p_value[(i, j)] = resolved_p_value
             confidence[(i, j)] = edge_margin(resolved_p_value, alpha, retained=not pruned)
+            decisive_conditioning_set[(i, j)] = triggering_subset if pruned else max_p_value_subset
 
     return StructuredDensityGrowingSubsetResult(
         adjacency=final, conditioning_size_used=sizes, cap_reached=cap_reached,
         decisive_p_value=decisive_p_value, confidence=confidence, n_significance_tests=n_tests,
+        decisive_conditioning_set=decisive_conditioning_set,
     )

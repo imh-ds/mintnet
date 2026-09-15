@@ -5,6 +5,7 @@ import numpy as np
 
 from mintnet.pipeline.stability_rescue import (
     UNRESOLVED_CONDITIONING_SIZE,
+    growing_subset_dpi_structured_density_with_localized_rescue,
     growing_subset_dpi_structured_density_with_stability_rescue,
     growing_subset_dpi_with_stability_rescue,
 )
@@ -299,3 +300,98 @@ def test_structured_density_n_jobs_greater_than_one_matches_the_sequential_resul
     assert np.array_equal(sequential.final_adjacency, parallel.final_adjacency)
     assert sequential.pi_final == parallel.pi_final
     assert sequential.rescued == parallel.rescued
+
+
+# -- growing_subset_dpi_structured_density_with_localized_rescue (Stage 9d) --
+# Same collider fixture as the full-repeat mechanism's own tests above.
+
+
+def _localized_collider_data(n: int, seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    x1 = rng.normal(size=n)
+    x2 = rng.normal(size=n)
+    x3 = 0.65 * x1 + 0.65 * x2 + np.sqrt(1 - 2 * 0.65**2) * rng.normal(size=n)
+    x4 = rng.normal(size=n)
+    return np.column_stack([x1, x2, x3, x4])
+
+
+def test_localized_no_qualifying_edges_means_no_bootstrap_and_identical_adjacency():
+    rng = np.random.default_rng(0)
+    data = rng.normal(size=(300, 4))
+    flagged = np.zeros((4, 4), dtype=bool)
+    flagged[0, 1] = flagged[1, 0] = True
+
+    result = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.001, bootstraps=2, pi_min=0.5,
+        master_seed=1, replicate=0, permutations=19, n_jobs=1, bootstrap_rng=np.random.default_rng(2),
+    )
+
+    assert result.bootstrapped is False
+    assert np.array_equal(result.original_adjacency, result.final_adjacency)
+    assert math.isnan(result.pi_final[(0, 1)])
+    assert result.rescued[(0, 1)] is False
+
+
+def test_localized_a_qualifying_edge_gets_bootstrapped():
+    data = _localized_collider_data(500, seed=7)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    result = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.2, max_conditioning_size=4, bootstraps=2, pi_min=0.5,
+        master_seed=8, replicate=0, permutations=19, n_jobs=1, bootstrap_rng=np.random.default_rng(9),
+    )
+
+    assert result.bootstrapped is True
+    if result.conditioning_size_used[(0, 1)] >= 2:
+        assert not math.isnan(result.pi_final[(0, 1)])
+
+
+def test_localized_final_adjacency_never_adds_an_edge_the_original_did_not_have():
+    rng = np.random.default_rng(2)
+    data = sample_hub(500, 0.5, 3, rng)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    result = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.01, bootstraps=2, pi_min=0.5,
+        master_seed=3, replicate=0, permutations=19, n_jobs=1, bootstrap_rng=np.random.default_rng(4),
+    )
+
+    assert np.all(result.final_adjacency <= result.original_adjacency)
+
+
+def test_localized_reproducible_given_the_same_rng_state():
+    data = _localized_collider_data(500, seed=7)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    result_a = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.2, bootstraps=2, pi_min=0.5,
+        master_seed=8, replicate=0, permutations=19, n_jobs=1, bootstrap_rng=np.random.default_rng(9),
+    )
+    result_b = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.2, bootstraps=2, pi_min=0.5,
+        master_seed=8, replicate=0, permutations=19, n_jobs=1, bootstrap_rng=np.random.default_rng(9),
+    )
+
+    assert result_a.pi_final == result_b.pi_final
+    assert np.array_equal(result_a.final_adjacency, result_b.final_adjacency)
+
+
+def test_localized_n_jobs_greater_than_one_matches_sequential():
+    data = _localized_collider_data(500, seed=7)
+    flagged = np.ones((4, 4), dtype=bool)
+    np.fill_diagonal(flagged, False)
+
+    sequential = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.2, bootstraps=2, pi_min=0.5,
+        master_seed=8, replicate=0, permutations=19, n_jobs=1, bootstrap_rng=np.random.default_rng(9),
+    )
+    parallel = growing_subset_dpi_structured_density_with_localized_rescue(
+        data, flagged, alpha=0.2, bootstraps=2, pi_min=0.5,
+        master_seed=8, replicate=0, permutations=19, n_jobs=2, bootstrap_rng=np.random.default_rng(9),
+    )
+
+    assert sequential.pi_final == parallel.pi_final
+    assert np.array_equal(sequential.final_adjacency, parallel.final_adjacency)
