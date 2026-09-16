@@ -186,3 +186,7 @@ outline/
 # Local Codex worktrees and generated experiment evidence
 .worktrees/
 results/generated/
+
+# Internal review documents, not tracked in the public repo
+docs/postmortem_2026-09-16_search_scaling_and_dense_network_failure.md
+docs/handoff_for_independent_review_2026-09-16.md
