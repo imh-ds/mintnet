@@ -242,3 +242,111 @@ architecture must, before any further evidence generation:
 
 Until all three are satisfied, "the package works" is not a claim this
 project has evidence for.
+
+## 7. Files and functions an independent reviewer must read to get full context
+
+Ordered by priority. An agent with no prior context on this project
+should be able to reconstruct the entire finding from these alone,
+without needing this conversation.
+
+**The defect itself — read these first, in this order:**
+
+1. `src/mintnet/pipeline/growing_subset_dpi_structured_density.py` —
+   the broken search. The specific line is `pool = sorted(component -
+   {i, j})` inside `growing_subset_dpi_structured_density()`. Read the
+   whole function; the pool is used to build every candidate
+   conditioning subset tested from size 1 up to `max_conditioning_size`.
+2. `src/mintnet/pipeline/compose.py` — `connected_components()`, the
+   function that produces `component` above. Confirms the pool is
+   drawn from the *entire* screened connected component, not a node's
+   own adjacency.
+3. `docs/validated_operating_ranges.md` — the row for Stage 1k/D-015
+   ("Multi-variable conditioning — DPI conditioning on all other nodes
+   in a candidate component"). This is the documentary proof that the
+   whole-component pool was the deliberate, explicitly-named, validated
+   design from the start, not an unnoticed bug.
+4. `src/mintnet/simulation/motifs.py` — `sample_organic_network()`,
+   `ORGANIC_NETWORK_TRUE_EDGES`, `_build_organic_network_precision()`.
+   The one DGP in this project's history that is a single connected,
+   cyclic, realistically-shaped network rather than disjoint small
+   motifs — the fixture that exposed the defect.
+5. `src/mintnet/experiments/stage10a.py` and the `"organic_network"`
+   entry in `_DGP_REGISTRY` (`src/mintnet/experiments/stage5a.py`) —
+   how the fixture is wired into the project's shared DGP registry.
+6. `scripts/stage10a_cost_shard.py` — reproduces the search's own
+   per-pair loop for sharding purposes; this is the script that
+   actually produced the multi-hour-per-shard timings cited in Section
+   1. Its module docstring explains why the pool must be computed from
+   the *full* candidate graph even when sharding by pair batch (a
+   shard-local subset would silently shrink the pool and change the
+   answer).
+7. `.github/workflows/stage10a_cost.yml` and
+   `scripts/aggregate_stage10a_cost_shards.py` — the dispatch mechanics
+   for the run that produced the timings. GitHub Actions run ID
+   `35013637338` (cancelled by explicit instruction after 5 of 6 shards
+   confirmed the finding) is the actual run referenced throughout this
+   document.
+
+**The core primitives that are sound and must not be confused with the defect:**
+
+8. `src/mintnet/mi/structured_density.py` — `local_permutation_test()`.
+   Given a specific conditioning set, this test is correct. The defect
+   is entirely upstream of this function, in how candidate conditioning
+   sets are chosen, never in this function's own logic.
+9. `src/mintnet/screening/pairwise_correlation.py` —
+   `compute_pairwise_screening_evidence()`, `screen_uncorrected()`. No
+   conditioning-pool concept exists here; unaffected by any of this.
+
+**The related, independently-confirmed failure mode (bootstrap-rescue):**
+
+10. `src/mintnet/bootstrap/stability.py` —
+    `compute_edge_stability_growing_subset_structured_density()` /
+    `_run_one_growing_subset_structured_density()` (the archived
+    full-repeat mechanism) and
+    `compute_edge_stability_localized_structured_density()` (the
+    localized replacement, itself now also archived per Section 4,
+    since it sits on top of the same broken base search).
+11. `src/mintnet/pipeline/stability_rescue.py` —
+    `growing_subset_dpi_structured_density_with_stability_rescue()`
+    and `growing_subset_dpi_structured_density_with_localized_rescue()`,
+    the two rescue entry points built on the functions above.
+12. `docs/decision_log.md` entries **D-085** (the heavy-tailed cost
+    distribution disclosed before any of this, `mean 377s, max
+    ~14,548s` — should have been a warning sign earlier than it was),
+    **D-088** (first, unsharded cost-measurement failure), **D-090**
+    (the resample-sharded retry, where one resample finished in 43
+    minutes and a sibling exceeded 6 hours on nominally the same
+    computation), and **D-091** (the pointer entry to this document).
+    Read in that order; they are the actual narrative of how this was
+    discovered, not just the conclusion.
+13. `src/mintnet/experiments/stage9d_localized_rescue.py` and
+    `src/mintnet/experiments/stage9c_bootstrap_rescue.py` /
+    `stage9c_bootstrap_rescue_reporting.py` — the evidence-generation
+    runners for the (now archived) rescue calibration work. GitHub
+    Actions run ID `35037634057` (Stage 9d Steps 3-4, cancelled by
+    explicit instruction alongside `35013637338`) is referenced in
+    D-091 as the concurrently-cancelled dispatch.
+
+**Product-surface documents that assumed the search was usable and now need revisiting:**
+
+14. `src/mintnet/api.py` — `discover()`, the public v1 API function.
+    Built assuming the underlying search and rescue mechanisms were
+    usable at real scale; that assumption is now known false.
+15. `outline/package_scope_v1.md`, `outline/api_design_v1.md` — the
+    product-scope and API-design documents that named `enable_rescue`
+    and the search itself as the path to real usability. Both need a
+    disclosed correction (in the manner already used twice in
+    `outline/api_design_v1.md`'s own history) reflecting this finding,
+    not a silent rewrite.
+
+**Frozen charters providing background (read for context, not as current truth):**
+
+16. `docs/stage10a_charter.md` — the charter that commissioned the test
+    that found this. Still frozen and historically accurate about what
+    was planned; its own topology-design history is further corrected
+    in D-089 (a separate, smaller correction that predates this
+    finding — the topology fix for screening reliability, not the
+    scaling defect).
+17. `docs/stage9d_charter.md` — the localized bootstrap-rescue charter,
+    now archived per Section 4 for reasons unrelated to its own
+    internal logic (it inherits the base search's defect).
