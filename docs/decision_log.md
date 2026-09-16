@@ -7296,3 +7296,96 @@ matching shard count to a nominal unit of work (here, "one resample")
 without checking whether that unit's own tail risk exceeds the job
 time limit on its own is the same class of miss as D-088's original
 one, just one level deeper.
+
+## D-091: Search-architecture scaling failure confirmed on a single dense network -- Stage 9's entire bootstrap-rescue arc and every composed-pipeline result through Stage 9 archived; two binding gates adopted for all future charters (mi-native)
+
+Stage 10a's Step 2 cost measurement, run to five of six shards
+completing, confirmed decisively: `growing_subset_dpi_structured_
+density`'s search cannot complete on `organic_network` (18 nodes, one
+connected component of 15 screened-in nodes) in usable time. Five
+pair-batch shards, each covering roughly a sixth of the 51 candidate
+pairs, took `2h36m`, `3h44m`, `4h25m`, `4h54m`, and `5h17m`
+respectively for a single point-estimate search -- no bootstrap, no
+rescue. A sixth shard exceeded 6 hours and was cancelled unfinished.
+Summing the five completed shards alone exceeds 21 hours for one
+network model. Both this run and the concurrently-running Stage 9d
+evidence-generation dispatch were cancelled by explicit user
+instruction once this was confirmed, rather than left to keep
+consuming GitHub Actions time on a result already known.
+
+**Root cause, identified precisely, not just observed as "slow"**: the
+search's conditioning pool for a candidate pair `(i, j)` is every other
+node in `(i, j)`'s screened connected component (`pool = sorted(
+component - {i, j})`), not the pair's own local neighbors. This is not
+a code defect -- `docs/validated_operating_ranges.md`'s own Stage 1k/
+D-015 row names it explicitly as the validated design: "DPI
+conditioning on all other nodes in a candidate component." Every DGP
+tested from Stage 1 through Stage 9 kept candidate components small (at
+most 5 nodes) by deliberate construction, so component size and local
+node degree were always approximately equal -- an equivalence that
+holds for isolated motifs and breaks completely for one real, connected
+network. `organic_network`'s single 15-node component gives a worst-
+case pool of 13 nodes vs. `overlap`'s worst case of 3, a combinatorial
+search-space growth (capped at `max_conditioning_size=4`) from 7 subset
+combinations per edge to 1,092 -- roughly 156x, for identical local
+degree. The full write-up, including the parallel failure mode already
+seen in the full-repeat bootstrap-rescue mechanism (D-088/D-090) and a
+complete stage-by-stage disposition, is recorded in `docs/postmortem_
+2026-09-16_search_scaling_and_dense_network_failure.md` rather than
+duplicated here.
+
+**Two gates adopted, binding on every future mi-native charter**:
+
+1. **No unbounded-cost mechanism proceeds, regardless of
+   infrastructure.** A mechanism whose cost is not demonstrably bounded
+   by local structure (a node's own degree) rather than global
+   structure (network/component size) is disqualified outright. More
+   sharding, more parallelism, or more compute time does not clear this
+   gate -- it only delays discovering the gate was never cleared, which
+   is exactly what happened twice already with the full-repeat
+   mechanism (D-088's unsharded attempt, then its own resample-sharded
+   retry) before this was recognized as structural rather than an
+   infrastructure problem.
+2. **No mechanism is validated for real use without a dense,
+   single-connected-component test.** Performance on any number of
+   disjoint small motifs, at any number of sample sizes or replicates,
+   establishes only that the underlying statistical test is sound --
+   never that the search wrapped around it is usable on anything
+   resembling a real network. Every future charter for a discovery or
+   search mechanism must clear this test before any PROCEED claim.
+
+Decision: **archive, not delete** (per this project's own standing
+practice of preserving the evidentiary record) every result that
+depended on the now-disqualified search architecture -- concretely,
+per the postmortem's own stage-by-stage table: all composed-pipeline
+PROCEED/REASSESS decisions through Stage 9 (`validated_operating_
+ranges.md`'s own `p<=30` rows), Stage 6a's search architecture itself,
+Stage 7e-7h's calibration work (D-063, D-076, D-085), Stage 8's
+composed calibration, and Stage 9a-9d's entire bootstrap-rescue arc in
+full (D-077 through D-090). None of these are known to be wrong for
+the narrow small-motif conditions they were tested under; all of them
+are disqualified as claims about real-world use, and none may be cited
+as currently-trustworthy or built on further without being re-derived
+against a corrected search architecture.
+
+**What survives, unconditionally**: the structured-density conditional-
+independence test itself (`local_permutation_test`, given a specific
+conditioning set, still correctly tests it), pairwise screening
+(no conditioning-pool concept, unaffected), the `organic_network`
+fixture itself (a reusable stress test, exactly what Gate 2 now
+requires for every future charter), and the project's own falsification
+discipline (frozen charters, sequential decision log, disclosed
+corrections, sharded evidence generation) -- the process is what
+surfaced this defect precisely and reproducibly; it is the search
+architecture it was applied to that is disqualified, not the process
+itself.
+
+Consequences: `docs/validated_operating_ranges.md` needs a follow-up
+pass narrowing or annotating every row downstream of Stage 6a's search
+architecture to reflect archived status, not yet done as part of this
+entry. No replacement search architecture is chartered here -- Section
+6 of the postmortem states the precondition (a locally-scoped
+conditioning pool, re-validated against small motifs first, then
+proven against `organic_network` under both new gates) that any future
+charter for one must satisfy before evidence generation, not evidence
+generation itself.
