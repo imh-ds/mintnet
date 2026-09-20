@@ -7467,3 +7467,18 @@ estimation, comparative evidence, cost-pilot, or statistical-panel claim is
 made by this entry. The CIN engine remains unvalidated, and the categorical
 branch remains a candidate capability until the later prespecified gates are
 run.
+
+## D-094: Tighten CIN Task 01 invalid-missingness validation after final review
+
+Date: 2026-09-20.
+
+The final self-review identified that an unhashable `missing` value such as a
+list raised `TypeError` during set membership instead of the configuration
+contract's required `ValueError`. The validator now checks the field's string
+type before testing its allowed values, and a regression case covers the
+unhashable input.
+
+Evidence after the fix: the focused invalid-configuration tests pass with 26
+tests, and the full active unit suite passes with 106 tests under the same
+available Python 3.12.1 runtime. This is a validation-hardening correction,
+not a change to the CIN statistical procedure or its unvalidated status.
