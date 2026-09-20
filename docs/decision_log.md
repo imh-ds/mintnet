@@ -7389,3 +7389,45 @@ conditioning pool, re-validated against small motifs first, then
 proven against `organic_network` under both new gates) that any future
 charter for one must satisfy before evidence generation, not evidence
 generation itself.
+
+## D-092: Retain `mintnet`; define MINT as the Model-based Information Network Toolkit and CIN as its replacement algorithmic engine
+
+Date: 2026-09-20.
+
+The replacement methodology is now specified as a Conditional
+Predictive-Information Network (CIN). It compares nested, cross-fitted
+predictive distributions by held-out logarithmic score: for a target node,
+the full model conditions on all other included variables and the reduced
+model exactly omits one predictor block at the same regularization penalty.
+If the fitted conditionals equal the true conditionals, the population score
+difference is conditional mutual information. With finite, restricted models,
+the reported quantity is instead model-based conditional predictive
+information, in nats per observation, with approximation error made explicit.
+
+Decision: retain the repository and Python distribution name `mintnet`, but
+define the project name as **MINT -- Model-based Information Network Toolkit**.
+The replacement estimator is **CIN -- Conditional Predictive-Information
+Network**, implemented under the future `mintnet.cin` namespace. “Tolerance”
+is retired from the name because it described the previous architecture and
+is not a defining element of CIN. “Mutual Information Network Toolkit” is not
+used because it could overstate finite CIN weights as direct, model-free CMI
+estimates.
+
+Repository boundary: the generic sharded-evidence infrastructure, EBICglasso
+comparator, Gaussian and motif simulation helpers, package metadata, and this
+append-only decision log remain active. The screening, conditioning-search,
+DPI, confidence-curve, and bootstrap-rescue implementation and its associated
+tests, configurations, scripts, workflows, and documents are preserved under
+`archive/mi_native_search/`. The controlling CIN methodology and task plan are
+tracked under `docs/design/cin/` rather than remaining in an ignored local
+outline directory.
+
+Consequences: new estimator code belongs in `src/mintnet/cin/`; new evidence
+runners use `src/mintnet/experiments/cin_*`; new simulation work uses
+`src/mintnet/simulation/cin_networks.py`. No compatibility alias from the
+retired `mintnet.api.discover()` API is promised because CIN has materially
+different semantics. Package version `0.1.0` is retained during repository
+preparation; a release boundary will be chosen only after implementation and
+the prespecified evidence gates. This decision establishes identity and file
+organization only; it is not evidence that CIN has been implemented or
+validated.

@@ -43,12 +43,12 @@
 - Consumes: the audit manifest of 309 active tracked files.
 - Produces: an active set of 17 pre-CIN infrastructure files plus this plan, with 292 retired files preserved under one snapshot.
 
-- [ ] **Step 1:** Record the exact pre-move tracked-file manifest and counts.
-- [ ] **Step 2:** Move the retired files with history-preserving Git moves.
-- [ ] **Step 3:** Add the snapshot README and update the archive index.
-- [ ] **Step 4:** Verify that every pre-move tracked path is either retained or represented once under `archive/mi_native_search/`.
-- [ ] **Step 5:** Verify no retained Python source imports a newly archived `mintnet` module. Archive the nominally generic integration tests if dependency inspection shows that they import retired runners.
-- [ ] **Step 6:** Commit as `chore: archive retired MI-native search pipeline`.
+- [x] **Step 1:** Record the exact pre-move tracked-file manifest and counts.
+- [x] **Step 2:** Move the retired files with history-preserving Git moves.
+- [x] **Step 3:** Add the snapshot README and update the archive index.
+- [x] **Step 4:** Verify that every pre-move tracked path is either retained or represented once under `archive/mi_native_search/`.
+- [x] **Step 5:** Verify no retained Python source imports a newly archived `mintnet` module. Archive the nominally generic integration tests if dependency inspection shows that they import retired runners.
+- [x] **Step 6:** Commit as `chore: archive retired MI-native search pipeline`.
 
 ### Task 2: Promote the controlling CIN design documents
 
@@ -62,11 +62,11 @@
 - Consumes: the local authoritative files in `outline/network/revised/` and `outline/plan/` from the primary checkout.
 - Produces: 16 tracked source-of-truth documents with resolvable internal links.
 
-- [ ] **Step 1:** Copy the three revised methodology documents and thirteen build-plan documents without changing substantive methodology.
-- [ ] **Step 2:** Add a concise design index identifying controlling versus historical material.
-- [ ] **Step 3:** Update only relocation-sensitive links and references.
-- [ ] **Step 4:** Verify all relative Markdown links within `docs/design/cin/` resolve locally or are valid external URLs.
-- [ ] **Step 5:** Commit as `docs: track CIN methodology and build plan`.
+- [x] **Step 1:** Copy the three revised methodology documents and thirteen build-plan documents without changing substantive methodology.
+- [x] **Step 2:** Add a concise design index identifying controlling versus historical material.
+- [x] **Step 3:** Update only relocation-sensitive links and references.
+- [x] **Step 4:** Verify all relative Markdown links within `docs/design/cin/` resolve locally or are valid external URLs.
+- [x] **Step 5:** Commit as `docs: track CIN methodology and build plan`.
 
 ### Task 3: Establish the MINT/CIN active repository identity
 
@@ -79,9 +79,9 @@
 - Consumes: the approved MINT backronym and CIN method name.
 - Produces: an honest top-level identity and a permanent record of the pivot without claiming implementation or validation.
 
-- [ ] **Step 1:** Replace the placeholder README with the MINT/CIN identity, current status, active-tree map, and historical archive pointer.
-- [ ] **Step 2:** Update the package description while retaining version `0.1.0` until the CIN implementation establishes a release boundary.
-- [ ] **Step 3:** Append decision D-092 documenting the naming and repository-boundary decision.
-- [ ] **Step 4:** Verify the active tracked manifest, archive counts, forbidden active paths, Markdown links, and Git status.
-- [ ] **Step 5:** Run retained tests if a Python 3.11 interpreter is available; otherwise record the exact environment blocker and do not claim test success.
-- [ ] **Step 6:** Commit as `docs: establish MINT and CIN project identity`.
+- [x] **Step 1:** Replace the placeholder README with the MINT/CIN identity, current status, active-tree map, and historical archive pointer.
+- [x] **Step 2:** Update the package description while retaining version `0.1.0` until the CIN implementation establishes a release boundary.
+- [x] **Step 3:** Append decision D-092 documenting the naming and repository-boundary decision.
+- [x] **Step 4:** Verify the active tracked manifest, archive counts, forbidden active paths, Markdown links, and Git status.
+- [x] **Step 5:** Run retained tests if a Python 3.11 interpreter is available; otherwise record the exact environment blocker and do not claim test success.
+- [x] **Step 6:** Commit as `docs: establish MINT and CIN project identity`.
