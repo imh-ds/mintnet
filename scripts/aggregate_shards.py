@@ -1,10 +1,10 @@
 """Generic aggregator for any sharded experiment run. See
 .github/workflows/sharded_benchmark.yml -- that workflow and this
 script work on any runner module that opts into the shard-aggregation
-contract, not just `mintnet.experiments.stage5a` (its first user).
+contract. Its first user, the retired Stage 5a runner, is preserved under
+`archive/mi_native_search/` as a historical example.
 
-Contract a shardable module must expose (see stage5a.py's own "Generic
-shard-aggregation contract" comment for the reference implementation):
+Contract a shardable module must expose:
     - `load_config(path) -> Config`
     - `expected_row_count(config) -> int`
     - `expected_combinations(config) -> set[tuple]`
@@ -19,9 +19,9 @@ raw metrics, verifies full coverage (every expected combination present
 exactly once, no shard missing or duplicated), and only then calls the
 module's own report writer -- producing the same report an unsharded
 run would, since a well-behaved shardable runner derives its seeds from
-the *full* grid's index, not the shard's own subset (see
-`mintnet.experiments.stage5a.run_stage5a`'s own docstring, and its test
-`test_stage5a_sharded_run_matches_unsharded_run`).
+the *full* grid's index, not the shard's own subset. The archived Stage 5a
+runner and its integration test demonstrate that historical contract;
+active CIN runners must prove the same property independently.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def aggregate(module_path: str, config_path: Path, shards_dir: Path, output_dir:
 
 def _write_provenance(shard_paths: list[Path], output_dir: Path) -> None:
     """Every shard writes its own `metadata.json`/`resolved_config.yaml`
-    (see e.g. `mintnet.experiments.stage7b_frontier._write_evidence`),
+    (the archived Stage 7b runner is one historical example),
     but this aggregator previously dropped both -- the combined
     artifact had raw evidence and a report but no provenance at all.
     `resolved_config.yaml` is identical across shards (it reflects the
@@ -131,7 +131,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--module", required=True,
-        help="import path of the shardable runner module, e.g. mintnet.experiments.stage5a",
+        help="import path of the shardable runner module, e.g. mintnet.experiments.cin_baseline",
     )
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument(

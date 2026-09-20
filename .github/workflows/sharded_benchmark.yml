@@ -1,8 +1,9 @@
 name: Sharded benchmark (generic)
 
 # Manual trigger only -- reusable dispatch target for any heavy,
-# multi-cell experiment, not just Stage 5a (its first user). Each cell
-# in the dim1 x dim2 grid runs as its own isolated matrix job (own
+# multi-cell experiment. Its first user, the retired Stage 5a runner, is
+# preserved under archive/mi_native_search/. Each cell in the dim1 x dim2
+# grid runs as its own isolated matrix job (own
 # runner, own cores), which sidesteps the BLAS-thread oversubscription
 # that made a single-machine multi-process run of Stage 5a slower than
 # expected, and survives the triggering machine being off. A final job
@@ -12,14 +13,12 @@ name: Sharded benchmark (generic)
 # To reuse for a new experiment, the runner module must:
 #   1. Be invocable as `python -m <module> --config <path> --output
 #      <dir> <dim1_flag> <value> <dim2_flag> <value> --no-report` and
-#      write a raw_metrics.csv there (see stage5a.py's own `main()`).
+#      write a raw_metrics.csv there.
 #   2. Derive seeds from the FULL grid's index, not a shard's own
-#      filtered subset, so sharded output matches an unsharded run
-#      (see stage5a.py's `run_stage5a` docstring and
-#      test_stage5a_sharded_run_matches_unsharded_run).
+#      filtered subset, so sharded output matches an unsharded run.
+#      Active runners must test that equivalence directly.
 #   3. Expose the shard-aggregation contract documented at the top of
-#      scripts/aggregate_shards.py and in stage5a.py's own "Generic
-#      shard-aggregation contract" comment: `load_config`,
+#      scripts/aggregate_shards.py: `load_config`,
 #      `expected_row_count`, `expected_combinations`,
 #      `COMBINATION_COLUMNS`, plus a `<module>_reporting` companion
 #      module exposing `write_report(raw, config, output_dir)`.
@@ -28,41 +27,31 @@ name: Sharded benchmark (generic)
 # dim3_values for a three-dimension one -- every cell still ends up as
 # its own single-task shard either way, which matters on GitHub-hosted
 # runners' 2 vCPUs: a shard left with more than one unsharded task
-# inside it (e.g. Stage 5b's own first run, which sharded only (dgp,
-# noise multiplier) and left N unsplit) can fall back to running those
-# tasks serially rather than in parallel, since `run_stage5a`/`_5b`'s
-# own auto worker-count is `min(tasks, cpu_count-1)` = `min(2, 1)` on a
-# 2-vCPU runner -- so the single slowest shard then dominates the whole
-# run's wall-clock. Prefer sharding every varying dimension over
-# leaving any of them to run serially inside one shard.
+# inside it can fall back to running those tasks serially rather than in
+# parallel. Prefer sharding every varying dimension over leaving any of
+# them to run serially inside one shard.
 
 on:
   workflow_dispatch:
     inputs:
       runner_module:
         description: "Import path of the shardable runner module"
-        required: false
-        default: "mintnet.experiments.stage5a"
+        required: true
       config:
         description: "Config YAML path"
-        required: false
-        default: "configs/stage5a_comparator_benchmark.yaml"
+        required: true
       dim1_flag:
         description: "CLI flag for the first shard dimension"
-        required: false
-        default: "--dgps"
+        required: true
       dim1_values:
         description: "Comma-separated values for the first shard dimension"
-        required: false
-        default: "chain_fork_hub,overlap,triangle_balanced,triangle_moderate,triangle_strong"
+        required: true
       dim2_flag:
         description: "CLI flag for the second shard dimension"
-        required: false
-        default: "--sample-sizes"
+        required: true
       dim2_values:
         description: "Comma-separated values for the second shard dimension"
-        required: false
-        default: "400,500,600,750,1000,1500,1750"
+        required: true
       dim3_flag:
         description: "CLI flag for an optional third shard dimension"
         required: false

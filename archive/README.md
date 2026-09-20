@@ -1,4 +1,17 @@
-# Archive: partial-correlation-era pipeline (pre-MI pivot)
+# Archive index
+
+MINT preserves retired methodology as historical snapshots rather than deleting
+it or leaving incompatible implementations on the active import and test paths.
+
+Two snapshots are currently present:
+
+- The files directly under `archive/{src,tests,configs,docs}` are the original
+  partial-correlation-era pipeline described below.
+- [`mi_native_search/`](mi_native_search/README.md) is the later MI-native
+  screening/search/bootstrap pipeline retired after the D-091 dense-network
+  scaling failure and the pivot to the CIN methodology.
+
+## Original partial-correlation-era pipeline (pre-MI pivot)
 
 This directory holds the code, tests, configs, and charters from mintnet's
 original partial-correlation-based pipeline (Stage 0 through most of Stage 5),

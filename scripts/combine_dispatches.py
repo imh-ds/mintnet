@@ -11,8 +11,8 @@ this script into one evidence set spanning all of them.
 Works on any module already opted into the generic shard-aggregation
 contract (`load_config`, `expected_row_count`, `expected_combinations`,
 `COMBINATION_COLUMNS`, a `<module>_reporting` companion) -- the same
-contract `aggregate_shards.py` uses -- not just
-`mintnet.experiments.stage7_isolation_timing`, its first user.
+contract `aggregate_shards.py` uses. Its first user, the retired Stage 7
+isolation-timing runner, is preserved under `archive/mi_native_search/`.
 
 Each dispatch is specified as a paired `--dispatch-config <path>
 --dispatch-dir <dir>` -- the same config file used to `gh workflow run`
@@ -152,7 +152,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--module", required=True,
-        help="import path of the shardable runner module, e.g. mintnet.experiments.stage7_isolation_timing",
+        help="import path of the shardable runner module, e.g. mintnet.experiments.cin_baseline",
     )
     parser.add_argument(
         "--dispatch-config", required=True, action="append", type=Path,
