@@ -38,10 +38,11 @@ def _schema() -> dict[str, dict[str, object]]:
 
 def _frame() -> pd.DataFrame:
     z = np.linspace(-2.0, 2.0, 30)
+    u_axis = np.r_[np.linspace(-2.0, 2.0, 20), np.linspace(-3.0, 3.0, 10)]
     return pd.DataFrame(
         {
             "linear": z,
-            "u_shape": z**2,
+            "u_shape": u_axis,
             "constant_partition": np.r_[np.ones(20), np.arange(10, dtype=float) + 2.0],
             "two_value": np.r_[np.tile([-1.0, 1.0], 10), np.arange(10, dtype=float)],
             "ties": np.r_[np.repeat([0.0, 1.0, 2.0], [10, 8, 2]), np.linspace(3.0, 5.0, 10)],
@@ -160,7 +161,6 @@ def test_categorical_block_is_centered_and_level_stable() -> None:
     relabeled_schema = _schema()
     relabeled_schema["category"] = {"kind": "categorical", "levels": [4, 3, 2, 1, 0]}
     relabeled = _frame()
-    relabeled["category"] = relabeled["category"].map({0: 4, 1: 3, 2: 2, 3: 1, 4: 0})
     relabeled_space = _fit(relabeled, schema=relabeled_schema)
     np.testing.assert_allclose(
         _block(relabeled_space, "category").transform(relabeled_space.prepared.codes[train, 6]),
