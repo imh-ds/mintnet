@@ -7482,3 +7482,18 @@ Evidence after the fix: the focused invalid-configuration tests pass with 26
 tests, and the full active unit suite passes with 106 tests under the same
 available Python 3.12.1 runtime. This is a validation-hardening correction,
 not a change to the CIN statistical procedure or its unvalidated status.
+
+## D-095: Reject lossy float64 coercion in CIN continuous inputs
+
+Date: 2026-09-20.
+
+The final review also checked the Task 01 requirement that continuous inputs
+convert to `float64` without loss. Large integer values can otherwise collapse
+to the same `float64` value before the estimator sees them. `prepare_data`
+now rejects integer values whose `float64` conversion is not exact, with a
+regression test covering values above the exact-integer range.
+
+Evidence after this correction: the new regression test passes and the full
+active unit suite passes with 107 tests. This preserves the declared input
+contract; it does not widen CIN's supported statistical scope or constitute
+method validation.
