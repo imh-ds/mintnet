@@ -276,6 +276,14 @@ def test_continuous_rejects_nonnumeric_values() -> None:
         prepare_data(frame, valid_schema(), CINConfig(seed=1))
 
 
+def test_continuous_rejects_lossy_integer_conversion() -> None:
+    frame = valid_frame()
+    frame["stress"] = [2**53 + (index % 2) for index in range(30)]
+
+    with pytest.raises(ValueError, match="stress.*loss"):
+        prepare_data(frame, valid_schema(), CINConfig(seed=1))
+
+
 def test_categorical_codes_are_explicit() -> None:
     prepared = prepare_data(valid_frame(), valid_schema(), CINConfig(seed=1))
 

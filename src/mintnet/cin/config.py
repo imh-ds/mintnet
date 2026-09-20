@@ -283,6 +283,12 @@ def prepare_data(
                 numeric = pd.to_numeric(series, errors="raise").to_numpy(dtype=np.float64)
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{spec.name}: continuous data must be numeric") from exc
+            for raw_value, converted_value in zip(raw_values, numeric):
+                if isinstance(raw_value, Integral) and not isinstance(raw_value, bool):
+                    if int(converted_value) != int(raw_value):
+                        raise ValueError(
+                            f"{spec.name}: continuous data cannot be converted to float64 without loss"
+                        )
             if not np.isfinite(numeric).all():
                 raise ValueError(f"{spec.name}: continuous data must be finite")
             if np.std(numeric, ddof=0) == 0:
