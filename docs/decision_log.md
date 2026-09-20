@@ -7431,3 +7431,39 @@ preparation; a release boundary will be chosen only after implementation and
 the prespecified evidence gates. This decision establishes identity and file
 organization only; it is not evidence that CIN has been implemented or
 validated.
+
+## D-093: Implement CIN Task 01's validated configuration, schema, and prepared-data boundary
+
+Date: 2026-09-20.
+
+Task 01 of the tracked CIN build plan is now implemented under
+`src/mintnet/cin/config.py`. `CINConfig` validates the fixed initial
+engineering settings and exposes a stable procedure hash that intentionally
+excludes only `pair_batch_size` and `max_seconds`. `VariableSpec` and
+`parse_schema` preserve declared node order, require explicit types and
+categorical levels, and distinguish numeric `1` from boolean `True` while
+matching numeric `1.0` to `1`.
+
+`prepare_data` now enforces unique row identity, declared-column extraction,
+error or one-time global complete-case missingness handling, retained-N and
+expanded-width limits, finite continuous values, explicit categorical coding,
+and constant-variable rejection. It returns frozen `PreparedData` and
+`DataDiagnostics` records with read-only arrays, rare-level and few-unique
+flags, ignored-column reporting, row/data digests, and excluded-row metadata.
+The package-level `fit_network`, `estimate_stability`, and `make_view` names
+remain explicit `NotImplementedError` stubs; importing `mintnet.cin` does not
+load scikit-learn or matplotlib.
+
+Evidence: `tests/unit/cin/test_config.py` passes with 59 tests, and the full
+active unit suite passes with 105 tests. The import-boundary check reports
+`False False` for scikit-learn and matplotlib presence, and `git diff --check`
+is clean. These checks used the available Python 3.12.1 runtime because the
+repository's local Python 3.11 environment is currently unavailable; the
+project's declared Python requirement remains `>=3.11,<3.12`.
+
+Decision: accept Task 01 as the implementation baseline for the next
+dependency-ordered step, Task 02 (feature blocks and response matrix). No
+estimation, comparative evidence, cost-pilot, or statistical-panel claim is
+made by this entry. The CIN engine remains unvalidated, and the categorical
+branch remains a candidate capability until the later prespecified gates are
+run.
