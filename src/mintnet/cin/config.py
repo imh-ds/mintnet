@@ -409,7 +409,7 @@ class CINConfig:
 
         if self.seed < 0:
             raise ValueError("seed must be >= 0")
-        if self.missing not in {"error", "complete_case"}:
+        if not isinstance(self.missing, str) or self.missing not in {"error", "complete_case"}:
             raise ValueError("missing must be 'error' or 'complete_case'")
         if self.max_seconds <= 0:
             raise ValueError("max_seconds must be > 0")

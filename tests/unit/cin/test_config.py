@@ -62,6 +62,7 @@ def test_config_defaults_are_stable() -> None:
         {"seed": -1},
         {"seed": True},
         {"missing": "drop"},
+        {"missing": []},
         {"max_seconds": 0.0},
         {"max_seconds": math.inf},
         {"outer_folds": 1},
