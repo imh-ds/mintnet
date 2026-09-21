@@ -7497,3 +7497,38 @@ Evidence after this correction: the new regression test passes and the full
 active unit suite passes with 107 tests. This preserves the declared input
 contract; it does not widen CIN's supported statistical scope or constitute
 method validation.
+
+## D-096: Implement CIN Task 02 feature blocks and response matrix
+
+Date: 2026-09-20.
+
+Task 02 of the tracked CIN build plan is now implemented in
+`src/mintnet/cin/features.py`. The implementation fits continuous linear and
+curvature blocks, declared-level categorical blocks, standardized continuous
+responses, centered categorical responses, and the assembled `FeatureSpace`
+design/response API using `PreparedData` and `CINConfig`.
+
+All fitted statistics are derived from the explicit training-row partition:
+means, scales, knots, spline residualization, deterministic SVD directions,
+curvature normalization, categorical prevalence, response statistics, and
+design centering. Constant and tied partitions preserve row alignment while
+producing zero-width or linear-only blocks with flags. Evaluation-only
+categorical levels remain declared columns, and continuous extrapolation is
+finite while exposing a non-mutating range-excursion diagnostic.
+
+Decision: accept Task 02 as the implementation baseline for the next
+dependency-ordered CIN step. The expanded-feature cap follows the build
+specification and is enforced on predictor width `q`; response widths remain
+reported in cap errors and in `R`/`t`. This resolves the implementation
+plan's broader `q + t` wording in favor of the controlling build spec.
+
+Evidence: `tests/unit/cin/test_features.py` passes with 7 tests, the active
+unit suite passes with 114 tests, the feature module imports successfully,
+and `git diff --check` is clean. These checks used the available Python
+3.12.1 runtime because the repository's local Python 3.11 environment is
+currently unavailable. No CIN estimation or statistical-method validation
+claim is made by this entry.
+
+Consequences: Task 03 may consume the stable `FeatureSpace` block/range and
+response interfaces. The CIN engine remains unvalidated, and no public
+estimator or network-level evidence claim is introduced.
