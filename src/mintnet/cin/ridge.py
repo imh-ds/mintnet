@@ -48,7 +48,7 @@ def _matrix(values: Any, name: str) -> np.ndarray:
         raise ValueError(f"{name} must be a numeric two-dimensional array")
     if not np.isfinite(result).all():
         raise ValueError(f"{name} must contain only finite values")
-    result = np.ascontiguousarray(result, dtype=np.float64)
+    result = np.array(result, dtype=np.float64, order="C", copy=True)
     result.setflags(write=False)
     return result
 

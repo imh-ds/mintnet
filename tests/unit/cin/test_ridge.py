@@ -235,3 +235,13 @@ def test_h_is_symmetric_and_normal_residual_is_small() -> None:
     np.testing.assert_array_equal(H_first, H_second)
     np.testing.assert_allclose(H_first, H_first.T, rtol=0.0, atol=1e-12)
     assert solution.scaled_normal_residual() < 1e-10
+
+
+def test_ridge_inputs_remain_caller_owned_and_writeable() -> None:
+    B, T = _data(m=16, q=5, t=2)
+    ridge.RidgeSolution(B, T, 0.2, _config())
+
+    assert B.flags.writeable
+    assert T.flags.writeable
+    B[0, 0] += 1.0
+    T[0, 0] += 1.0
