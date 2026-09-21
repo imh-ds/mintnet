@@ -64,7 +64,11 @@ def _lambda(value: Any) -> float:
 
 def _columns(values: Any, n_columns: int, name: str) -> np.ndarray:
     result = np.asarray(values)
-    if result.ndim != 1 or result.dtype.kind not in "iu":
+    if result.ndim != 1:
+        raise ValueError(f"{name} must be a one-dimensional integer array")
+    if result.size == 0:
+        return np.empty(0, dtype=np.intp)
+    if result.dtype.kind not in "iu":
         raise ValueError(f"{name} must be a one-dimensional integer array")
     result = np.ascontiguousarray(result, dtype=np.intp)
     if np.unique(result).size != result.size:

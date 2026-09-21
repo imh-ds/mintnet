@@ -128,6 +128,22 @@ def test_intercept_only_and_zero_width_omissions_are_degenerate_but_finite() -> 
     np.testing.assert_allclose(empty_prediction, 0.0, atol=1e-12)
 
 
+def test_empty_response_matrix_has_stable_shapes() -> None:
+    B, _ = _data(m=12, q=4, t=1)
+    T = np.empty((12, 0), dtype=np.float64)
+    solution = ridge.RidgeSolution(B, T, 0.2, _config())
+    workspace = ridge.OmissionWorkspace(solution, {"train": B})
+
+    full = workspace.predict_full("train", [])
+    omitted, status = workspace.predict_omit("train", np.array([0]), [])
+    coefficients = workspace.omitted_coefficients(np.array([0]), [])
+
+    assert full.shape == (12, 0)
+    assert omitted.shape == (12, 0)
+    assert coefficients.shape == (4, 0)
+    assert status == "ok"
+
+
 def test_self_block_omission_prevents_target_leakage() -> None:
     rng = np.random.default_rng(2026)
     train_self = rng.normal(size=30)
