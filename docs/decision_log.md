@@ -7532,3 +7532,41 @@ claim is made by this entry.
 Consequences: Task 03 may consume the stable `FeatureSpace` block/range and
 response interfaces. The CIN engine remains unvalidated, and no public
 estimator or network-level evidence claim is introduced.
+
+## D-097: Implement CIN Task 03 shared ridge engine and exact block omission
+
+Date: 2026-09-20.
+
+Task 03 of the tracked CIN build plan is now implemented in
+`src/mintnet/cin/ridge.py`. `RidgeSolution` performs one shared
+multiresponse Cholesky solve per centered `(B, T, lambda)` system, while
+`OmissionWorkspace` caches `X @ H` and computes exact fixed-penalty restricted
+predictions and coefficients for arbitrary omitted column sets. The module
+also provides an independently solved direct restricted-ridge reference for
+tests and isolated numerical fallback.
+
+The implementation preserves target-self leakage protection as a caller
+contract, supports q greater than the number of rows, collinear/all-level
+blocks, intercept-only and zero-width omissions, empty response matrices, and
+caller-owned input arrays. Small-block failures return an explicit fallback
+status and event, and `check_fallback_rate` raises structured numerical
+failure when the fallback rate exceeds 1%; no jitter, lambda changes, or
+per-omission large factorizations are introduced.
+
+Decision: accept Task 03 as the shared numerical-core baseline for the next
+dependency-ordered CIN step. Exact omission is implemented through the
+specified block identity, with `degenerate` status reserved for empty
+omissions and `ok`/`fallback` statuses for ordinary numerical paths.
+
+Evidence: `tests/unit/cin/test_ridge.py` passes with 11 tests,
+`tests/unit/cin/test_features.py tests/unit/cin/test_ridge.py` pass with 18
+tests, and the full active unit suite passes with 125 tests under the
+available Python 3.12.1 runtime. The ridge module imports successfully and
+the reviewed diff passes `git diff --check`. This establishes numerical
+correctness for the tested algebra only; it is not statistical-method,
+runtime, or network-level validation.
+
+Consequences: Task 04 may consume `RidgeSolution`, `OmissionWorkspace`, and
+the explicit fallback/status contract for score and tuning implementation.
+The CIN estimator remains unvalidated, and no public network evidence claim
+is introduced.
