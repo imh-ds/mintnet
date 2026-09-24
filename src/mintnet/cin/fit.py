@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from .config import CINConfig
 from .result import NetworkFit
@@ -15,13 +16,16 @@ __all__ = [
     "Budget",
     "BudgetExceeded",
     "CostCounters",
+    "FoldScore",
     "InnerSplit",
     "NetworkFit",
     "OuterSplit",
     "SplitPlan",
     "TuningResult",
+    "aggregate",
     "fit_network",
     "make_splits",
+    "score_partition",
     "target_supported",
     "tune_lambdas",
 ]
@@ -299,6 +303,348 @@ def tune_lambdas(
         supported_by_fold=np.ascontiguousarray(supported),
         diagnostics=tuple(diagnostics),
     )
+
+
+@dataclass
+class FoldScore:
+    directional_sum: np.ndarray
+    directional_rows: np.ndarray
+    directional_started: np.ndarray
+    directional_failure: np.ndarray
+    node_score_sum: np.ndarray
+    node_score_rows: np.ndarray
+    node_diagnostics: tuple[dict[str, Any], ...]
+    fold_diagnostics: dict[str, Any]
+    unsupported_targets: frozenset[int] = frozenset()
+    pair_flags: dict[tuple[int, int], set[str]] = field(default_factory=dict)
+
+
+def _intercept_score(
+    prepared: Any,
+    feature_space: Any,
+    target: int,
+    eval_rows: np.ndarray,
+    config: CINConfig,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    from .scores import intercept_scores
+
+    response = feature_space.response_specs[target]
+    start, _ = (int(value) for value in feature_space.R[target])
+    if response.kind == "continuous":
+        return intercept_scores(
+            "continuous",
+            feature_space.responses(eval_rows)[:, start],
+            sd_y=float(response.y_sd),
+            variance_floor=config.variance_floor,
+        )
+    assert response.prevalence is not None
+    assert response.train_counts is not None
+    return intercept_scores(
+        "categorical",
+        prepared.codes[eval_rows, target],
+        prevalence=response.prevalence,
+        train_counts=response.train_counts,
+        m=int(np.sum(response.train_counts, dtype=np.int64)),
+        mixture=config.probability_mixture,
+        pseudocount=config.count_pseudocount,
+    )
+
+
+def _mark_target_failure(
+    failure: np.ndarray,
+    target: int,
+) -> None:
+    for source in range(failure.shape[0]):
+        if source != target:
+            failure[source, target] = True
+
+
+def score_partition(
+    prepared: Any,
+    feature_space: Any,
+    train_rows: np.ndarray,
+    eval_rows: np.ndarray,
+    chosen_lambdas: np.ndarray,
+    config: CINConfig,
+    budget: Budget,
+    counters: CostCounters,
+    fold_index: int,
+) -> FoldScore:
+    """Score all ordered predictor-to-target directions for one outer fold."""
+
+    from .ridge import OmissionWorkspace, RidgeNumericalFailure, RidgeSolution
+
+    n_targets = len(prepared.specs)
+    lambdas = np.asarray(chosen_lambdas, dtype=np.float64)
+    if lambdas.shape != (n_targets,):
+        raise ValueError("chosen_lambdas must contain one value per target")
+    directional_sum = np.zeros((n_targets, n_targets), dtype=np.float64)
+    directional_rows = np.zeros((n_targets, n_targets), dtype=np.intp)
+    directional_started = np.zeros((n_targets, n_targets), dtype=bool)
+    directional_failure = np.zeros((n_targets, n_targets), dtype=bool)
+    node_score_sum = np.zeros((n_targets, 2), dtype=np.float64)
+    node_score_rows = np.zeros(n_targets, dtype=np.intp)
+    node_diagnostics: list[dict[str, Any]] = []
+    unsupported_targets: set[int] = set()
+    pair_flags: dict[tuple[int, int], set[str]] = {}
+    fold_diagnostics: dict[str, Any] = {
+        "fold": int(fold_index),
+        "train_rows": int(len(train_rows)),
+        "eval_rows": int(len(eval_rows)),
+        "factorizations": 0,
+        "fallbacks": 0,
+        "status": "complete",
+    }
+    train_design = feature_space.design(train_rows)
+    eval_design = feature_space.design(eval_rows)
+    train_responses = feature_space.responses(train_rows)
+    distinct_lambdas = sorted({float(value) for value in lambdas if np.isfinite(value)})
+    phase_start = time.perf_counter()
+
+    for lambda_index, lam in enumerate(distinct_lambdas):
+        budget.check(f"outer fold {fold_index} lambda {lambda_index}")
+        solution = RidgeSolution(train_design, train_responses, lam, config)
+        counters.n_large_factorizations += 1
+        fold_diagnostics["factorizations"] += 1
+        counters.q = max(counters.q, solution.q)
+        counters.t = max(counters.t, solution.t)
+        workspace = OmissionWorkspace(
+            solution,
+            {"train": train_design, "eval": eval_design},
+        )
+        target_indices = [
+            target for target, target_lambda in enumerate(lambdas) if np.isfinite(target_lambda) and target_lambda == lam
+        ]
+        for target in target_indices:
+            budget.check(f"outer fold {fold_index} target {target}")
+            if not target_supported(prepared, feature_space, target, train_rows):
+                unsupported_targets.add(target)
+                continue
+            s_start, s_stop = (int(value) for value in feature_space.S[target])
+            r_start, r_stop = (int(value) for value in feature_space.R[target])
+            self_columns = np.arange(s_start, s_stop, dtype=np.intp)
+            response_columns = np.arange(r_start, r_stop, dtype=np.intp)
+            try:
+                full_train, _ = workspace.predict_omit("train", self_columns, response_columns)
+                full_eval, _ = workspace.predict_omit("eval", self_columns, response_columns)
+                full_logq, full_info = _score_target(
+                    prepared,
+                    feature_space,
+                    target,
+                    train_rows,
+                    eval_rows,
+                    train_responses,
+                    full_train,
+                    full_eval,
+                    config,
+                )
+                intercept_logq, intercept_info = _intercept_score(
+                    prepared,
+                    feature_space,
+                    target,
+                    eval_rows,
+                    config,
+                )
+                if not np.isfinite(full_logq).all() or not np.isfinite(intercept_logq).all():
+                    raise RidgeNumericalFailure("non-finite full or intercept score")
+                node_score_sum[target] = (float(np.sum(full_logq)), float(np.sum(intercept_logq)))
+                node_score_rows[target] = full_logq.size
+                node_diagnostics.append(
+                    {
+                        "node": prepared.names[target],
+                        "fold": int(fold_index),
+                        "lambda": float(lam),
+                        "full_score_sum": float(np.sum(full_logq)),
+                        "intercept_score_sum": float(np.sum(intercept_logq)),
+                        "n_rows": int(full_logq.size),
+                        "full_info": full_info,
+                        "intercept_info": intercept_info,
+                    }
+                )
+            except (RidgeNumericalFailure, ValueError, FloatingPointError):
+                _mark_target_failure(directional_failure, target)
+                continue
+
+            predictor_indices = [source for source in range(n_targets) if source != target]
+            for batch_start in range(0, len(predictor_indices), config.pair_batch_size):
+                budget.check(f"outer fold {fold_index} target {target} batch {batch_start}")
+                batch = predictor_indices[batch_start : batch_start + config.pair_batch_size]
+                for source in batch:
+                    directional_started[source, target] = True
+                    p_start, p_stop = (int(value) for value in feature_space.S[source])
+                    if p_start == p_stop:
+                        directional_rows[source, target] += len(eval_rows)
+                        key = (min(source, target), max(source, target))
+                        pair_flags.setdefault(key, set()).add(
+                            f"degenerate_predictor_fold_{fold_index}"
+                        )
+                        continue
+                    omit_columns = np.unique(
+                        np.concatenate((self_columns, np.arange(p_start, p_stop, dtype=np.intp)))
+                    )
+                    try:
+                        reduced_train, _ = workspace.predict_omit(
+                            "train", omit_columns, response_columns
+                        )
+                        reduced_eval, _ = workspace.predict_omit(
+                            "eval", omit_columns, response_columns
+                        )
+                        reduced_logq, _ = _score_target(
+                            prepared,
+                            feature_space,
+                            target,
+                            train_rows,
+                            eval_rows,
+                            train_responses,
+                            reduced_train,
+                            reduced_eval,
+                            config,
+                        )
+                        if not np.isfinite(reduced_logq).all():
+                            raise RidgeNumericalFailure("non-finite reduced score")
+                        directional_sum[source, target] += float(
+                            np.sum(full_logq - reduced_logq)
+                        )
+                        directional_rows[source, target] += reduced_logq.size
+                    except (RidgeNumericalFailure, ValueError, FloatingPointError):
+                        directional_failure[source, target] = True
+        counters.n_fallbacks += workspace.fallback_count
+        fold_diagnostics["fallbacks"] += workspace.fallback_count
+        workspace.check_fallback_rate(config.fallback_stop_fraction)
+
+    counters.phase_seconds["outer_scoring"] = counters.phase_seconds.get("outer_scoring", 0.0) + (
+        time.perf_counter() - phase_start
+    )
+    return FoldScore(
+        directional_sum=directional_sum,
+        directional_rows=directional_rows,
+        directional_started=directional_started,
+        directional_failure=directional_failure,
+        node_score_sum=node_score_sum,
+        node_score_rows=node_score_rows,
+        node_diagnostics=tuple(node_diagnostics),
+        fold_diagnostics=fold_diagnostics,
+        unsupported_targets=frozenset(unsupported_targets),
+        pair_flags=pair_flags,
+    )
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, dict):
+        return {str(key): _plain(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain(item) for item in value]
+    return value
+
+
+def aggregate(
+    prepared: Any,
+    directional_sum: np.ndarray,
+    directional_rows: np.ndarray,
+    directional_folds: np.ndarray,
+    directional_started: np.ndarray,
+    directional_failure: np.ndarray,
+    unsupported_targets: set[int],
+    pair_flags: dict[tuple[int, int], set[str]],
+    node_records: list[dict[str, Any]],
+    fold_records: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    *,
+    expected_folds: int,
+) -> NetworkFit:
+    """Publish complete pair weights and explicit statuses."""
+
+    from .result import PAIR_COLUMNS
+
+    n_targets = len(prepared.names)
+    n_rows = int(prepared.n_retained)
+    pair_records: list[dict[str, Any]] = []
+    for left in range(n_targets):
+        for right in range(left + 1, n_targets):
+            key = (left, right)
+            flags = set(pair_flags.get(key, set()))
+            if left in unsupported_targets or right in unsupported_targets:
+                status = "unsupported"
+            elif directional_failure[left, right] or directional_failure[right, left]:
+                status = "numerical_failure"
+            else:
+                complete = bool(
+                    directional_rows[left, right] == n_rows
+                    and directional_rows[right, left] == n_rows
+                    and directional_folds[left, right] == expected_folds
+                    and directional_folds[right, left] == expected_folds
+                )
+                if complete:
+                    status = "complete"
+                elif directional_started[left, right] or directional_started[right, left]:
+                    status = "budget_exceeded"
+                else:
+                    status = "not_started"
+            if status == "complete":
+                gain_left = float(directional_sum[left, right] / directional_rows[left, right])
+                gain_right = float(directional_sum[right, left] / directional_rows[right, left])
+                weight = (gain_left + gain_right) / 2.0
+                display = max(weight, 0.0)
+                gaussian = float(np.sqrt(-np.expm1(-2.0 * display)))
+                orientation = abs(gain_left - gain_right)
+                n_scored = n_rows
+                folds_complete = expected_folds
+            else:
+                gain_left = gain_right = weight = display = gaussian = orientation = float("nan")
+                n_scored = 0
+                folds_complete = int(min(directional_folds[left, right], directional_folds[right, left]))
+            pair_records.append(
+                {
+                    "node_i": prepared.names[left],
+                    "node_j": prepared.names[right],
+                    "gain_i_to_j": gain_left,
+                    "gain_j_to_i": gain_right,
+                    "weight_nats_raw": weight,
+                    "display_magnitude_nats": display,
+                    "gaussian_equivalent_magnitude": gaussian,
+                    "orientation_gap": orientation,
+                    "n_scored": n_scored,
+                    "folds_complete": folds_complete,
+                    "status": status,
+                    "diagnostic_flags": ";".join(sorted(flags)),
+                }
+            )
+
+    pair_frame = pd.DataFrame(pair_records, columns=PAIR_COLUMNS)
+    node_rows: list[dict[str, Any]] = []
+    for target, name in enumerate(prepared.names):
+        records = [record for record in node_records if record.get("node") == name]
+        full_total = sum(float(record.get("full_score_sum", 0.0)) for record in records)
+        intercept_total = sum(float(record.get("intercept_score_sum", 0.0)) for record in records)
+        scored_rows = sum(int(record.get("n_rows", 0)) for record in records)
+        row: dict[str, Any] = {
+            "node": name,
+            "full_score_mean": full_total / scored_rows if scored_rows else float("nan"),
+            "intercept_score_mean": intercept_total / scored_rows if scored_rows else float("nan"),
+            "full_minus_intercept": (
+                (full_total - intercept_total) / scored_rows if scored_rows else float("nan")
+            ),
+            "n_predictions_full": scored_rows,
+            "n_predictions_intercept": scored_rows,
+            "diagnostic_flags": "",
+        }
+        for fold in range(expected_folds):
+            values = [record["lambda"] for record in records if record.get("fold") == fold]
+            row[f"lambda_fold_{fold + 1}"] = values[0] if values else float("nan")
+        node_rows.append(row)
+
+    node_frame = pd.DataFrame(node_rows)
+    fold_frame = pd.DataFrame(fold_records)
+    result_metadata = dict(metadata)
+    result_metadata["complete"] = bool(
+        result_metadata.get("complete", False)
+        and all(record["status"] == "complete" for record in pair_records)
+    )
+    return NetworkFit(pairs=pair_frame, nodes=node_frame, folds=fold_frame, metadata=result_metadata)
 
 
 def fit_network(*args: object, **kwargs: object) -> NetworkFit:
