@@ -18,6 +18,7 @@ from mintnet.cin.fit import (
     target_supported,
     tune_lambdas,
 )
+from mintnet.cin import fit_network
 from mintnet.cin.result import NetworkFit, PAIR_COLUMNS
 
 
@@ -166,6 +167,8 @@ def test_aggregate_uses_row_sums_and_preserves_signed_weight() -> None:
     directional_failure = np.zeros((3, 3), dtype=bool)
     directional_sum[0, 1] = 12.0
     directional_sum[1, 0] = -6.0
+    directional_sum[0, 2] = -12.0
+    directional_sum[2, 0] = -6.0
     directional_rows[0, 1] = directional_rows[1, 0] = prepared.n_retained
     directional_folds[0, 1] = directional_folds[1, 0] = 2
     directional_started[0, 1] = directional_started[1, 0] = True
@@ -196,6 +199,12 @@ def test_aggregate_uses_row_sums_and_preserves_signed_weight() -> None:
     assert pair.gain_j_to_i == pytest.approx(-0.2)
     assert pair.weight_nats_raw == pytest.approx(0.1)
     assert pair.display_magnitude_nats == pytest.approx(0.1)
+    negative_pair = fit.pairs.loc[
+        (fit.pairs.node_i == "a") & (fit.pairs.node_j == "c")
+    ].iloc[0]
+    assert negative_pair.weight_nats_raw == pytest.approx(-0.3)
+    assert negative_pair.display_magnitude_nats == 0.0
+    assert negative_pair.gaussian_equivalent_magnitude == 0.0
 
 
 def test_score_partition_handles_mixed_response_types() -> None:
@@ -229,3 +238,124 @@ def test_score_partition_handles_mixed_response_types() -> None:
     )
 
     assert np.isfinite(result.directional_sum[~np.eye(3, dtype=bool)]).all()
+
+
+def test_fit_network_is_deterministic_and_keeps_raw_data_out_of_metadata() -> None:
+    frame, schema, config = _continuous_fixture()
+
+    left = fit_network(frame, schema, config)
+    right = fit_network(frame, schema, config)
+
+    pd.testing.assert_frame_equal(left.pairs, right.pairs)
+    pd.testing.assert_frame_equal(left.nodes, right.nodes)
+    pd.testing.assert_frame_equal(left.folds, right.folds)
+    assert left.metadata["fit_id"] == right.metadata["fit_id"]
+    assert left.metadata["split_seeds"] == right.metadata["split_seeds"]
+    assert left.metadata["complete"] is True
+    assert "values" not in left.to_dict()
+    assert "codes" not in left.metadata
+
+
+def test_fit_network_batch_size_does_not_change_pairs() -> None:
+    frame, schema, config = _continuous_fixture()
+
+    left = fit_network(frame, schema, config)
+    right = fit_network(frame, schema, CINConfig(**{**config.__dict__, "pair_batch_size": 2}))
+
+    pd.testing.assert_frame_equal(left.pairs, right.pairs)
+    assert left.metadata["fit_id"] == right.metadata["fit_id"]
+
+
+def test_fit_network_expired_deadline_marks_pairs_not_started() -> None:
+    frame, schema, config = _continuous_fixture()
+
+    result = fit_network(frame, schema, config, deadline=time.monotonic() - 1.0)
+
+    assert result.metadata["complete"] is False
+    assert set(result.pairs.status) == {"not_started"}
+    assert result.pairs.weight_nats_raw.isna().all()
+
+
+def test_fit_network_isolates_target_numerical_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import mintnet.cin.fit as fit_module
+    from mintnet.cin.ridge import RidgeNumericalFailure
+
+    frame, schema, config = _continuous_fixture()
+    original = fit_module._score_target
+
+    def fail_target(*args: object, **kwargs: object) -> tuple[np.ndarray, dict[str, object]]:
+        target = int(args[2])
+        if target == 0 and len(args[3]) == 20:
+            raise RidgeNumericalFailure("injected target failure")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(fit_module, "_score_target", fail_target)
+    result = fit_network(frame, schema, config)
+
+    pair_ab = result.pairs.loc[(result.pairs.node_i == "a") & (result.pairs.node_j == "b")].iloc[0]
+    pair_bc = result.pairs.loc[(result.pairs.node_i == "b") & (result.pairs.node_j == "c")].iloc[0]
+    assert pair_ab.status == "numerical_failure"
+    assert pair_bc.status == "complete"
+
+
+def test_fit_network_started_budget_stop_does_not_publish_weights(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import mintnet.cin.fit as fit_module
+
+    frame, schema, config = _continuous_fixture()
+    original = fit_module.Budget.check
+
+    def stop_after_first_target(self: Budget, phase: str) -> None:
+        if phase == "outer fold 0 target 1":
+            raise BudgetExceeded("injected deadline")
+        original(self, phase)
+
+    monkeypatch.setattr(fit_module.Budget, "check", stop_after_first_target)
+    result = fit_network(frame, schema, config)
+
+    assert result.metadata["complete"] is False
+    assert set(result.pairs.status) == {"budget_exceeded"}
+    assert result.pairs.weight_nats_raw.isna().all()
+
+
+def test_fit_network_reports_type_specific_node_diagnostics() -> None:
+    rows = np.arange(30, dtype=np.float64)
+    frame = pd.DataFrame(
+        {
+            "a": np.sin(rows / 4.0),
+            "b": np.asarray(rows, dtype=np.intp) % 2,
+            "c": np.asarray(rows, dtype=np.intp) % 3,
+        }
+    )
+    schema = {
+        "a": {"kind": "continuous"},
+        "b": {"kind": "categorical", "levels": [0, 1]},
+        "c": {"kind": "categorical", "levels": [0, 1, 2]},
+    }
+    result = fit_network(frame, schema, CINConfig(seed=12, lambda_grid=(0.1, 1.0)))
+
+    for column in (
+        "variance_floor_hits",
+        "training_mse_mean",
+        "evaluation_mse_mean",
+        "clipped_fraction_mean",
+        "zero_sum_fallbacks",
+        "min_probability",
+        "rare_training_levels",
+        "absent_training_levels",
+    ):
+        assert column in result.nodes.columns
+
+
+def test_fit_network_factorization_count_is_bounded_for_wide_network() -> None:
+    rows = np.arange(30, dtype=np.float64)
+    frame = pd.DataFrame(
+        {f"v{index}": np.sin(rows / (index + 2.0)) + index * rows / 100.0 for index in range(12)}
+    )
+    schema = {name: {"kind": "continuous"} for name in frame.columns}
+    config = CINConfig(seed=15, max_seconds=30.0, pair_batch_size=32)
+
+    result = fit_network(frame, schema, config)
+
+    assert result.metadata["cost"]["n_large_factorizations"] <= 45

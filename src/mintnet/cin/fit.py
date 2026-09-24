@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+import hashlib
+import json
+import platform
+import subprocess
+from dataclasses import asdict, dataclass, field
+from importlib import metadata as importlib_metadata
 from typing import Any
 
 import numpy as np
@@ -631,7 +636,53 @@ def aggregate(
             "n_predictions_full": scored_rows,
             "n_predictions_intercept": scored_rows,
             "diagnostic_flags": "",
+            "variance_floor_hits": 0,
+            "training_mse_mean": float("nan"),
+            "evaluation_mse_mean": float("nan"),
+            "clipped_fraction_mean": float("nan"),
+            "zero_sum_fallbacks": 0,
+            "min_probability": float("nan"),
+            "rare_training_levels": 0,
+            "absent_training_levels": 0,
         }
+        continuous_infos = [
+            record["full_info"]
+            for record in records
+            if isinstance(record.get("full_info"), dict)
+            and "variance_floor_hit" in record["full_info"]
+        ]
+        categorical_infos = [
+            record["full_info"]
+            for record in records
+            if isinstance(record.get("full_info"), dict)
+            and "clipped_fraction" in record["full_info"]
+        ]
+        if continuous_infos:
+            row["variance_floor_hits"] = int(
+                sum(bool(info["variance_floor_hit"]) for info in continuous_infos)
+            )
+            row["training_mse_mean"] = float(
+                np.mean([float(info["training_mse"]) for info in continuous_infos])
+            )
+            row["evaluation_mse_mean"] = float(
+                np.mean([float(info["evaluation_mse"]) for info in continuous_infos])
+            )
+        if categorical_infos:
+            row["clipped_fraction_mean"] = float(
+                np.mean([float(info["clipped_fraction"]) for info in categorical_infos])
+            )
+            row["zero_sum_fallbacks"] = int(
+                sum(int(info["zero_sum_count"]) for info in categorical_infos)
+            )
+            row["min_probability"] = float(
+                min(float(info["min_probability"]) for info in categorical_infos)
+            )
+            row["rare_training_levels"] = int(
+                sum(int(info["rare_training_levels"]) for info in categorical_infos)
+            )
+            row["absent_training_levels"] = int(
+                sum(int(info["absent_training_levels"]) for info in categorical_infos)
+            )
         for fold in range(expected_folds):
             values = [record["lambda"] for record in records if record.get("fold") == fold]
             row[f"lambda_fold_{fold + 1}"] = values[0] if values else float("nan")
@@ -647,5 +698,214 @@ def aggregate(
     return NetworkFit(pairs=pair_frame, nodes=node_frame, folds=fold_frame, metadata=result_metadata)
 
 
-def fit_network(*args: object, **kwargs: object) -> NetworkFit:
-    raise NotImplementedError("CIN fit orchestration is implemented in later steps")
+def _metadata_value(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return [_metadata_value(item) for item in value.tolist()]
+    if isinstance(value, dict):
+        return {str(key): _metadata_value(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_metadata_value(item) for item in value]
+    return value
+
+
+def _dependency_versions() -> dict[str, str | None]:
+    versions: dict[str, str | None] = {"python": platform.python_version()}
+    for package in ("numpy", "scipy", "scikit-learn", "pandas"):
+        try:
+            versions[package] = importlib_metadata.version(package)
+        except importlib_metadata.PackageNotFoundError:
+            versions[package] = None
+    return versions
+
+
+def _git_revision() -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    revision = completed.stdout.strip()
+    return revision if completed.returncode == 0 and revision else None
+
+
+def _fit_metadata(prepared: Any, schema: Any, config: CINConfig, split_plan: SplitPlan) -> dict[str, Any]:
+    config_payload = _metadata_value(asdict(config))
+    schema_payload = _metadata_value(schema)
+    schema_json = json.dumps(schema_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    code_revision = _git_revision()
+    digest_input = "\x1f".join(
+        (
+            config.config_hash(),
+            schema_json,
+            prepared.data_digest,
+            code_revision or "",
+        )
+    ).encode("utf-8")
+    fit_id = hashlib.sha256(digest_input).hexdigest()[:16]
+    return {
+        "config": config_payload,
+        "config_hash": config.config_hash(),
+        "schema": schema_payload,
+        "retained_count": int(prepared.n_retained),
+        "excluded_count": int(prepared.n_excluded),
+        "digests": {
+            "data_digest": prepared.data_digest,
+            "row_identity_digest": prepared.row_identity_digest,
+            "excluded_labels_digest": prepared.excluded_labels_digest,
+        },
+        "dependencies": _dependency_versions(),
+        "split_seeds": _metadata_value(split_plan.seed_metadata),
+        "git_revision": code_revision,
+        "fit_id": fit_id,
+        "complete": True,
+        "runtime": {
+            "status": "running",
+            "deadline_exceeded": False,
+        },
+        "cost": {
+            "n_large_factorizations": 0,
+            "q": 0,
+            "t": 0,
+            "phase_seconds": {},
+            "peak_rss_mb": None,
+            "n_fallbacks": 0,
+        },
+    }
+
+
+def _empty_accumulators(n_targets: int) -> tuple[np.ndarray, ...]:
+    shape = (n_targets, n_targets)
+    return (
+        np.zeros(shape, dtype=np.float64),
+        np.zeros(shape, dtype=np.intp),
+        np.zeros(shape, dtype=np.intp),
+        np.zeros(shape, dtype=bool),
+        np.zeros(shape, dtype=bool),
+    )
+
+
+def _mark_all_started(started: np.ndarray) -> None:
+    started[:] = True
+    np.fill_diagonal(started, False)
+
+
+def fit_network(
+    frame: Any = None,
+    schema: Any = None,
+    config: CINConfig | None = None,
+    *,
+    deadline: float | None = None,
+) -> NetworkFit:
+    """Fit a cross-validated CIN network using shared fold orchestration."""
+
+    if config is None:
+        raise NotImplementedError("fit_network requires frame, schema, and config")
+
+    from .config import prepare_data
+    from .features import fit_feature_space
+    from .ridge import RidgeNumericalFailure
+
+    started_at = time.monotonic()
+    prepared = prepare_data(frame, schema, config)
+    split_plan = make_splits(prepared.n_retained, config)
+    actual_deadline = (
+        float(deadline) if deadline is not None else started_at + float(config.max_seconds)
+    )
+    budget = Budget(actual_deadline)
+    metadata = _fit_metadata(prepared, schema, config, split_plan)
+    counters = CostCounters()
+    n_targets = len(prepared.names)
+    (
+        directional_sum,
+        directional_rows,
+        directional_folds,
+        directional_started,
+        directional_failure,
+    ) = _empty_accumulators(n_targets)
+    unsupported_targets: set[int] = set()
+    pair_flags: dict[tuple[int, int], set[str]] = {}
+    node_records: list[dict[str, Any]] = []
+    fold_records: list[dict[str, Any]] = []
+    complete = True
+    tuning_started = False
+    outer_started = False
+
+    try:
+        budget.check("fit setup")
+        tuning_started = True
+        tuning = tune_lambdas(prepared, split_plan, config, budget, counters)
+        unsupported_targets.update(
+            int(target)
+            for target in np.flatnonzero(~np.all(tuning.supported_by_fold, axis=0))
+        )
+        for fold_index, outer in enumerate(split_plan.outer):
+            budget.check(f"outer fold {fold_index}")
+            outer_started = True
+            feature_space = fit_feature_space(prepared, outer.train_rows, config)
+            fold_score = score_partition(
+                prepared,
+                feature_space,
+                outer.train_rows,
+                outer.eval_rows,
+                tuning.lambda_by_fold[fold_index],
+                config,
+                budget,
+                counters,
+                fold_index,
+            )
+            directional_sum += fold_score.directional_sum
+            directional_rows += fold_score.directional_rows
+            directional_started |= fold_score.directional_started
+            directional_failure |= fold_score.directional_failure
+            completed_direction = (
+                fold_score.directional_rows > 0
+            ) & ~fold_score.directional_failure
+            directional_folds += completed_direction.astype(np.intp)
+            unsupported_targets.update(fold_score.unsupported_targets)
+            for key, flags in fold_score.pair_flags.items():
+                pair_flags.setdefault(key, set()).update(flags)
+            node_records.extend(fold_score.node_diagnostics)
+            fold_record = dict(fold_score.fold_diagnostics)
+            fold_record["lambda_values"] = _metadata_value(tuning.lambda_by_fold[fold_index])
+            fold_records.append(fold_record)
+    except BudgetExceeded:
+        complete = False
+        metadata["runtime"]["deadline_exceeded"] = True
+        if tuning_started or outer_started or counters.n_large_factorizations:
+            _mark_all_started(directional_started)
+    except RidgeNumericalFailure:
+        complete = False
+        directional_failure[:] = True
+        np.fill_diagonal(directional_failure, False)
+
+    metadata["complete"] = complete
+    metadata["runtime"]["status"] = "complete" if complete else "incomplete"
+    metadata["runtime"]["elapsed_seconds"] = float(time.monotonic() - started_at)
+    metadata["cost"] = {
+        "n_large_factorizations": int(counters.n_large_factorizations),
+        "q": int(counters.q),
+        "t": int(counters.t),
+        "phase_seconds": _metadata_value(counters.phase_seconds),
+        "peak_rss_mb": None,
+        "n_fallbacks": int(counters.n_fallbacks),
+    }
+    return aggregate(
+        prepared,
+        directional_sum,
+        directional_rows,
+        directional_folds,
+        directional_started,
+        directional_failure,
+        unsupported_targets,
+        pair_flags,
+        node_records,
+        fold_records,
+        metadata,
+        expected_folds=config.outer_folds,
+    )
