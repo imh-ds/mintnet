@@ -157,6 +157,72 @@ def test_score_partition_omits_diagonal_and_scores_each_direction_once() -> None
                 assert result.directional_started[source, target]
 
 
+def test_score_partition_matches_direct_restricted_ridge_reference() -> None:
+    from mintnet.cin.ridge import direct_restricted_ridge
+    from mintnet.cin.scores import gaussian_logscore
+
+    frame, schema, config = _continuous_fixture()
+    prepared = prepare_data(frame, schema, config)
+    outer = make_splits(prepared.n_retained, config).outer[0]
+    feature_space = fit_feature_space(prepared, outer.train_rows, config)
+    result = score_partition(
+        prepared,
+        feature_space,
+        outer.train_rows,
+        outer.eval_rows,
+        np.full(len(schema), 0.1),
+        config,
+        Budget(time.monotonic() + 30),
+        CostCounters(),
+        0,
+    )
+
+    design_train = feature_space.design(outer.train_rows)
+    design_eval = feature_space.design(outer.eval_rows)
+    responses_train = feature_space.responses(outer.train_rows)
+    responses_eval = feature_space.responses(outer.eval_rows)
+    target = 1
+    source = 0
+    response_start = int(feature_space.R[target, 0])
+    target_columns = np.arange(*feature_space.S[target], dtype=np.intp)
+    source_columns = np.arange(*feature_space.S[source], dtype=np.intp)
+    full_keep = np.setdiff1d(np.arange(feature_space.q), target_columns, assume_unique=True)
+    reduced_keep = np.setdiff1d(
+        np.arange(feature_space.q),
+        np.union1d(target_columns, source_columns),
+        assume_unique=True,
+    )
+    full_beta = direct_restricted_ridge(
+        design_train, responses_train, 0.1, full_keep, len(outer.train_rows)
+    )
+    reduced_beta = direct_restricted_ridge(
+        design_train, responses_train, 0.1, reduced_keep, len(outer.train_rows)
+    )
+    full_train = design_train[:, full_keep] @ full_beta[:, response_start : response_start + 1]
+    full_eval = design_eval[:, full_keep] @ full_beta[:, response_start : response_start + 1]
+    reduced_train = design_train[:, reduced_keep] @ reduced_beta[:, response_start : response_start + 1]
+    reduced_eval = design_eval[:, reduced_keep] @ reduced_beta[:, response_start : response_start + 1]
+    full_logq, _ = gaussian_logscore(
+        responses_eval[:, response_start],
+        full_eval[:, 0],
+        responses_train[:, response_start] - full_train[:, 0],
+        float(feature_space.response_specs[target].y_sd),
+        config.variance_floor,
+    )
+    reduced_logq, _ = gaussian_logscore(
+        responses_eval[:, response_start],
+        reduced_eval[:, 0],
+        responses_train[:, response_start] - reduced_train[:, 0],
+        float(feature_space.response_specs[target].y_sd),
+        config.variance_floor,
+    )
+
+    expected = float(np.mean(full_logq - reduced_logq))
+    assert result.directional_sum[source, target] / result.directional_rows[source, target] == pytest.approx(
+        expected, rel=1e-7
+    )
+
+
 def test_aggregate_uses_row_sums_and_preserves_signed_weight() -> None:
     frame, schema, config = _continuous_fixture()
     prepared = prepare_data(frame, schema, config)
