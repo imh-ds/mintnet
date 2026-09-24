@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from .config import CINConfig
+from .fit import fit_network
+from .result import NetworkFit
 
-__all__ = ["CINConfig", "estimate_stability", "fit_network", "make_view"]
-
-
-def fit_network(*args: object, **kwargs: object) -> None:
-    raise NotImplementedError("CIN fitting is implemented in a later build task")
+__all__ = ["CINConfig", "NetworkFit", "estimate_stability", "fit_network", "make_view"]
 
 
 def estimate_stability(*args: object, **kwargs: object) -> None:
