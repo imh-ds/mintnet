@@ -25,6 +25,8 @@ from mintnet.experiments.cin_cost import (
     run_cost,
 )
 from mintnet.experiments import cin_cost_reporting
+from mintnet.experiments import cin_baseline_reporting
+from scripts.aggregate_cin_sidecars import aggregate_sidecars
 from mintnet.experiments.cin_common import (
     IncrementalCsvWriter,
     canonical_pair_sidecar_name,
@@ -197,3 +199,42 @@ def test_panel_smoke_writes_rows_for_supported_methods(tmp_path: Path) -> None:
     assert set(raw.loc[raw["case"] == "A", "method"]) == {"cin", "cin_linear", "ebicglasso"}
     assert (output / "raw_metrics.csv").exists()
     assert len(list((output / "sidecars").glob("*_pairs.csv.gz"))) == 16
+
+
+def test_sidecar_aggregation_combines_cost_pairs_and_manifest(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    source = tmp_path / "source"
+    run_cost(config, source, write_report=False)
+    output = tmp_path / "aggregate"
+    pairs, stability = aggregate_sidecars(source, output)
+
+    assert len(pairs) == (8 * 7 // 2) + 7 * (12 * 11 // 2)
+    assert stability.empty
+    assert (output / "sidecars" / "pairs_all.csv.gz").exists()
+    assert (output / "sidecars" / "sidecar_manifest.csv").exists()
+
+
+def test_sidecar_aggregation_rejects_tampering_and_orphans(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    source = tmp_path / "source"
+    run_cost(config, source, write_report=False)
+    first = next((source / "sidecars").glob("*.csv.gz"))
+    first.write_bytes(first.read_bytes() + b"tampered")
+    with pytest.raises(ValueError, match="sha256"):
+        aggregate_sidecars(source, tmp_path / "bad-hash")
+
+    source = tmp_path / "orphan-source"
+    run_cost(config, source, write_report=False)
+    (source / "sidecars" / "orphan.csv.gz").write_bytes(b"not listed")
+    with pytest.raises(ValueError, match="orphan"):
+        aggregate_sidecars(source, tmp_path / "bad-orphan")
+
+
+def test_baseline_report_requires_promised_pair_sidecars(tmp_path: Path) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    source = tmp_path / "panel"
+    raw = run_baseline(config, source, write_report=False)
+    sidecar = next((source / "sidecars").glob("*_pairs.csv.gz"))
+    sidecar.unlink()
+    with pytest.raises(FileNotFoundError, match="sidecar"):
+        cin_baseline_reporting.write_report(raw, config, source)
