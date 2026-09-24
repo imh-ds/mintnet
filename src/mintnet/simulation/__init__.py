@@ -1,5 +1,14 @@
 """Known-truth simulation data generators."""
 
+from .cin_networks import (
+    SimulatedDataset,
+    exact_cmi_from_joint,
+    gaussian_truth,
+    generate_case,
+    generate_cost_input,
+    is_connected,
+    population_signal_summary,
+)
 from .motifs import (
     ORGANIC_NETWORK_TRUE_EDGES,
     sample_chain,
@@ -16,6 +25,13 @@ from .motifs import (
 
 __all__ = [
     "ORGANIC_NETWORK_TRUE_EDGES",
+    "SimulatedDataset",
+    "exact_cmi_from_joint",
+    "gaussian_truth",
+    "generate_case",
+    "generate_cost_input",
+    "is_connected",
+    "population_signal_summary",
     "sample_chain",
     "sample_hub",
     "sample_measured_fork",

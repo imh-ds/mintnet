@@ -7570,3 +7570,239 @@ Consequences: Task 04 may consume `RidgeSolution`, `OmissionWorkspace`, and
 the explicit fallback/status contract for score and tuning implementation.
 The CIN estimator remains unvalidated, and no public network evidence claim
 is introduced.
+
+## D-098: Implement CIN Task 04 score adapters and penalty tuning
+
+Date: 2026-09-24.
+
+Task 04 of the tracked CIN build plan is now implemented in
+`src/mintnet/cin/scores.py`. The module provides training-variance Gaussian
+log scores, smoothed categorical log scores with clipping and zero-sum prior
+fallback diagnostics, shared intercept-only adapters, and deterministic
+per-target lambda selection with largest-lambda tie breaking. The row-max
+normalization is algebraically equivalent to the specified categorical
+normalization while remaining finite for very large finite raw scores.
+
+Decision: accept Task 04 as the score-and-tuning baseline for the next
+dependency-ordered CIN step. Full, reduced, and intercept-only models use the
+same score conventions; tuning maximizes summed inner held-out scores and does
+not search reduced models. The score module remains independent of feature
+fitting and ridge orchestration.
+
+Evidence: `tests/unit/cin/test_scores.py` passes with 13 tests, the combined
+CIN numerical suite passes with 31 tests, and the full active unit suite passes
+with 138 tests under the available Python 3.12.1 runtime. The score module
+imports successfully, the forbidden-pattern scan is clean at word boundaries,
+and the reviewed diff passes `git diff --check`. This establishes algebraic
+and numerical correctness for the tested adapters only; it is not
+statistical-method validation.
+
+Consequences: Task 05 may consume the score adapters and `choose_lambda` for
+training-only nested tuning and outer-fold scoring. The CIN estimator remains
+unvalidated, and no public network evidence claim is introduced.
+
+## D-099: Implement CIN Task 05 cross-fitting and fit orchestration
+
+Date: 2026-09-24.
+
+Task 05 of the tracked CIN build plan is now implemented under
+`src/mintnet/cin/fit.py` and `src/mintnet/cin/result.py`. The public
+`fit_network` entry point prepares data once, creates deterministic shared
+outer and inner splits, tunes one penalty per target and outer fold using
+training-only feature spaces, scores full/reduced models through the shared
+ridge omission workspace, and aggregates every unordered pair by held-out
+row sums. The target predictor block is omitted before every score, reduced
+models reuse the same fitted factorization and penalty, and zero-width
+predictor blocks contribute exact zero with a diagnostic flag.
+
+`NetworkFit` now carries Task 6-compatible pair, node, and fold tables plus
+JSON-safe `to_dict()`/`from_dict()` serialization. Pair statuses distinguish
+complete, unsupported, numerical failure, budget exceeded, and not started;
+partial directional sums never become published weights. Signed raw gains are
+preserved while display magnitudes are clamped at zero. Metadata records
+configuration/schema digests, split seed provenance, dependency versions,
+best-effort git revision, fit id, runtime status, factorization counts, and
+phase costs without retaining participant-level data.
+
+Decision: accept Task 05 as the fit-orchestration baseline for the next
+dependency-ordered CIN step. Use the Task 4 score adapters as the sole score
+contract, keep the absolute monotonic deadline externalizable for later
+stability work, and keep `pair_batch_size` and `max_seconds` out of the
+statistical procedure hash. This implementation establishes tested
+orchestration behavior; it is not statistical-method validation or evidence
+that CIN estimates are calibrated for substantive use.
+
+Evidence: the focused Task 5 suite passes with 17 tests, including direct
+restricted-ridge equivalence at relative tolerance `1e-7`, mixed continuous
+and categorical responses, deterministic and batch-size-invariant fits,
+budget and target-local numerical-failure statuses, signed-negative weights,
+and the p=12 factorization bound. The full active unit suite passes with 155
+tests using the available Python 3.12 runtime; `ruff check src tests` passes;
+`git diff --check` passes; and the final feature branch is clean. The
+factorization test asserts the specified maximum of 45 large factorizations;
+peak RSS remains best-effort and is recorded as unavailable in this local
+runner.
+
+Implementation commits: `9f4fc8f`, `4ac6828`, `56b1df0`, `8d3c8fd`, and
+`e1b67ca`. The decision-log update is committed separately after verification.
+
+Consequences: Task 06 may consume `NetworkFit` without refitting or changing
+the fit procedure. The CIN estimator remains unvalidated, and no public
+network evidence claim is introduced.
+
+## D-100: Implement CIN Task 06 results, views, exports, and methods text
+
+Date: 2026-09-24.
+
+Task 06 is now implemented under `src/mintnet/cin/result.py` and
+`src/mintnet/cin/views.py`. `NetworkFit` supports validated six-file
+persistence with canonical fit-id recomputation, schema-order checks, unique
+pair-cardinality checks, symmetric weight/display matrices, and preserved
+`NaN` values for incomplete pairs. Fit metadata now records compact prepared-
+data diagnostics without retaining raw observations.
+
+`make_view` is a pure, non-refitting filter over complete positive raw weights,
+with exact threshold inclusion, optional two-direction agreement, lazy
+fit-matched stability integration, deterministic presentation limits, and
+named descriptions. `NetworkView` exports display-magnitude edge lists and
+labelled matrices, writes reproducible view artifacts, and provides a
+matplotlib-only circular network plot and matrix heatmap without importing
+matplotlib during package import. Generated methods text reports the actual
+model/configuration, filters, tuning summary, limitations, and triggered data
+diagnostic warnings.
+
+Decision: accept Task 06 as the results and presentation baseline for the next
+dependency-ordered step. Stability remains a lazy protocol integration point
+for Task 07; ordinary fit persistence and views do not require the stability
+module. Views never refit and retain the distinction between non-displayed
+complete pairs and unavailable incomplete pairs. The estimator remains
+unvalidated, and methods text makes no significance, causal, or confidence
+claim.
+
+Evidence: the full active unit suite passes with 170 tests; three optional
+matplotlib plot smoke cases are skipped because matplotlib is absent from the
+prepared local test runner even though it is a declared project dependency;
+`ruff check src tests` passes; and `git diff --check` is clean. Implementation
+commits are `ac6af35`, `192731c`, `4d402e8`, and `31b6188`.
+
+Consequences: Task 07 may provide the stability rule adapter consumed by
+`make_view`, and Task 12 may consume the fit → view → save → reload workflow.
+No substantive network interpretation or statistical-method validation claim
+is introduced by this entry.
+
+## D-101: Implement CIN Task 07 stability estimation and aggregation
+
+Date: 2026-09-24.
+
+Task 07 is now implemented under `src/mintnet/cin/fit.py` and
+`src/mintnet/cin/stability.py`, with public exports from `src/mintnet/cin/__init__.py`.
+The fit path exposes a prepared-data runner with repeat-specific split seeds
+and an absolute deadline while preserving the default `fit_network` behavior.
+Stability estimation derives deterministic child seeds from the fitted seed and
+stable tag `0xC17`, records fit/config/data identity, samples with a minimum
+sample-size guard, performs budget preflight, supports resumable persisted
+results, and marks interrupted repeats explicitly. CSV/JSON persistence accepts
+gzip records, and structural validation rejects mismatched provenance or
+incomplete pair records. `stability_for_rule` returns every schema-order pair
+with explicit requested/completed denominators and applies the requested
+agreement and effect thresholds without refitting. Task 06 views consume the
+stability table lazily and preserve the fit identity boundary.
+
+Decision: accept Task 07 as the deterministic stability and rule-aggregation
+baseline for downstream CIN examples and reporting. Stability results are
+reproducible and resumable under the recorded procedure identity, but the
+implementation makes no inferential, calibration, or substantive network claim.
+
+Evidence: the full active unit suite passes with 187 tests; three optional
+matplotlib plot cases are skipped because matplotlib is absent from the
+prepared local runner; `ruff check src tests` passes; and `git diff --check`
+is clean. Implementation commits are `883fb9b`, `47c1773`, `ab3a851`, and
+`f790728`.
+
+Consequences: downstream CIN documentation may consume `estimate_stability`,
+`load_stability`, and `stability_for_rule`; Task 06 views can request the
+stability filter without refitting. No substantive network interpretation or
+statistical-method validation claim is introduced by this entry.
+
+## D-102: Implement CIN Task 08 simulation generators and exact population truth
+
+Date: 2026-09-24.
+
+Task 08 is now implemented under `src/mintnet/simulation/cin_networks.py`,
+with stable exports from `src/mintnet/simulation/__init__.py` and the explicit
+population audit in `scripts/cin_simulation_audit.py`. The generators cover the
+frozen cases A–D (Gaussian precision structures), E (a depth-limited nonlinear
+tree), F/G (exact-enumeration binary and three-level categorical models), H (a
+mixed categorical/continuous star), and I (a mixed independent null). They
+also provide dense continuous, categorical5, categorical10, and mixed cost
+inputs without declaring recovery truth.
+
+Decision: accept Task 08 as the deterministic simulation and population-truth
+baseline for the downstream evidence tasks. Exact CMI is recorded only where
+it is derived from the Gaussian precision or finite-state joint. E and H use
+explicitly labelled parameter signal proxies with `population_cmi=None`; the
+proxies are not CMI and must not be used as recovery truth. Finite-state
+rejection sampling uses population quantities only, records its tries, and
+keeps the sample RNG independent of structure acceptance. The binary F graph
+draw uses a randomized low-degree cycle plus two extras, equivalent to a tree
+plus three extras, to avoid pathological hub-induced rejection while retaining
+the frozen Ising field and interaction laws.
+
+Evidence: the complete repository suite passes with 229 tests and three
+optional matplotlib skips; `ruff check src tests scripts/cin_simulation_audit.py`
+passes; and `git diff --check` is clean. The audit command writes the ignored
+population report at `results/generated/cin_population_properties.json` and
+passes all nine case records, 200 Gaussian structures per applicable case,
+100,000-row F/G frequency checks, B/D pairing, the historical organic-network
+smoke, and deterministic cost-input digests.
+
+Implementation commits: `9d1ef4c`, `900bf6e`, `24bf525`, `753ab34`, and
+`2e2ce82`. The decision-log update is committed separately after verification.
+
+Consequences: Task 09 may derive replicate seeds and consume the stable A–I
+generator contract; Tasks 11/12 may use the audit report as population-property
+evidence. No fitted-weight, recovery-score, inferential, causal, or substantive
+network claim is introduced by this entry.
+
+## D-103: Implement CIN Task 09 runner and Actions infrastructure
+
+Date: 2026-09-24.
+
+Task 09 is now implemented in the active runner surface. Shared utilities in
+`src/mintnet/experiments/cin_common.py` provide the fixed five-child full-grid
+seed bundle, incremental CSV flushing, one-thread limits, resolved-config
+hashing, sidecar naming, provenance, and Windows-safe RSS semantics. The cost
+runner and statistical-panel runner expose frozen YAML configuration loaders,
+full-grid shard selectors, deterministic paired methods, durable failure rows,
+gzip pair/stability sidecars, and runner-specific reports. The method matrix
+runs `cin` for every A–I case and the regression fixture, with `cin_linear` and
+`ebicglasso` only on continuous cases. Comparator failures remain explicit
+`status=error` rows and are never converted into empty successful graphs.
+
+`scripts/aggregate_cin_sidecars.py` validates sidecar hashes, row counts,
+promises, duplicate identities, missing files, and orphan files before writing
+combined tables. The generic workflow and `scripts/aggregate_shards.py` were
+left unchanged; CIN modules enforce their one-thread policy before numerical
+imports and inside each fit. The compute ledger is frozen at its header until
+an Actions run is actually dispatched, and `docs/cin_user_guide.md` records the
+verified dispatch shapes without dispatching expensive jobs locally.
+
+Decision: accept Task 09 as the deterministic, auditable runner foundation for
+the Task 10 cost pilot and Task 11 statistical panel. Local smoke and shard
+equivalence runs establish correctness only; they do not establish hosted-run
+timing gates, statistical recovery, inferential validity, or substantive network
+interpretation.
+
+Evidence: the fresh complete repository suite passes with 254 tests and three
+optional matplotlib skips; the focused integration suite covers configuration,
+cost/panel smoke, shard equivalence, sidecar tamper/orphan/duplicate detection,
+incremental failure behavior, comparator failure semantics, generic aggregation,
+metadata/thread provenance, reports, ledger, and workflow documentation. Ruff
+passes for the runner surface and sidecar script, and `git diff --check` is
+clean. Implementation commits are `2c632a1`, `1a43d40`, `a24f68e`, `cbea833`,
+`ef8bb7c`, `c80d5cb`, `171c110`, `d5bff51`, and `97de039`.
+
+Consequences: Task 10 may run the frozen cost matrix through the documented
+runner and record hosted timings in the ledger; Task 11 may run the bounded
+panel using the paired A–I simulation contract. No expensive workflow was
+dispatched and no publication or release claim is introduced by this entry.

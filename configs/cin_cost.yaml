@@ -1,0 +1,11 @@
+master_seed: 20260924
+repeats: [1, 2]
+cells:
+  - {id: c_p8_n100, kind: dense_continuous, p: 8, n: 100}
+  - {id: c_p30_n100, kind: dense_continuous, p: 30, n: 100}
+  - {id: c_p100_n100, kind: dense_continuous, p: 100, n: 100}
+  - {id: c_p100_n300, kind: dense_continuous, p: 100, n: 300}
+  - {id: c_p100_n1000, kind: dense_continuous, p: 100, n: 1000}
+  - {id: k5_p30_n150, kind: categorical5, p: 30, n: 150}
+  - {id: k10_p100_n200, kind: categorical10, p: 100, n: 200}
+  - {id: mix_p100_n200, kind: mixed, p: 100, n: 200}
