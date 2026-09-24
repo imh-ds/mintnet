@@ -27,6 +27,7 @@ from mintnet.experiments.cin_cost import (
 from mintnet.experiments import cin_cost_reporting
 from mintnet.experiments import cin_baseline_reporting
 from scripts.aggregate_cin_sidecars import aggregate_sidecars
+from scripts.aggregate_shards import aggregate as aggregate_generic
 from mintnet.experiments.cin_common import (
     IncrementalCsvWriter,
     canonical_pair_sidecar_name,
@@ -238,3 +239,94 @@ def test_baseline_report_requires_promised_pair_sidecars(tmp_path: Path) -> None
     sidecar.unlink()
     with pytest.raises(FileNotFoundError, match="sidecar"):
         cin_baseline_reporting.write_report(raw, config, source)
+
+
+def _without_runtime_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    ignored = {
+        "elapsed_seconds", "peak_rss_mb", "prepare_seconds", "features_seconds",
+        "gram_factor_seconds", "h_seconds", "omission_seconds", "score_seconds",
+        "aggregate_seconds", "outputs_seconds",
+    }
+    result = frame.drop(columns=[column for column in ignored if column in frame], errors="ignore").replace({None: np.nan})
+    return result.sort_values(
+        [column for column in ("cell", "repeat", "case", "phase", "replicate", "method") if column in frame]
+    ).reset_index(drop=True)
+
+
+def test_cost_full_grid_equals_single_cell_shards(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    full = run_cost(config, tmp_path / "full", write_report=False)
+    shard_frames = []
+    for cell in config.cells:
+        shard_frames.append(run_cost(config, tmp_path / f"shard-{cell.cell_id}", cells=(cell.cell_id,), write_report=False))
+    sharded = pd.concat(shard_frames, ignore_index=True)
+    pd.testing.assert_frame_equal(_without_runtime_columns(full), _without_runtime_columns(sharded), check_dtype=False)
+    resolved = (tmp_path / "full" / "resolved_config.yaml").read_bytes()
+    assert all((tmp_path / f"shard-{cell.cell_id}" / "resolved_config.yaml").read_bytes() == resolved for cell in config.cells)
+
+
+def test_panel_full_grid_equals_case_and_batch_shards(tmp_path: Path) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    full = run_baseline(config, tmp_path / "full", write_report=False)
+    shard_frames = []
+    for case in config.cases:
+        for batch in ("dev0", "val0", "val1"):
+            shard_frames.append(run_baseline(config, tmp_path / f"{case}-{batch}", cases=(case,), replicate_batches=(batch,), write_report=False))
+    sharded = pd.concat(shard_frames, ignore_index=True)
+    pd.testing.assert_frame_equal(_without_runtime_columns(full), _without_runtime_columns(sharded), check_dtype=False)
+    assert set(sharded.loc[sharded["phase"] == "development", "replicate"]) == {0, 1}
+    assert set(sharded.loc[sharded["phase"] == "validation", "replicate"]) == {1000, 1001}
+
+
+def test_generic_aggregator_accepts_cost_shards(tmp_path: Path) -> None:
+    config_path = ROOT / "configs" / "cin_cost_smoke.yaml"
+    config = load_cost_config(config_path)
+    shards = tmp_path / "shards"
+    shards.mkdir()
+    for cell in config.cells:
+        run_cost(config, shards / cell.cell_id, cells=(cell.cell_id,), write_report=False)
+    output = tmp_path / "aggregated"
+    raw = aggregate_generic("mintnet.experiments.cin_cost", config_path, shards, output)
+    assert len(raw) == expected_cost_rows(config)
+    assert (output / "raw_metrics.csv").exists()
+
+
+def test_comparator_failure_is_an_error_row_without_pair_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    monkeypatch.setattr("mintnet.experiments.cin_baseline.fit_ebicglasso", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("forced comparator failure")))
+    raw = run_baseline(config, tmp_path / "failure", cases=("A",), replicate_batches=("dev0",), write_report=False)
+    failed = raw.loc[raw["method"] == "ebicglasso"].iloc[0]
+    assert failed["status"] == "error"
+    assert pd.isna(failed["pair_sidecar_file"])
+    assert failed["error_type"] == "RuntimeError"
+
+
+def test_cost_failure_leaves_prior_rows_and_explicit_error_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    original = __import__("mintnet.experiments.cin_cost", fromlist=["generate_cost_input"]).generate_cost_input
+
+    def fail_one(kind: str, p: int, n: int, *, seed: int):
+        if p == 12 and kind == "categorical5":
+            raise RuntimeError("forced dataset failure")
+        return original(kind, p, n, seed=seed)
+
+    monkeypatch.setattr("mintnet.experiments.cin_cost.generate_cost_input", fail_one)
+    raw = run_cost(config, tmp_path / "failure", write_report=False)
+    assert len(raw) == 8
+    assert (raw["status"] == "complete").sum() >= 1
+    failed = raw.loc[raw["kind"] == "categorical5"].iloc[0]
+    assert failed["status"] == "error"
+    assert failed["error_type"] == "RuntimeError"
+
+
+def test_metadata_preserves_thread_and_resolved_config_provenance(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    output = tmp_path / "metadata"
+    run_cost(config, output, cells=("c_p8_n100",), write_report=False)
+    metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
+    resolved_hash = hashlib.sha256((output / "resolved_config.yaml").read_bytes()).hexdigest()
+    assert metadata["config_sha256"] == resolved_hash
+    assert metadata["git_commit"]
+    assert all(value == "1" for value in metadata["thread_settings"]["environment"].values())
+    assert "threadpool_info" in metadata["thread_settings"]
+    assert "peak_rss_mb" in metadata

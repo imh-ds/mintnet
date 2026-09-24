@@ -16,15 +16,15 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from sklearn.metrics import average_precision_score  # noqa: E402
 
-from mintnet.cin import CINConfig, estimate_stability, fit_network
-from mintnet.comparators.ebicglasso import fit_ebicglasso
-from mintnet.simulation import (
+from mintnet.cin import CINConfig, estimate_stability, fit_network  # noqa: E402
+from mintnet.comparators.ebicglasso import fit_ebicglasso  # noqa: E402
+from mintnet.simulation import (  # noqa: E402
     ORGANIC_NETWORK_TRUE_EDGES,
     generate_case,
     sample_organic_network,
 )
 
-from .cin_common import (
+from .cin_common import (  # noqa: E402
     IncrementalCsvWriter,
     canonical_pair_sidecar_name,
     canonical_stability_sidecar_name,

@@ -116,17 +116,18 @@ def aggregate_sidecars(shards_dir: Path, output_dir: Path) -> tuple[pd.DataFrame
                 expected_pairs = int(raw_row["p"]) * (int(raw_row["p"]) - 1) // 2
                 if len(table) != expected_pairs:
                     raise ValueError(f"pair row count mismatch for {identity}: expected {expected_pairs}, got {len(table)}")
-                for column, value in zip(("case", "phase", "replicate", "method"), identity if "case" in raw_row else (None, None, None, None)):
+                identity_columns = ("case", "phase", "replicate", "method") if "case" in raw_row else ("cell", "repeat", "method")
+                for column, value in zip(identity_columns, identity):
                     if value is not None and column not in table:
                         table.insert(0, column, value)
                 all_pairs.append(table)
             else:
                 if "repeat_id" in table and len(table["repeat_id"].unique()) * (int(raw_row["p"]) * (int(raw_row["p"]) - 1) // 2) != len(table):
                     raise ValueError(f"stability row count mismatch for {identity}")
-                if "case" in raw_row:
-                    for column, value in zip(IDENTITY_COLUMNS, identity):
-                        if column not in table:
-                            table.insert(0, column, value)
+                identity_columns = IDENTITY_COLUMNS if "case" in raw_row else ("cell", "repeat", "method")
+                for column, value in zip(identity_columns, identity):
+                    if column not in table:
+                        table.insert(0, column, value)
                 all_stability.append(table)
             combined_manifest.append({**{column: manifest_row.get(column) for column in MANIFEST_COLUMNS}, "file": file_name})
         actual_files = {path.name for path in (root / "sidecars").glob("*.csv.gz")} if (root / "sidecars").exists() else set()
