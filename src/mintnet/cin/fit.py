@@ -81,7 +81,7 @@ def _seed_record(sequence: np.random.SeedSequence) -> dict[str, Any]:
     return {"entropy": entropy, "spawn_key": list(sequence.spawn_key)}
 
 
-def make_splits(n_rows: int, config: CINConfig) -> SplitPlan:
+def make_splits(n_rows: int, config: CINConfig, *, seed: int | None = None) -> SplitPlan:
     """Make one shared deterministic outer/inner split plan."""
 
     if isinstance(n_rows, bool) or not isinstance(n_rows, (int, np.integer)) or n_rows < 1:
@@ -89,7 +89,8 @@ def make_splits(n_rows: int, config: CINConfig) -> SplitPlan:
     if not isinstance(config, CINConfig):
         raise ValueError("config must be a CINConfig instance")
 
-    root = np.random.SeedSequence(config.seed)
+    root_seed = config.seed if seed is None else int(seed)
+    root = np.random.SeedSequence(root_seed)
     outer_sequence = root.spawn(1)[0]
     inner_sequences = root.spawn(config.outer_folds)
     permutation = np.random.default_rng(outer_sequence).permutation(int(n_rows))
@@ -97,7 +98,7 @@ def make_splits(n_rows: int, config: CINConfig) -> SplitPlan:
     all_rows = np.arange(int(n_rows), dtype=np.intp)
     outer_splits: list[OuterSplit] = []
     seed_metadata: dict[str, Any] = {
-        "root_entropy": int(config.seed),
+        "root_entropy": root_seed,
         "outer": _seed_record(outer_sequence),
         "inner": [_seed_record(sequence) for sequence in inner_sequences],
     }
@@ -795,25 +796,21 @@ def _mark_all_started(started: np.ndarray) -> None:
     np.fill_diagonal(started, False)
 
 
-def fit_network(
-    frame: Any = None,
-    schema: Any = None,
-    config: CINConfig | None = None,
+def _fit_prepared(
+    prepared: Any,
+    schema: Any,
+    config: CINConfig,
     *,
     deadline: float | None = None,
+    split_seed: int | None = None,
 ) -> NetworkFit:
-    """Fit a cross-validated CIN network using shared fold orchestration."""
+    """Fit a prepared CIN network with an optional external deadline and seed."""
 
-    if config is None:
-        raise NotImplementedError("fit_network requires frame, schema, and config")
-
-    from .config import prepare_data
     from .features import fit_feature_space
     from .ridge import RidgeNumericalFailure
 
     started_at = time.monotonic()
-    prepared = prepare_data(frame, schema, config)
-    split_plan = make_splits(prepared.n_retained, config)
+    split_plan = make_splits(prepared.n_retained, config, seed=split_seed)
     actual_deadline = (
         float(deadline) if deadline is not None else started_at + float(config.max_seconds)
     )
@@ -908,4 +905,31 @@ def fit_network(
         fold_records,
         metadata,
         expected_folds=config.outer_folds,
+    )
+
+
+def fit_network(
+    frame: Any = None,
+    schema: Any = None,
+    config: CINConfig | None = None,
+    *,
+    deadline: float | None = None,
+) -> NetworkFit:
+    """Fit a cross-validated CIN network using shared fold orchestration."""
+
+    if config is None:
+        raise NotImplementedError("fit_network requires frame, schema, and config")
+
+    from .config import prepare_data
+
+    started_at = time.monotonic()
+    prepared = prepare_data(frame, schema, config)
+    actual_deadline = (
+        float(deadline) if deadline is not None else started_at + float(config.max_seconds)
+    )
+    return _fit_prepared(
+        prepared,
+        schema,
+        config,
+        deadline=actual_deadline,
     )

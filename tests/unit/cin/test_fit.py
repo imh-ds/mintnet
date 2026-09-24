@@ -13,6 +13,7 @@ from mintnet.cin.fit import (
     BudgetExceeded,
     CostCounters,
     aggregate,
+    _fit_prepared,
     make_splits,
     score_partition,
     target_supported,
@@ -54,6 +55,30 @@ def test_make_splits_is_reproducible_and_balanced() -> None:
         assert len(np.unique(np.concatenate([fold.eval_rows for fold in left_fold.inner]))) == len(
             left_fold.train_rows
         )
+
+
+def test_make_splits_accepts_an_explicit_repeat_seed() -> None:
+    config = CINConfig(seed=11, outer_folds=3, inner_folds=2)
+
+    original = make_splits(60, config)
+    repeat_a = make_splits(60, config, seed=101)
+    repeat_b = make_splits(60, config, seed=101)
+
+    assert original.seed_metadata != repeat_a.seed_metadata
+    assert repeat_a.seed_metadata == repeat_b.seed_metadata
+    for left, right in zip(repeat_a.outer, repeat_b.outer):
+        np.testing.assert_array_equal(left.eval_rows, right.eval_rows)
+
+
+def test_public_fit_network_still_uses_the_existing_default_seed() -> None:
+    frame, schema, config = _continuous_fixture()
+
+    prepared = prepare_data(frame, schema, config)
+    direct = _fit_prepared(prepared, schema, config)
+    public = fit_network(frame, schema, config)
+
+    pd.testing.assert_frame_equal(public.pairs, direct.pairs)
+    assert public.metadata["config_hash"] == direct.metadata["config_hash"]
 
 
 def test_budget_raises_with_phase() -> None:
