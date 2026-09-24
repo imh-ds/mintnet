@@ -572,6 +572,197 @@ def _sample_finite_case(
     )
 
 
+def _mixed_star_result(
+    *,
+    structure_seed: int,
+    sample_seed: int,
+    n: int | None,
+) -> SimulatedDataset:
+    sample_size = _validate_sample_size(n, 150)
+    structure_rng = np.random.default_rng(_validate_seed(structure_seed, "structure_seed"))
+    sample_rng = np.random.default_rng(_validate_seed(sample_seed, "sample_seed"))
+    pi = float(structure_rng.uniform(0.35, 0.65))
+    coefficients = _signed_weights(4, structure_rng, low=0.8, high=1.4)
+    hub = (sample_rng.random(sample_size) < pi).astype(np.int8)
+    children = coefficients * (hub[:, None] - pi) + sample_rng.normal(size=(sample_size, 4))
+    distractors = sample_rng.normal(size=(sample_size, 3))
+    data = np.column_stack((hub, children, distractors))
+
+    names = _node_names(8)
+    truth_edges = frozenset((names[0], names[index]) for index in range(1, 5))
+    signal_proxy = {
+        (names[0], names[index]): float(abs(coefficients[index - 1]))
+        for index in range(1, 5)
+    }
+    summary = population_signal_summary(None, truth_edges, signal_proxy=signal_proxy)
+    meta = {
+        "case": "H",
+        "structure_seed": int(structure_seed),
+        "sample_seed": int(sample_seed),
+        "n": sample_size,
+        "p": 8,
+        "hub_index": 0,
+        "child_indices": [1, 2, 3, 4],
+        "distractor_indices": [5, 6, 7],
+        "pi": pi,
+        "coefficients": coefficients.tolist(),
+        "child_noise_scale": 1.0,
+        "conditional_child_covariance": np.eye(4).tolist(),
+        "rejection_tries": 0,
+        "population_signal_summary": summary,
+    }
+    schema = {
+        names[0]: {"kind": "categorical", "levels": [0, 1]},
+        **{name: {"kind": "continuous"} for name in names[1:]},
+    }
+    return SimulatedDataset(
+        frame=pd.DataFrame(data, index=pd.RangeIndex(sample_size), columns=names),
+        schema=schema,
+        truth_edges=truth_edges,
+        population_cmi=None,
+        meta=meta,
+    )
+
+
+def _independent_null_result(
+    *,
+    structure_seed: int,
+    sample_seed: int,
+    n: int | None,
+) -> SimulatedDataset:
+    sample_size = _validate_sample_size(n, 60)
+    structure_rng = np.random.default_rng(_validate_seed(structure_seed, "structure_seed"))
+    sample_rng = np.random.default_rng(_validate_seed(sample_seed, "sample_seed"))
+    prevalence = structure_rng.dirichlet(np.full(3, 4.0), size=15)
+    continuous = sample_rng.normal(size=(sample_size, 15))
+    categorical = np.column_stack(
+        [sample_rng.choice(3, size=sample_size, p=probabilities) for probabilities in prevalence]
+    )
+    data = np.column_stack((continuous, categorical))
+
+    names = _node_names(30)
+    population_cmi = {
+        (names[left], names[right]): 0.0
+        for left in range(30)
+        for right in range(left + 1, 30)
+    }
+    truth_edges = frozenset()
+    summary = population_signal_summary(population_cmi, truth_edges)
+    meta = {
+        "case": "I",
+        "structure_seed": int(structure_seed),
+        "sample_seed": int(sample_seed),
+        "n": sample_size,
+        "p": 30,
+        "prevalence": prevalence.tolist(),
+        "rejection_tries": 0,
+        "population_signal_summary": summary,
+    }
+    schema = {
+        **{name: {"kind": "continuous"} for name in names[:15]},
+        **{
+            name: {"kind": "categorical", "levels": [0, 1, 2]}
+            for name in names[15:]
+        },
+    }
+    return SimulatedDataset(
+        frame=pd.DataFrame(data, index=pd.RangeIndex(sample_size), columns=names),
+        schema=schema,
+        truth_edges=truth_edges,
+        population_cmi=population_cmi,
+        meta=meta,
+    )
+
+
+_STANDARD_NORMAL_CUTS = {
+    5: np.array(
+        [-0.8416212335729143, -0.2533471031357997, 0.2533471031357997, 0.8416212335729143]
+    ),
+    10: np.array(
+        [
+            -1.2815515655446004,
+            -0.8416212335729143,
+            -0.5244005127080409,
+            -0.2533471031357997,
+            0.0,
+            0.2533471031357997,
+            0.5244005127080409,
+            0.8416212335729143,
+            1.2815515655446004,
+        ]
+    ),
+}
+
+
+def _validate_dimension(value: int, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return int(value)
+
+
+def _dense_cost_values(*, p: int, n: int, rng: np.random.Generator) -> np.ndarray:
+    factors = rng.normal(size=(n, 5))
+    loadings = rng.normal(scale=0.6, size=(5, p))
+    noise_scales = rng.uniform(0.3, 0.8, size=p)
+    values = factors @ loadings + rng.normal(scale=noise_scales, size=(n, p))
+    centered = values - values.mean(axis=0)
+    scales = values.std(axis=0)
+    return centered / np.where(scales > 0.0, scales, 1.0)
+
+
+def generate_cost_input(
+    kind: str,
+    p: int,
+    n: int,
+    *,
+    seed: int,
+) -> tuple[pd.DataFrame, dict[str, dict[str, Any]]]:
+    """Generate numerical stress inputs without declaring a network truth."""
+
+    if kind not in {"dense_continuous", "categorical5", "categorical10", "mixed"}:
+        raise ValueError("kind must be dense_continuous, categorical5, categorical10, or mixed")
+    width = _validate_dimension(p, "p")
+    rows = _validate_dimension(n, "n")
+    if kind == "mixed" and width % 2:
+        raise ValueError("mixed cost input requires an even p")
+    rng = np.random.default_rng(_validate_seed(seed, "seed"))
+    values = _dense_cost_values(p=width, n=rows, rng=rng)
+
+    if kind == "dense_continuous":
+        frame = pd.DataFrame(values, columns=_node_names(width))
+        schema = {name: {"kind": "continuous"} for name in frame.columns}
+        return frame, schema
+
+    if kind in {"categorical5", "categorical10"}:
+        cardinality = int(kind.removeprefix("categorical"))
+        categorical = np.digitize(values, _STANDARD_NORMAL_CUTS[cardinality]).astype(np.int8)
+        frame = pd.DataFrame(categorical, columns=_node_names(width))
+        schema = {
+            name: {"kind": "categorical", "levels": list(range(cardinality))}
+            for name in frame.columns
+        }
+        return frame, schema
+
+    continuous_count = width // 2
+    continuous = values[:, :continuous_count]
+    categorical = np.digitize(values[:, continuous_count:], _STANDARD_NORMAL_CUTS[5]).astype(np.int8)
+    frame = pd.DataFrame(
+        np.column_stack((continuous, categorical)),
+        columns=_node_names(width),
+    )
+    schema = {
+        **{
+            name: {"kind": "continuous"}
+            for name in frame.columns[:continuous_count]
+        },
+        **{
+            name: {"kind": "categorical", "levels": [0, 1, 2, 3, 4]}
+            for name in frame.columns[continuous_count:]
+        },
+    }
+    return frame, schema
+
+
 def generate_case(
     case: str,
     *,
@@ -618,12 +809,25 @@ def generate_case(
             sample_seed=sample_seed,
             n=n,
         )
+    if case == "H":
+        return _mixed_star_result(
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n,
+        )
+    if case == "I":
+        return _independent_null_result(
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n,
+        )
     raise ValueError(f"unknown CIN simulation case: {case}")
 
 
 __all__ = [
     "SimulatedDataset",
     "exact_cmi_from_joint",
+    "generate_cost_input",
     "gaussian_truth",
     "generate_case",
     "is_connected",

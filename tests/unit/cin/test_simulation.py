@@ -8,6 +8,7 @@ from mintnet.simulation.cin_networks import (
     SimulatedDataset,
     _gaussian_structure,
     exact_cmi_from_joint,
+    generate_cost_input,
     generate_case,
     gaussian_truth,
     is_connected,
@@ -216,3 +217,66 @@ def test_categorical_sample_tracks_the_exact_joint_smoke(case: str) -> None:
     expected = np.asarray(result.meta["joint_tensor"], dtype=float).ravel()
 
     assert np.max(np.abs(observed - expected)) < 0.04
+
+
+def test_case_h_is_a_mixed_star_with_conditional_child_independence() -> None:
+    result = generate_case("H", structure_seed=3, sample_seed=4)
+
+    assert result.frame.shape == (150, 8)
+    assert result.schema["V00"] == {"kind": "categorical", "levels": [0, 1]}
+    assert all(result.schema[f"V{index:02d}"]["kind"] == "continuous" for index in range(1, 8))
+    assert result.truth_edges == frozenset(("V00", f"V{index:02d}") for index in range(1, 5))
+    assert result.meta["hub_index"] == 0
+    assert result.meta["child_indices"] == [1, 2, 3, 4]
+    assert result.meta["population_signal_summary"]["cmi_available"] is False
+    assert result.meta["population_signal_summary"]["proxy_available"] is True
+
+    conditional_covariance = np.asarray(result.meta["conditional_child_covariance"], dtype=float)
+    np.testing.assert_allclose(conditional_covariance, np.eye(4), atol=1e-12)
+
+
+def test_case_i_is_a_mixed_independent_null() -> None:
+    result = generate_case("I", structure_seed=3, sample_seed=4)
+
+    assert result.frame.shape == (60, 30)
+    assert result.truth_edges == frozenset()
+    assert all(value == 0.0 for value in result.population_cmi.values())
+    assert [spec["kind"] for spec in result.schema.values()].count("continuous") == 15
+    assert [spec["kind"] for spec in result.schema.values()].count("categorical") == 15
+
+
+@pytest.mark.parametrize("kind", ["dense_continuous", "categorical5", "categorical10", "mixed"])
+def test_cost_input_contract_is_deterministic_and_has_no_truth(kind: str) -> None:
+    p = 10 if kind == "mixed" else 7
+    first_frame, first_schema = generate_cost_input(kind, p, 512, seed=17)
+    second_frame, second_schema = generate_cost_input(kind, p, 512, seed=17)
+
+    pd.testing.assert_frame_equal(first_frame, second_frame)
+    assert first_schema == second_schema
+    assert first_frame.shape == (512, p)
+    assert np.isfinite(first_frame.select_dtypes(include=[np.number]).to_numpy()).all()
+    assert set(first_frame.columns) == set(first_schema)
+    assert all("truth_edges" not in spec for spec in first_schema.values())
+
+    expected_levels = {"categorical5": 5, "categorical10": 10}
+    if kind in expected_levels:
+        assert all(spec["kind"] == "categorical" for spec in first_schema.values())
+        assert all(spec["levels"] == list(range(expected_levels[kind])) for spec in first_schema.values())
+    elif kind == "mixed":
+        assert [spec["kind"] for spec in first_schema.values()] == [
+            "continuous"
+        ] * 5 + ["categorical"] * 5
+        assert all(spec["levels"] == [0, 1, 2, 3, 4] for spec in list(first_schema.values())[5:])
+    else:
+        assert all(spec["kind"] == "continuous" for spec in first_schema.values())
+
+
+def test_cost_input_rejects_invalid_requests() -> None:
+    with pytest.raises(ValueError, match="kind"):
+        generate_cost_input("unknown", 4, 10, seed=1)
+    with pytest.raises(ValueError, match="even"):
+        generate_cost_input("mixed", 5, 10, seed=1)
+    with pytest.raises(ValueError, match="p"):
+        generate_cost_input("dense_continuous", 0, 10, seed=1)
+    with pytest.raises(ValueError, match="n"):
+        generate_cost_input("dense_continuous", 4, 0, seed=1)
