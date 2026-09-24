@@ -12,6 +12,7 @@ from mintnet.cin.result import (
     compute_fit_id,
     load_fit,
 )
+from mintnet.cin.views import make_view
 
 
 def _sample_fit() -> NetworkFit:
@@ -140,3 +141,55 @@ def test_network_fit_metadata_json_is_not_raw_data() -> None:
 
     assert "raw_data" not in payload
     assert "data_digest" in payload["digests"]
+
+
+def test_make_view_applies_effect_then_agreement_filters_without_mutating_fit() -> None:
+    fit = _sample_fit()
+    before = fit.pairs.copy(deep=True)
+
+    landscape = make_view(fit)
+    effect = make_view(fit, min_effect=0.005)
+    agreement = make_view(fit, require_both_positive=True)
+
+    assert list(landscape.edges[["node_i", "node_j"]].itertuples(index=False, name=None)) == [
+        ("alpha", "beta"),
+        ("alpha", "gamma"),
+    ]
+    assert list(effect.edges["node_j"]) == ["beta", "gamma"]
+    assert list(agreement.edges[["node_i", "node_j"]].itertuples(index=False, name=None)) == [
+        ("alpha", "beta")
+    ]
+    assert landscape.label == "Landscape"
+    assert effect.label == "Effect-filtered"
+    assert agreement.label == "Agreement-filtered"
+    pd.testing.assert_frame_equal(fit.pairs, before)
+
+
+def test_make_view_presentation_limits_are_explicit_and_deterministic() -> None:
+    fit = _sample_fit()
+
+    limited = make_view(fit, max_edges=1)
+    fractional = make_view(fit, top_fraction=0.5)
+
+    assert list(limited.edges["node_j"]) == ["beta"]
+    assert list(fractional.edges["node_j"]) == ["beta"]
+    assert limited.settings["presentation_limit"] is True
+    assert limited.settings["edges_cut"] == 1
+    assert "+ Presentation limit" in limited.label
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        make_view(fit, max_edges=1, top_fraction=0.5)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"min_effect": -0.1}, "min_effect"),
+        ({"max_edges": 0}, "max_edges"),
+        ({"top_fraction": 0.0}, "top_fraction"),
+        ({"top_fraction": 1.1}, "top_fraction"),
+        ({"min_stability": 0.5}, "stability"),
+    ],
+)
+def test_make_view_rejects_invalid_filter_settings(kwargs, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        make_view(_sample_fit(), **kwargs)
