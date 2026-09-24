@@ -157,3 +157,62 @@ def test_gaussian_case_density_targets_are_recorded() -> None:
 
     assert len(case_a.truth_edges) == 9
     assert 0.24 <= case_b.meta["edge_density"] <= 0.26
+
+
+def test_case_e_is_a_depth_limited_tree_with_real_even_dependence() -> None:
+    result = generate_case("E", structure_seed=11, sample_seed=13, n=4000)
+
+    parents = result.meta["parents"]
+    depths = result.meta["depths"]
+    assert len(result.truth_edges) == 24
+    assert max(depths) <= 3
+    assert all(
+        parent is None or depths[node] == depths[parent] + 1
+        for node, parent in enumerate(parents)
+    )
+    assert {
+        kind for kind in result.meta["function_types"].values() if kind != "root"
+    } == {"linear", "tanh", "even"}
+    assert result.meta["population_signal_summary"]["cmi_available"] is False
+    assert result.meta["population_signal_summary"]["proxy_available"] is True
+
+    even_child = next(
+        node for node, kind in result.meta["function_types"].items()
+        if kind == "even"
+    )
+    even_parent = result.meta["parents"][even_child]
+    assert abs(np.corrcoef(result.frame.iloc[:, [even_parent, even_child]].to_numpy().T)[0, 1]) < 0.25
+
+
+@pytest.mark.parametrize("case", ["F", "G"])
+def test_exact_categorical_case_matches_joint_cmi_and_observed_support(case: str) -> None:
+    result = generate_case(case, structure_seed=5, sample_seed=7)
+    joint = np.asarray(result.meta["joint_tensor"], dtype=float)
+    exact = exact_cmi_from_joint(joint)
+    names = list(result.frame.columns)
+
+    for (left, right), value in result.population_cmi.items():
+        i, j = names.index(left), names.index(right)
+        assert value == pytest.approx(exact[(i, j)], abs=1e-12)
+    assert result.truth_edges == {
+        (names[i], names[j])
+        for (i, j), value in exact.items()
+        if value >= result.meta["edge_cmi_floor"]
+    }
+    assert all(
+        value <= 1e-12
+        for pair, value in result.population_cmi.items()
+        if pair not in result.truth_edges
+    )
+
+
+@pytest.mark.parametrize("case", ["F", "G"])
+def test_categorical_sample_tracks_the_exact_joint_smoke(case: str) -> None:
+    result = generate_case(case, structure_seed=17, sample_seed=19, n=4096)
+    codes = result.frame.to_numpy(dtype=int)
+    levels = [len(spec["levels"]) for spec in result.schema.values()]
+    flat = np.ravel_multi_index(codes.T, dims=tuple(levels))
+    observed = np.bincount(flat, minlength=int(np.prod(levels))) / len(codes)
+    expected = np.asarray(result.meta["joint_tensor"], dtype=float).ravel()
+
+    assert np.max(np.abs(observed - expected)) < 0.04

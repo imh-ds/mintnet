@@ -217,6 +217,24 @@ def _spanning_tree_from_parent_draws(p: int, rng: np.random.Generator) -> list[t
     return edges
 
 
+def _finite_case_graph(p: int, edge_count: int, rng: np.random.Generator) -> list[tuple[int, int]]:
+    """Draw a connected finite-case graph without pathological hub degrees."""
+
+    if edge_count < p or edge_count > p * (p - 1) // 2:
+        raise ValueError("finite-case graph edge count is invalid")
+    order = rng.permutation(p)
+    cycle = [
+        tuple(sorted((int(order[index]), int(order[(index + 1) % p]))))
+        for index in range(p)
+    ]
+    # Removing one cycle edge leaves a tree; restoring it is the first of the
+    # three extras, followed by two uniformly selected additional edges.
+    omitted = cycle.pop()
+    edges = cycle + [omitted]
+    _add_edges(edges, _all_pairs(p), edge_count - p, rng)
+    return edges
+
+
 def _add_edges(
     edges: list[tuple[int, int]],
     candidates: list[tuple[int, int]],
@@ -378,6 +396,182 @@ def _named_gaussian_result(
     )
 
 
+def _tree_function(kind: str, value: np.ndarray) -> np.ndarray:
+    if kind == "linear":
+        return value
+    if kind == "tanh":
+        return np.tanh(1.5 * value)
+    if kind == "even":
+        return 2.0 * value**2 / (1.0 + value**2) - 1.0
+    raise ValueError(f"unknown tree function: {kind}")
+
+
+def _nonlinear_tree_result(
+    *,
+    structure_seed: int,
+    sample_seed: int,
+    n: int | None,
+) -> SimulatedDataset:
+    sample_size = _validate_sample_size(n, 200)
+    structure_rng = np.random.default_rng(_validate_seed(structure_seed, "structure_seed"))
+    sample_rng = np.random.default_rng(_validate_seed(sample_seed, "sample_seed"))
+    signal_nodes = 25
+    total_nodes = 30
+    parents: list[int | None] = [None]
+    depths = [0]
+    for node in range(1, signal_nodes):
+        eligible = [index for index, depth in enumerate(depths) if depth < 3]
+        parent = int(structure_rng.choice(eligible))
+        parents.append(parent)
+        depths.append(depths[parent] + 1)
+
+    function_types: dict[int, str] = {0: "root"}
+    assignments = np.array(["linear"] * 8 + ["tanh"] * 8 + ["even"] * 8, dtype=object)
+    for node, kind in zip(range(1, signal_nodes), assignments[structure_rng.permutation(24)]):
+        function_types[node] = str(kind)
+    coefficients = np.zeros(signal_nodes, dtype=np.float64)
+    noise_scales = np.zeros(signal_nodes, dtype=np.float64)
+    coefficients[1:] = _signed_weights(signal_nodes - 1, structure_rng, low=0.8, high=1.2)
+    noise_scales[1:] = structure_rng.uniform(0.4, 0.7, size=signal_nodes - 1)
+
+    data = np.zeros((sample_size, total_nodes), dtype=np.float64)
+    data[:, 0] = sample_rng.normal(size=sample_size)
+    for node in range(1, signal_nodes):
+        parent = parents[node]
+        assert parent is not None
+        data[:, node] = (
+            coefficients[node] * _tree_function(function_types[node], data[:, parent])
+            + noise_scales[node] * sample_rng.normal(size=sample_size)
+        )
+    data[:, signal_nodes:] = sample_rng.normal(size=(sample_size, total_nodes - signal_nodes))
+
+    names = _node_names(total_nodes)
+    truth_edges = frozenset(
+        (names[min(parent, node)], names[max(parent, node)])
+        for node, parent in enumerate(parents)
+        if parent is not None
+    )
+    signal_proxy = {
+        (names[min(parent, node)], names[max(parent, node)]): float(
+            abs(coefficients[node]) / noise_scales[node]
+        )
+        for node, parent in enumerate(parents)
+        if parent is not None
+    }
+    function_children: dict[int, list[int]] = {node: [] for node in range(signal_nodes)}
+    for node, parent in enumerate(parents):
+        if parent is not None:
+            function_children[parent].append(node)
+    summary = population_signal_summary(None, truth_edges, signal_proxy=signal_proxy)
+    meta = {
+        "case": "E",
+        "structure_seed": int(structure_seed),
+        "sample_seed": int(sample_seed),
+        "n": sample_size,
+        "p": total_nodes,
+        "parents": parents,
+        "depths": depths,
+        "function_types": function_types,
+        "coefficients": coefficients.tolist(),
+        "noise_scales": noise_scales.tolist(),
+        "function_children": function_children,
+        "distractor_indices": list(range(signal_nodes, total_nodes)),
+        "rejection_tries": 0,
+        "population_signal_summary": summary,
+    }
+    schema = {name: {"kind": "continuous"} for name in names}
+    return SimulatedDataset(
+        frame=pd.DataFrame(data, index=pd.RangeIndex(sample_size), columns=names),
+        schema=schema,
+        truth_edges=truth_edges,
+        population_cmi=None,
+        meta=meta,
+    )
+
+
+def _finite_states(cardinality: int, p: int) -> np.ndarray:
+    axes = np.indices((cardinality,) * p, dtype=np.int16)
+    return np.moveaxis(axes, 0, -1).reshape(-1, p)
+
+
+def _sample_finite_case(
+    case: str,
+    *,
+    structure_seed: int,
+    sample_seed: int,
+    n: int | None,
+) -> SimulatedDataset:
+    structure_rng = np.random.default_rng(_validate_seed(structure_seed, "structure_seed"))
+    if case == "F":
+        p, cardinality, edge_count, default_n = 8, 2, 10, 150
+    elif case == "G":
+        p, cardinality, edge_count, default_n = 6, 3, 7, 150
+    else:
+        raise ValueError(f"unknown finite CIN case: {case}")
+    sample_size = _validate_sample_size(n, default_n)
+    states = _finite_states(cardinality, p)
+    max_tries = 500
+    accepted: tuple[list[tuple[int, int]], np.ndarray, np.ndarray, dict[tuple[int, int], float], int] | None = None
+    for tries in range(1, max_tries + 1):
+        edges = _finite_case_graph(p, edge_count, structure_rng)
+        if case == "F":
+            fields = structure_rng.uniform(-0.5, 0.5, size=p)
+            interactions = structure_rng.uniform(0.6, 1.2, size=len(edges))
+            logits = states @ fields
+            for (left, right), interaction in zip(edges, interactions):
+                logits += interaction * states[:, left] * states[:, right]
+        else:
+            fields = structure_rng.uniform(-0.5, 0.5, size=(p, cardinality))
+            interactions = structure_rng.uniform(0.6, 1.2, size=len(edges))
+            logits = fields[np.arange(p)[:, None], states.T].sum(axis=0)
+            for (left, right), interaction in zip(edges, interactions):
+                logits += interaction * (states[:, left] == states[:, right])
+        probabilities = np.exp(logits - float(np.max(logits)))
+        probabilities /= probabilities.sum()
+        tensor = probabilities.reshape((cardinality,) * p)
+        cmi_indices = exact_cmi_from_joint(tensor)
+        if all(cmi_indices[edge] >= 0.005 for edge in edges):
+            accepted = (edges, fields, interactions, cmi_indices, tries)
+            break
+    if accepted is None:
+        raise RuntimeError(f"{case} did not satisfy its population CMI floor in {max_tries} tries")
+
+    edges, fields, interactions, cmi_indices, tries = accepted
+    sample_rng = np.random.default_rng(_validate_seed(sample_seed, "sample_seed"))
+    sampled_states = states[sample_rng.choice(len(states), size=sample_size, p=probabilities)]
+    names = _node_names(p)
+    truth_edges = frozenset((names[left], names[right]) for left, right in edges)
+    population_cmi = {
+        (names[left], names[right]): value for (left, right), value in cmi_indices.items()
+    }
+    summary = population_signal_summary(population_cmi, truth_edges)
+    schema = {
+        name: {"kind": "categorical", "levels": list(range(cardinality))}
+        for name in names
+    }
+    meta = {
+        "case": case,
+        "structure_seed": int(structure_seed),
+        "sample_seed": int(sample_seed),
+        "n": sample_size,
+        "p": p,
+        "edges": [list(edge) for edge in edges],
+        "fields": np.asarray(fields).tolist(),
+        "interactions": np.asarray(interactions).tolist(),
+        "joint_tensor": tensor.tolist(),
+        "edge_cmi_floor": 0.005,
+        "rejection_tries": tries,
+        "population_signal_summary": summary,
+    }
+    return SimulatedDataset(
+        frame=pd.DataFrame(sampled_states, index=pd.RangeIndex(sample_size), columns=names),
+        schema=schema,
+        truth_edges=truth_edges,
+        population_cmi=population_cmi,
+        meta=meta,
+    )
+
+
 def generate_case(
     case: str,
     *,
@@ -410,6 +604,19 @@ def generate_case(
             truth_edges=base.truth_edges,
             population_cmi=base.population_cmi,
             meta=meta,
+        )
+    if case == "E":
+        return _nonlinear_tree_result(
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n,
+        )
+    if case in {"F", "G"}:
+        return _sample_finite_case(
+            case,
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n,
         )
     raise ValueError(f"unknown CIN simulation case: {case}")
 
