@@ -7723,3 +7723,43 @@ Consequences: downstream CIN documentation may consume `estimate_stability`,
 `load_stability`, and `stability_for_rule`; Task 06 views can request the
 stability filter without refitting. No substantive network interpretation or
 statistical-method validation claim is introduced by this entry.
+
+## D-102: Implement CIN Task 08 simulation generators and exact population truth
+
+Date: 2026-09-24.
+
+Task 08 is now implemented under `src/mintnet/simulation/cin_networks.py`,
+with stable exports from `src/mintnet/simulation/__init__.py` and the explicit
+population audit in `scripts/cin_simulation_audit.py`. The generators cover the
+frozen cases A–D (Gaussian precision structures), E (a depth-limited nonlinear
+tree), F/G (exact-enumeration binary and three-level categorical models), H (a
+mixed categorical/continuous star), and I (a mixed independent null). They
+also provide dense continuous, categorical5, categorical10, and mixed cost
+inputs without declaring recovery truth.
+
+Decision: accept Task 08 as the deterministic simulation and population-truth
+baseline for the downstream evidence tasks. Exact CMI is recorded only where
+it is derived from the Gaussian precision or finite-state joint. E and H use
+explicitly labelled parameter signal proxies with `population_cmi=None`; the
+proxies are not CMI and must not be used as recovery truth. Finite-state
+rejection sampling uses population quantities only, records its tries, and
+keeps the sample RNG independent of structure acceptance. The binary F graph
+draw uses a randomized low-degree cycle plus two extras, equivalent to a tree
+plus three extras, to avoid pathological hub-induced rejection while retaining
+the frozen Ising field and interaction laws.
+
+Evidence: the complete repository suite passes with 229 tests and three
+optional matplotlib skips; `ruff check src tests scripts/cin_simulation_audit.py`
+passes; and `git diff --check` is clean. The audit command writes the ignored
+population report at `results/generated/cin_population_properties.json` and
+passes all nine case records, 200 Gaussian structures per applicable case,
+100,000-row F/G frequency checks, B/D pairing, the historical organic-network
+smoke, and deterministic cost-input digests.
+
+Implementation commits: `9d1ef4c`, `900bf6e`, `24bf525`, `753ab34`, and
+`2e2ce82`. The decision-log update is committed separately after verification.
+
+Consequences: Task 09 may derive replicate seeds and consume the stable A–I
+generator contract; Tasks 11/12 may use the audit report as population-property
+evidence. No fitted-weight, recovery-score, inferential, causal, or substantive
+network claim is introduced by this entry.
