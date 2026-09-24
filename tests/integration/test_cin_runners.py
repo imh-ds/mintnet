@@ -10,6 +10,13 @@ import pytest
 import yaml
 
 from mintnet.experiments.cin_baseline import load_config as load_panel_config
+from mintnet.experiments.cin_baseline import (
+    COMBINATION_COLUMNS as PANEL_COMBINATION_COLUMNS,
+    expected_combinations as expected_panel_combinations,
+    expected_row_count as expected_panel_rows,
+    methods_for_case,
+    run_baseline,
+)
 from mintnet.experiments.cin_cost import (
     COST_RAW_COLUMNS,
     expected_combinations as expected_cost_combinations,
@@ -165,3 +172,28 @@ def test_cost_report_does_not_claim_recovery_metrics(tmp_path: Path) -> None:
     report = (tmp_path / "cost_report.md").read_text(encoding="utf-8")
     assert "cost pilot" in report.lower()
     assert "recovery" not in report.lower()
+
+
+def test_panel_method_matrix_and_full_phase_combinations() -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    assert PANEL_COMBINATION_COLUMNS == ("case", "phase", "method")
+    assert methods_for_case("A") == ("cin", "cin_linear", "ebicglasso")
+    assert methods_for_case("F") == ("cin",)
+    assert expected_panel_rows(config) == 16
+    combinations = expected_panel_combinations(config)
+    assert len(combinations) == 8
+    assert ("A", "development", "ebicglasso") in combinations
+    assert ("F", "validation", "cin_linear") not in combinations
+
+
+def test_panel_smoke_writes_rows_for_supported_methods(tmp_path: Path) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    output = tmp_path / "panel"
+    raw = run_baseline(config, output)
+
+    assert len(raw) == expected_panel_rows(config)
+    assert set(raw["status"]) <= {"complete", "incomplete"}
+    assert set(raw.loc[raw["case"] == "F", "method"]) == {"cin"}
+    assert set(raw.loc[raw["case"] == "A", "method"]) == {"cin", "cin_linear", "ebicglasso"}
+    assert (output / "raw_metrics.csv").exists()
+    assert len(list((output / "sidecars").glob("*_pairs.csv.gz"))) == 16
