@@ -36,6 +36,7 @@ __all__ = [
     "StabilityResult",
     "estimate_stability",
     "load_stability",
+    "stability_for_rule",
 ]
 
 
@@ -546,3 +547,58 @@ def load_stability(directory: str | Path) -> StabilityResult:
     if not isinstance(metadata, dict):
         raise ValueError("stability metadata must contain an object")
     return StabilityResult(_read_records(record_path), metadata)
+
+
+def stability_for_rule(
+    result: StabilityResult,
+    *,
+    min_effect: float,
+    require_both_positive: bool,
+) -> pd.DataFrame:
+    """Recompute pair stability from stored gains without refitting."""
+
+    if not isinstance(result, StabilityResult):
+        raise ValueError("result must be a StabilityResult")
+    if isinstance(min_effect, bool) or not isinstance(min_effect, (int, float)):
+        raise ValueError("min_effect must be a finite number")
+    if not np.isfinite(float(min_effect)) or float(min_effect) < 0:
+        raise ValueError("min_effect must be a finite number >= 0")
+    if not isinstance(require_both_positive, bool):
+        raise ValueError("require_both_positive must be a boolean")
+
+    names = [str(name) for name in result.metadata["schema"]]
+    records = result.records
+    rows: list[dict[str, Any]] = []
+    for left_index, left in enumerate(names):
+        for right in names[left_index + 1 :]:
+            pair = records.loc[
+                (records["node_i"] == left) & (records["node_j"] == right)
+            ]
+            complete = pair.loc[pair["status"] == "complete"]
+            passes = 0
+            for record in complete.to_dict(orient="records"):
+                weight = float(record["weight_nats_raw"])
+                gain_left = float(record["gain_i_to_j"])
+                gain_right = float(record["gain_j_to_i"])
+                if not np.isfinite(weight) or weight <= 0 or weight < float(min_effect):
+                    continue
+                if require_both_positive and (gain_left <= 0 or gain_right <= 0):
+                    continue
+                passes += 1
+            n_complete = int(len(complete))
+            n_requested = result.repeats_requested
+            value = passes / n_requested if n_complete == n_requested else np.nan
+            rows.append(
+                {
+                    "node_i": left,
+                    "node_j": right,
+                    "passes": passes,
+                    "n_complete": n_complete,
+                    "n_requested": n_requested,
+                    "stability": value,
+                }
+            )
+    return pd.DataFrame(
+        rows,
+        columns=["node_i", "node_j", "passes", "n_complete", "n_requested", "stability"],
+    )

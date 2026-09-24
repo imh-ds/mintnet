@@ -16,7 +16,9 @@ from mintnet.cin.stability import (
     _repeat_seeds,
     _sample_indices,
     load_stability,
+    stability_for_rule,
 )
+from mintnet.cin.views import make_view
 
 
 def _schema() -> dict[str, dict[str, str]]:
@@ -129,6 +131,41 @@ def _sample_stability_result() -> StabilityResult:
             "max_seconds": 10.0,
         },
     }
+    return StabilityResult(pd.DataFrame(rows, columns=STABILITY_COLUMNS), metadata)
+
+
+def _result_with_failed_pair() -> StabilityResult:
+    fit = _fit()
+    repeat_seeds = _repeat_seeds(17, 4)
+    rows = []
+    for repeat_id, repeat_seed in enumerate(repeat_seeds):
+        for record in fit.pairs.to_dict(orient="records"):
+            passing = repeat_id == 0 or (record["node_i"], record["node_j"]) != ("a", "b")
+            complete = repeat_id < 3
+            rows.append(
+                {
+                    "fit_id": fit.metadata["fit_id"],
+                    "repeat_id": repeat_id,
+                    "repeat_seed": repeat_seed,
+                    "node_i": record["node_i"],
+                    "node_j": record["node_j"],
+                    "gain_i_to_j": record["gain_i_to_j"] if complete and passing else (0.05 if complete else np.nan),
+                    "gain_j_to_i": record["gain_j_to_i"] if complete and passing else (0.05 if complete else np.nan),
+                    "weight_nats_raw": record["weight_nats_raw"] if complete and passing else (0.05 if complete else np.nan),
+                    "status": record["status"] if complete else "interrupted",
+                }
+            )
+    metadata = copy.deepcopy(_sample_stability_result().metadata)
+    metadata.update(
+        {
+            "repeats_requested": 4,
+            "B": 4,
+            "repeat_seeds": list(repeat_seeds),
+            "completed_repeat_ids": [0, 1, 2],
+            "repeats_completed": 3,
+            "status": "interrupted",
+        }
+    )
     return StabilityResult(pd.DataFrame(rows, columns=STABILITY_COLUMNS), metadata)
 
 
@@ -349,3 +386,70 @@ def test_resume_loads_from_directory_and_rejects_fraction_mismatch(monkeypatch, 
             resume=result,
             elapsed_estimate=0.01,
         )
+
+
+def test_estimate_stability_runs_the_internal_fit_runner() -> None:
+    fit, frame, _, _ = _fit_and_frame(n=40)
+
+    result = stability.estimate_stability(
+        fit,
+        frame,
+        repeats=1,
+        fraction=0.8,
+        max_seconds=30.0,
+        elapsed_estimate=0.001,
+    )
+
+    assert result.status == "complete"
+    assert result.repeats_completed == 1
+    assert len(result.records) == 3
+    assert set(result.records["status"]) == {"complete"}
+
+
+def test_rule_uses_requested_denominator_and_keeps_unavailable_as_nan() -> None:
+    result = _result_with_failed_pair()
+
+    table = stability_for_rule(result, min_effect=0.10, require_both_positive=False)
+
+    row = table.loc[(table.node_i == "a") & (table.node_j == "b")].iloc[0]
+    assert row.passes == 1
+    assert row.n_complete == 3
+    assert row.n_requested == 4
+    assert pd.isna(row.stability)
+
+
+def test_rule_change_recomputes_from_records_without_refitting(monkeypatch) -> None:
+    result = _sample_stability_result()
+    monkeypatch.setattr(stability, "_run_repeat", lambda *args, **kwargs: pytest.fail("no refit"))
+
+    loose = stability_for_rule(result, min_effect=0.01, require_both_positive=False)
+    strict = stability_for_rule(result, min_effect=0.20, require_both_positive=True)
+
+    assert loose.loc[0, "passes"] >= strict.loc[0, "passes"]
+
+
+def test_make_view_uses_the_view_effect_and_agreement_rule(monkeypatch) -> None:
+    import mintnet.cin.views as views
+
+    fit = _fit()
+    result = _sample_stability_result()
+    calls = []
+
+    def capture(result_arg, *, min_effect, require_both_positive):
+        calls.append((min_effect, require_both_positive))
+        return stability_for_rule(
+            result_arg,
+            min_effect=min_effect,
+            require_both_positive=require_both_positive,
+        )
+
+    monkeypatch.setattr(views, "_stability_for_rule", capture)
+    make_view(
+        fit,
+        min_effect=0.20,
+        require_both_positive=True,
+        stability=result,
+        min_stability=0.8,
+    )
+
+    assert calls == [(0.20, True)]
