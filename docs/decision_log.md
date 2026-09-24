@@ -7570,3 +7570,33 @@ Consequences: Task 04 may consume `RidgeSolution`, `OmissionWorkspace`, and
 the explicit fallback/status contract for score and tuning implementation.
 The CIN estimator remains unvalidated, and no public network evidence claim
 is introduced.
+
+## D-098: Implement CIN Task 04 score adapters and penalty tuning
+
+Date: 2026-09-24.
+
+Task 04 of the tracked CIN build plan is now implemented in
+`src/mintnet/cin/scores.py`. The module provides training-variance Gaussian
+log scores, smoothed categorical log scores with clipping and zero-sum prior
+fallback diagnostics, shared intercept-only adapters, and deterministic
+per-target lambda selection with largest-lambda tie breaking. The row-max
+normalization is algebraically equivalent to the specified categorical
+normalization while remaining finite for very large finite raw scores.
+
+Decision: accept Task 04 as the score-and-tuning baseline for the next
+dependency-ordered CIN step. Full, reduced, and intercept-only models use the
+same score conventions; tuning maximizes summed inner held-out scores and does
+not search reduced models. The score module remains independent of feature
+fitting and ridge orchestration.
+
+Evidence: `tests/unit/cin/test_scores.py` passes with 13 tests, the combined
+CIN numerical suite passes with 31 tests, and the full active unit suite passes
+with 138 tests under the available Python 3.12.1 runtime. The score module
+imports successfully, the forbidden-pattern scan is clean at word boundaries,
+and the reviewed diff passes `git diff --check`. This establishes algebraic
+and numerical correctness for the tested adapters only; it is not
+statistical-method validation.
+
+Consequences: Task 05 may consume the score adapters and `choose_lambda` for
+training-only nested tuning and outer-fold scoring. The CIN estimator remains
+unvalidated, and no public network evidence claim is introduced.
