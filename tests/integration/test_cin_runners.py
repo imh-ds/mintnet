@@ -330,3 +330,25 @@ def test_metadata_preserves_thread_and_resolved_config_provenance(tmp_path: Path
     assert all(value == "1" for value in metadata["thread_settings"]["environment"].values())
     assert "threadpool_info" in metadata["thread_settings"]
     assert "peak_rss_mb" in metadata
+
+
+def test_compute_ledger_has_frozen_header_without_dispatch_rows() -> None:
+    ledger = ROOT / "docs" / "cin_compute_ledger.csv"
+    lines = ledger.read_text(encoding="utf-8").splitlines()
+    assert lines == [
+        "phase,workflow_run_id,jobs,wall_hours_max,runner_hours_sum,dispatched_by,date,purpose"
+    ]
+
+
+def test_user_guide_contains_verified_commands_and_full_shard_axes() -> None:
+    guide = (ROOT / "docs" / "cin_user_guide.md").read_text(encoding="utf-8")
+    assert "gh workflow run sharded_benchmark.yml" in guide
+    assert "-f runner_module=mintnet.experiments.cin_baseline" in guide
+    assert "-f dim1_flag=--cases" in guide
+    assert "A,B,C,D,E,F,G,H,I,regression" in guide
+    assert "-f dim2_flag=--replicate-batches" in guide
+    assert "dev0,val0,val1" in guide
+    assert "-f dim1_flag=--cells" in guide
+    assert "c_p8_n100,c_p30_n100,c_p100_n100,c_p100_n300,c_p100_n1000,k5_p30_n150,k10_p100_n200,mix_p100_n200" in guide
+    assert "--workers 1" in guide
+    assert "python scripts/aggregate_cin_sidecars.py" in guide
