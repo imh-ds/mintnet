@@ -1,0 +1,8 @@
+master_seed: 20260924
+cases: [A, F]
+development_replicates: [0, 1]
+validation_replicates: [1000, 1001]
+n_overrides: {A: 40, F: 40}
+stability_cases: []
+stability_repeats: 0
+stability_fraction: 0.8
