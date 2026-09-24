@@ -93,6 +93,42 @@ def _sample_fit() -> NetworkFit:
     )
 
 
+def _synthetic_fit(node_count: int) -> NetworkFit:
+    schema = {f"node_{index:03d}": {"kind": "continuous"} for index in range(node_count)}
+    records = []
+    for left in range(node_count):
+        for right in range(left + 1, node_count):
+            records.append(
+                {
+                    "node_i": f"node_{left:03d}",
+                    "node_j": f"node_{right:03d}",
+                    "gain_i_to_j": 0.1,
+                    "gain_j_to_i": 0.1,
+                    "weight_nats_raw": 0.1,
+                    "display_magnitude_nats": 0.1,
+                    "gaussian_equivalent_magnitude": 0.4,
+                    "orientation_gap": 0.0,
+                    "n_scored": 30,
+                    "folds_complete": 3,
+                    "status": "complete",
+                    "diagnostic_flags": "",
+                }
+            )
+    fit_id = compute_fit_id("config", schema, "data", "revision")
+    return NetworkFit(
+        pairs=pd.DataFrame(records, columns=PAIR_COLUMNS),
+        nodes=pd.DataFrame([{"node": name} for name in schema]),
+        folds=pd.DataFrame([{"fold": 0}]),
+        metadata={
+            "config_hash": "config",
+            "schema": schema,
+            "digests": {"data_digest": "data"},
+            "git_revision": "revision",
+            "fit_id": fit_id,
+        },
+    )
+
+
 def test_network_fit_save_load_round_trip_preserves_tables_and_metadata(tmp_path) -> None:
     fit = _sample_fit()
 
@@ -193,3 +229,59 @@ def test_make_view_presentation_limits_are_explicit_and_deterministic() -> None:
 def test_make_view_rejects_invalid_filter_settings(kwargs, message) -> None:
     with pytest.raises(ValueError, match=message):
         make_view(_sample_fit(), **kwargs)
+
+
+def test_view_matrix_and_edge_list_preserve_incomplete_and_non_displayed_pairs() -> None:
+    view = make_view(_sample_fit(), min_effect=0.01)
+
+    matrix = view.to_matrix()
+    edge_list = view.to_edge_list()
+
+    assert matrix.loc["alpha", "beta"] == pytest.approx(0.15)
+    assert matrix.loc["alpha", "gamma"] == 0.0
+    assert np.isnan(matrix.loc["beta", "gamma"])
+    assert list(edge_list.columns) == ["node_i", "node_j", "weight"]
+    assert list(edge_list[["node_i", "node_j"]].itertuples(index=False, name=None)) == [
+        ("alpha", "beta")
+    ]
+
+
+def test_view_save_writes_documented_artifacts(tmp_path) -> None:
+    view = make_view(_sample_fit())
+
+    view.save(tmp_path, plots=False)
+
+    assert {
+        "edges.csv",
+        "edge_list.csv",
+        "matrix.csv",
+        "view.json",
+        "methods.txt",
+    } <= {path.name for path in tmp_path.iterdir()}
+    assert list(pd.read_csv(tmp_path / "edge_list.csv").columns) == [
+        "node_i",
+        "node_j",
+        "weight",
+    ]
+    payload = json.loads((tmp_path / "view.json").read_text(encoding="utf-8"))
+    assert payload["fit_id"] == view.fit_id
+
+
+@pytest.mark.parametrize("node_count", [2, 8, 100])
+def test_view_plots_have_one_line_collection_per_displayed_edge(node_count: int) -> None:
+    matplotlib = pytest.importorskip("matplotlib")
+    from matplotlib.collections import LineCollection
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    view = make_view(_synthetic_fit(node_count))
+    figure = view.plot()
+    matrix_figure = view.plot("matrix")
+
+    assert sum(isinstance(collection, LineCollection) for collection in figure.axes[0].collections) == len(
+        view.edges
+    )
+    assert len(matrix_figure.axes) == 2
+    plt.close(figure)
+    plt.close(matrix_figure)
