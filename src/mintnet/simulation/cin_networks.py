@@ -5,10 +5,19 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+
+_GAUSSIAN_CASES = {
+    "A": {"n": 100, "p": 8},
+    "B": {"n": 200, "p": 30},
+    "C": {"n": 150, "p": 100},
+}
 
 
 @dataclass(frozen=True)
@@ -177,3 +186,239 @@ def population_signal_summary(
             }
         )
     return summary
+
+
+def _validate_seed(seed: int, field_name: str) -> int:
+    if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
+        raise ValueError(f"{field_name} must be a nonnegative integer")
+    return int(seed)
+
+
+def _validate_sample_size(n: int, default: int | None = None) -> int:
+    value = default if n is None else n
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+        raise ValueError("n must be a positive integer")
+    return int(value)
+
+
+def _node_names(p: int) -> tuple[str, ...]:
+    return tuple(f"V{index:02d}" for index in range(p))
+
+
+def _all_pairs(p: int) -> list[tuple[int, int]]:
+    return [(left, right) for left in range(p) for right in range(left + 1, p)]
+
+
+def _spanning_tree_from_parent_draws(p: int, rng: np.random.Generator) -> list[tuple[int, int]]:
+    edges: list[tuple[int, int]] = []
+    for vertex in range(1, p):
+        parent = int(rng.integers(0, vertex))
+        edges.append((parent, vertex))
+    return edges
+
+
+def _add_edges(
+    edges: list[tuple[int, int]],
+    candidates: list[tuple[int, int]],
+    count: int,
+    rng: np.random.Generator,
+) -> None:
+    existing = set(edges)
+    available = [edge for edge in candidates if edge not in existing]
+    if count < 0 or count > len(available):
+        raise ValueError("requested edge count exceeds available candidates")
+    if count:
+        order = rng.permutation(len(available))[:count]
+        edges.extend(available[int(index)] for index in order)
+
+
+def _case_edges(case: str, rng: np.random.Generator) -> list[tuple[int, int]]:
+    if case == "A":
+        edges = _spanning_tree_from_parent_draws(8, rng)
+        _add_edges(edges, _all_pairs(8), 2, rng)
+        return edges
+    if case == "B":
+        p = 30
+        edges = _spanning_tree_from_parent_draws(p, rng)
+        target = round(0.25 * (p * (p - 1) // 2))
+        _add_edges(edges, _all_pairs(p), target - len(edges), rng)
+        return edges
+    if case == "C":
+        edges: list[tuple[int, int]] = []
+        community = list(range(25))
+        remainder = list(range(25, 100))
+        community_candidates = [(left, right) for left in community for right in community if left < right]
+        remainder_candidates = [(left, right) for left in remainder for right in remainder if left < right]
+        edges.extend(_spanning_tree_from_parent_draws(len(community), rng))
+        _add_edges(edges, community_candidates, round(0.50 * len(community_candidates)) - len(edges), rng)
+        remainder_edges = _spanning_tree_from_parent_draws(len(remainder), rng)
+        edges.extend((left + 25, right + 25) for left, right in remainder_edges)
+        _add_edges(
+            edges,
+            remainder_candidates,
+            round(0.03 * len(remainder_candidates)) - len(remainder_edges),
+            rng,
+        )
+        cross_candidates = [(left, right) for left in community for right in remainder]
+        _add_edges(edges, cross_candidates, 30, rng)
+        return edges
+    raise ValueError(f"unknown Gaussian case: {case}")
+
+
+def _signed_weights(
+    count: int,
+    rng: np.random.Generator,
+    *,
+    low: float,
+    high: float,
+) -> np.ndarray:
+    magnitudes = rng.uniform(low, high, size=count)
+    signs = np.where(rng.integers(0, 2, size=count) == 0, -1.0, 1.0)
+    return magnitudes * signs
+
+
+def _mixture_weights(count: int, rng: np.random.Generator) -> np.ndarray:
+    high_mask = rng.random(count) < 0.30
+    magnitudes = np.where(
+        high_mask,
+        rng.uniform(1.0, 1.8, size=count),
+        rng.uniform(0.3, 0.8, size=count),
+    )
+    signs = np.where(rng.integers(0, 2, size=count) == 0, -1.0, 1.0)
+    return magnitudes * signs
+
+
+def _structure_digest(omega: np.ndarray) -> str:
+    payload = json.dumps(
+        {
+            "shape": list(omega.shape),
+            "values": np.asarray(omega, dtype="<f8").tolist(),
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _gaussian_structure(
+    case: str, structure_seed: int
+) -> tuple[np.ndarray, dict[str, Any]]:
+    base_case = "B" if case == "D" else case
+    if base_case not in _GAUSSIAN_CASES:
+        raise ValueError(f"unknown Gaussian case: {case}")
+    rng = np.random.default_rng(_validate_seed(structure_seed, "structure_seed"))
+    p = _GAUSSIAN_CASES[base_case]["p"]
+    edges = _case_edges(base_case, rng)
+    if base_case == "A":
+        weights = _signed_weights(len(edges), rng, low=0.6, high=1.2)
+    else:
+        weights = _mixture_weights(len(edges), rng)
+    adjacency = np.zeros((p, p), dtype=np.float64)
+    for (left, right), weight in zip(edges, weights):
+        adjacency[left, right] = weight
+        adjacency[right, left] = weight
+    scale = 0.8 / float(np.linalg.norm(adjacency, ord=2))
+    omega = np.eye(p, dtype=np.float64) + scale * adjacency
+    np.linalg.cholesky(omega)
+    minimum_eigenvalue = float(np.linalg.eigvalsh(omega)[0])
+    if minimum_eigenvalue < 0.19:
+        raise RuntimeError("Gaussian precision matrix missed the positive-definite margin")
+    edge_density = len(edges) / (p * (p - 1) / 2)
+    meta = {
+        "base_case": base_case,
+        "edges": [list(edge) for edge in edges],
+        "weights": weights.tolist(),
+        "min_eigenvalue": minimum_eigenvalue,
+        "edge_density": float(edge_density),
+        "structure_digest": _structure_digest(omega),
+    }
+    return omega, meta
+
+
+def _sample_gaussian_precision(omega: np.ndarray, sample_seed: int, n: int) -> np.ndarray:
+    covariance = np.linalg.inv(omega)
+    rng = np.random.default_rng(_validate_seed(sample_seed, "sample_seed"))
+    return rng.multivariate_normal(np.zeros(omega.shape[0]), covariance, size=n)
+
+
+def _named_gaussian_result(
+    case: str,
+    *,
+    structure_seed: int,
+    sample_seed: int,
+    n: int | None,
+) -> SimulatedDataset:
+    default_n = _GAUSSIAN_CASES[case]["n"]
+    sample_size = _validate_sample_size(n, default_n)
+    omega, structure_meta = _gaussian_structure(case, structure_seed)
+    data = _sample_gaussian_precision(omega, sample_seed, sample_size)
+    names = _node_names(omega.shape[0])
+    truth_indices, cmi_indices = gaussian_truth(omega)
+    truth_edges = frozenset((names[left], names[right]) for left, right in truth_indices)
+    population_cmi = {
+        (names[left], names[right]): value for (left, right), value in cmi_indices.items()
+    }
+    summary = population_signal_summary(population_cmi, truth_edges)
+    meta = {
+        **structure_meta,
+        "case": case,
+        "structure_seed": int(structure_seed),
+        "sample_seed": int(sample_seed),
+        "n": sample_size,
+        "p": omega.shape[0],
+        "rejection_tries": 0,
+        "population_signal_summary": summary,
+    }
+    schema = {name: {"kind": "continuous"} for name in names}
+    return SimulatedDataset(
+        frame=pd.DataFrame(data, index=pd.RangeIndex(sample_size), columns=names),
+        schema=schema,
+        truth_edges=truth_edges,
+        population_cmi=population_cmi,
+        meta=meta,
+    )
+
+
+def generate_case(
+    case: str,
+    *,
+    structure_seed: int,
+    sample_seed: int,
+    n: int | None = None,
+) -> SimulatedDataset:
+    """Generate one deterministic CIN evaluation case."""
+
+    if case in _GAUSSIAN_CASES:
+        return _named_gaussian_result(
+            case,
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n,
+        )
+    if case == "D":
+        base = _named_gaussian_result(
+            "B",
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n,
+        )
+        frame = base.frame.copy()
+        frame.iloc[:, ::2] = np.sinh(0.5 * frame.iloc[:, ::2])
+        meta = {**base.meta, "case": "D", "paired_case": "B"}
+        return SimulatedDataset(
+            frame=frame,
+            schema=base.schema,
+            truth_edges=base.truth_edges,
+            population_cmi=base.population_cmi,
+            meta=meta,
+        )
+    raise ValueError(f"unknown CIN simulation case: {case}")
+
+
+__all__ = [
+    "SimulatedDataset",
+    "exact_cmi_from_joint",
+    "gaussian_truth",
+    "generate_case",
+    "is_connected",
+    "population_signal_summary",
+]
