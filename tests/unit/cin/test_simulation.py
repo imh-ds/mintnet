@@ -4,15 +4,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mintnet.simulation.cin_networks import (
+from mintnet.cin.config import CINConfig, prepare_data
+from mintnet.simulation import (
     SimulatedDataset,
-    _gaussian_structure,
     exact_cmi_from_joint,
-    generate_cost_input,
-    generate_case,
     gaussian_truth,
+    generate_case,
+    generate_cost_input,
     is_connected,
     population_signal_summary,
+)
+from mintnet.simulation.cin_networks import (
+    _gaussian_structure,
 )
 
 
@@ -280,3 +283,27 @@ def test_cost_input_rejects_invalid_requests() -> None:
         generate_cost_input("dense_continuous", 0, 10, seed=1)
     with pytest.raises(ValueError, match="n"):
         generate_cost_input("dense_continuous", 4, 0, seed=1)
+
+
+@pytest.mark.parametrize("case", list("ABCDEFGHI"))
+def test_public_cases_pass_prepare_data(case: str) -> None:
+    result = generate_case(case, structure_seed=5, sample_seed=7)
+
+    prepared = prepare_data(result.frame, result.schema, CINConfig(seed=19))
+
+    assert prepared.n_retained == len(result.frame)
+    assert prepared.names == tuple(result.frame.columns)
+
+
+@pytest.mark.parametrize("kind", ["dense_continuous", "categorical5", "categorical10", "mixed"])
+def test_public_cost_inputs_have_observed_declared_levels(kind: str) -> None:
+    p = 10
+    frame, schema = generate_cost_input(kind, p, 2048, seed=23)
+
+    prepared = prepare_data(frame, schema, CINConfig(seed=19))
+
+    assert prepared.n_retained == len(frame)
+    assert prepared.names == tuple(frame.columns)
+    for name, spec in schema.items():
+        if spec["kind"] == "categorical":
+            assert set(frame[name]) == set(spec["levels"])
