@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import time
 from typing import Any
 
-import pandas as pd
+for _name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ[_name] = "1"
 
-from mintnet.cin import CINConfig, fit_network
-from mintnet.simulation import generate_cost_input
+import pandas as pd  # noqa: E402
 
-from .cin_common import (
+from mintnet.cin import CINConfig, fit_network  # noqa: E402
+from mintnet.simulation import generate_cost_input  # noqa: E402
+
+from .cin_common import (  # noqa: E402
     IncrementalCsvWriter,
     derive_seed_bundle,
     load_yaml,
