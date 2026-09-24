@@ -5,11 +5,19 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import yaml
 
 from mintnet.experiments.cin_baseline import load_config as load_panel_config
-from mintnet.experiments.cin_cost import load_config as load_cost_config
+from mintnet.experiments.cin_cost import (
+    COST_RAW_COLUMNS,
+    expected_combinations as expected_cost_combinations,
+    expected_row_count as expected_cost_rows,
+    load_config as load_cost_config,
+    run_cost,
+)
+from mintnet.experiments import cin_cost_reporting
 from mintnet.experiments.cin_common import (
     IncrementalCsvWriter,
     canonical_pair_sidecar_name,
@@ -109,3 +117,51 @@ def test_invalid_config_is_rejected(tmp_path: Path) -> None:
     path.write_text(yaml.safe_dump({"master_seed": 1, "cases": ["Z"]}), encoding="utf-8")
     with pytest.raises(ValueError, match="unknown case"):
         load_panel_config(path)
+
+
+def test_cost_expected_combinations_cover_full_grid() -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost.yaml")
+    assert expected_cost_rows(config) == 16
+    assert len(expected_cost_combinations(config)) == 16
+    assert ("c_p100_n1000", 2) in expected_cost_combinations(config)
+
+
+def test_cost_smoke_writes_incremental_raw_rows_and_pair_sidecars(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    output = tmp_path / "cost"
+    raw = run_cost(config, output)
+
+    assert list(raw.columns) == list(COST_RAW_COLUMNS)
+    assert len(raw) == expected_cost_rows(config) == 8
+    assert set(raw["status"]) == {"complete"}
+    assert (output / "raw_metrics.csv").exists()
+    assert (output / "resolved_config.yaml").exists()
+    assert (output / "metadata.json").exists()
+    manifest = raw["pair_sidecar_file"].dropna().tolist()
+    assert len(manifest) == 8
+    assert len(list((output / "sidecars").glob("*.csv.gz"))) == 8
+    first = pd.read_csv(output / "sidecars" / manifest[0], compression="gzip")
+    assert len(first) == 8 * 7 // 2
+    assert "truth_edges" not in raw.columns
+    assert (output / "cost_summary.csv").exists()
+    assert (output / "cost_report.md").exists()
+
+
+def test_cost_shard_selection_writes_only_selected_identity(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    output = tmp_path / "one-cell"
+    raw = run_cost(config, output, cells=("c_p8_n100",), repeats=(1,), write_report=False)
+
+    assert raw[["cell", "repeat"]].to_dict("records") == [{"cell": "c_p8_n100", "repeat": 1}]
+    assert not (output / "cost_report.md").exists()
+
+
+def test_cost_report_does_not_claim_recovery_metrics(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    raw = pd.DataFrame(
+        [{"cell": "c_p8_n100", "repeat": 1, "status": "complete", "elapsed_seconds": 1.0}]
+    )
+    cin_cost_reporting.write_report(raw, config, tmp_path)
+    report = (tmp_path / "cost_report.md").read_text(encoding="utf-8")
+    assert "cost pilot" in report.lower()
+    assert "recovery" not in report.lower()
