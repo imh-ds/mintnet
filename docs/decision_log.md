@@ -7649,3 +7649,43 @@ Implementation commits: `9f4fc8f`, `4ac6828`, `56b1df0`, `8d3c8fd`, and
 Consequences: Task 06 may consume `NetworkFit` without refitting or changing
 the fit procedure. The CIN estimator remains unvalidated, and no public
 network evidence claim is introduced.
+
+## D-100: Implement CIN Task 06 results, views, exports, and methods text
+
+Date: 2026-09-24.
+
+Task 06 is now implemented under `src/mintnet/cin/result.py` and
+`src/mintnet/cin/views.py`. `NetworkFit` supports validated six-file
+persistence with canonical fit-id recomputation, schema-order checks, unique
+pair-cardinality checks, symmetric weight/display matrices, and preserved
+`NaN` values for incomplete pairs. Fit metadata now records compact prepared-
+data diagnostics without retaining raw observations.
+
+`make_view` is a pure, non-refitting filter over complete positive raw weights,
+with exact threshold inclusion, optional two-direction agreement, lazy
+fit-matched stability integration, deterministic presentation limits, and
+named descriptions. `NetworkView` exports display-magnitude edge lists and
+labelled matrices, writes reproducible view artifacts, and provides a
+matplotlib-only circular network plot and matrix heatmap without importing
+matplotlib during package import. Generated methods text reports the actual
+model/configuration, filters, tuning summary, limitations, and triggered data
+diagnostic warnings.
+
+Decision: accept Task 06 as the results and presentation baseline for the next
+dependency-ordered step. Stability remains a lazy protocol integration point
+for Task 07; ordinary fit persistence and views do not require the stability
+module. Views never refit and retain the distinction between non-displayed
+complete pairs and unavailable incomplete pairs. The estimator remains
+unvalidated, and methods text makes no significance, causal, or confidence
+claim.
+
+Evidence: the full active unit suite passes with 170 tests; three optional
+matplotlib plot smoke cases are skipped because matplotlib is absent from the
+prepared local test runner even though it is a declared project dependency;
+`ruff check src tests` passes; and `git diff --check` is clean. Implementation
+commits are `ac6af35`, `192731c`, `4d402e8`, and `31b6188`.
+
+Consequences: Task 07 may provide the stability rule adapter consumed by
+`make_view`, and Task 12 may consume the fit → view → save → reload workflow.
+No substantive network interpretation or statistical-method validation claim
+is introduced by this entry.
