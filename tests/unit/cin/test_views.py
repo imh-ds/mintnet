@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from mintnet.cin.result import (
+    PAIR_COLUMNS,
+    NetworkFit,
+    compute_fit_id,
+    load_fit,
+)
+
+
+def _sample_fit() -> NetworkFit:
+    schema = {
+        "alpha": {"kind": "continuous"},
+        "beta": {"kind": "continuous"},
+        "gamma": {"kind": "continuous"},
+    }
+    pairs = pd.DataFrame(
+        [
+            {
+                "node_i": "alpha",
+                "node_j": "beta",
+                "gain_i_to_j": 0.20,
+                "gain_j_to_i": 0.10,
+                "weight_nats_raw": 0.15,
+                "display_magnitude_nats": 0.15,
+                "gaussian_equivalent_magnitude": 0.51,
+                "orientation_gap": 0.10,
+                "n_scored": 30,
+                "folds_complete": 3,
+                "status": "complete",
+                "diagnostic_flags": "",
+            },
+            {
+                "node_i": "alpha",
+                "node_j": "gamma",
+                "gain_i_to_j": -0.02,
+                "gain_j_to_i": 0.03,
+                "weight_nats_raw": 0.005,
+                "display_magnitude_nats": 0.005,
+                "gaussian_equivalent_magnitude": 0.10,
+                "orientation_gap": 0.05,
+                "n_scored": 30,
+                "folds_complete": 3,
+                "status": "complete",
+                "diagnostic_flags": "",
+            },
+            {
+                "node_i": "beta",
+                "node_j": "gamma",
+                "gain_i_to_j": np.nan,
+                "gain_j_to_i": np.nan,
+                "weight_nats_raw": np.nan,
+                "display_magnitude_nats": np.nan,
+                "gaussian_equivalent_magnitude": np.nan,
+                "orientation_gap": np.nan,
+                "n_scored": 0,
+                "folds_complete": 1,
+                "status": "budget_exceeded",
+                "diagnostic_flags": "deadline",
+            },
+        ],
+        columns=PAIR_COLUMNS,
+    )
+    metadata = {
+        "config_hash": "config-digest",
+        "schema": schema,
+        "digests": {"data_digest": "data-digest"},
+        "git_revision": "revision",
+        "fit_id": compute_fit_id(
+            "config-digest", schema, "data-digest", "revision"
+        ),
+        "complete": False,
+        "data_diagnostics": {
+            "few_unique_continuous": ["gamma"],
+            "rare_levels": [],
+            "p_ge_n": False,
+            "q_estimate": 9,
+            "q_limit": 1000,
+        },
+    }
+    return NetworkFit(
+        pairs=pairs,
+        nodes=pd.DataFrame([{"node": name} for name in schema]),
+        folds=pd.DataFrame([{"fold": 0, "status": "complete"}]),
+        metadata=metadata,
+    )
+
+
+def test_network_fit_save_load_round_trip_preserves_tables_and_metadata(tmp_path) -> None:
+    fit = _sample_fit()
+
+    fit.save(tmp_path)
+    restored = load_fit(tmp_path)
+
+    assert {
+        "pairs.csv",
+        "nodes.csv",
+        "folds.csv",
+        "matrix_weight.csv",
+        "matrix_display.csv",
+        "metadata.json",
+    } == {path.name for path in tmp_path.iterdir()}
+    pd.testing.assert_frame_equal(restored.pairs, fit.pairs)
+    pd.testing.assert_frame_equal(restored.nodes, fit.nodes)
+    pd.testing.assert_frame_equal(restored.folds, fit.folds)
+    assert restored.metadata == fit.metadata
+
+
+def test_network_fit_persists_incomplete_pairs_as_nan_not_zero(tmp_path) -> None:
+    fit = _sample_fit()
+
+    fit.save(tmp_path)
+    matrix = pd.read_csv(tmp_path / "matrix_weight.csv", index_col=0)
+
+    assert np.isnan(matrix.loc["beta", "gamma"])
+    assert np.isnan(matrix.loc["gamma", "beta"])
+    assert matrix.loc["alpha", "beta"] == pytest.approx(0.15)
+
+
+def test_network_fit_load_rejects_corrupt_pair_table(tmp_path) -> None:
+    _sample_fit().save(tmp_path)
+    pairs = pd.read_csv(tmp_path / "pairs.csv", keep_default_na=False)
+    pairs = pairs.iloc[:-1]
+    pairs.to_csv(tmp_path / "pairs.csv", index=False)
+
+    with pytest.raises(ValueError, match="pair"):
+        load_fit(tmp_path)
+
+
+def test_network_fit_metadata_json_is_not_raw_data() -> None:
+    fit = _sample_fit()
+
+    payload = json.loads(json.dumps(fit.metadata))
+
+    assert "raw_data" not in payload
+    assert "data_digest" in payload["digests"]

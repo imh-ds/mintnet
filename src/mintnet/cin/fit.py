@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import time
-import hashlib
-import json
 import platform
 import subprocess
 from dataclasses import asdict, dataclass, field
@@ -15,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .config import CINConfig
-from .result import NetworkFit
+from .result import NetworkFit, compute_fit_id
 
 __all__ = [
     "Budget",
@@ -737,23 +735,25 @@ def _git_revision() -> str | None:
 def _fit_metadata(prepared: Any, schema: Any, config: CINConfig, split_plan: SplitPlan) -> dict[str, Any]:
     config_payload = _metadata_value(asdict(config))
     schema_payload = _metadata_value(schema)
-    schema_json = json.dumps(schema_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     code_revision = _git_revision()
-    digest_input = "\x1f".join(
-        (
-            config.config_hash(),
-            schema_json,
-            prepared.data_digest,
-            code_revision or "",
-        )
-    ).encode("utf-8")
-    fit_id = hashlib.sha256(digest_input).hexdigest()[:16]
+    fit_id = compute_fit_id(
+        config.config_hash(), schema_payload, prepared.data_digest, code_revision
+    )
+    diagnostics = prepared.diagnostics
     return {
         "config": config_payload,
         "config_hash": config.config_hash(),
         "schema": schema_payload,
         "retained_count": int(prepared.n_retained),
         "excluded_count": int(prepared.n_excluded),
+        "data_diagnostics": {
+            "few_unique_continuous": _metadata_value(diagnostics.few_unique_continuous),
+            "rare_levels": _metadata_value(diagnostics.rare_levels),
+            "p_ge_n": bool(diagnostics.p_ge_n),
+            "extra_columns": _metadata_value(diagnostics.extra_columns),
+            "q_estimate": int(diagnostics.q_estimate),
+            "q_limit": int(diagnostics.q_limit),
+        },
         "digests": {
             "data_digest": prepared.data_digest,
             "row_identity_digest": prepared.row_identity_digest,
