@@ -193,8 +193,8 @@ def test_categorical_binary_oracle_with_mixture() -> None:
         codes, np.zeros_like(ridge_out), prevalence, train_counts, 10, 0.01, 0.5
     )
 
-    mixture_expected = 0.8 * np.log(0.99 * 0.8 + 0.01 * 0.5)
-    mixture_expected += 0.2 * np.log(0.99 * 0.2 + 0.01 * 0.5)
+    mixture_expected = 0.8 * np.log((0.99 * 0.8 + 0.01 * 0.5) / 0.5)
+    mixture_expected += 0.2 * np.log((0.99 * 0.2 + 0.01 * 0.5) / 0.5)
     observed = float(np.mean(full - reduced))
     analytic_cmi = 0.8 * np.log(1.6) + 0.2 * np.log(0.4)
 
