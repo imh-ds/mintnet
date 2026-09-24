@@ -231,6 +231,17 @@ def test_sidecar_aggregation_rejects_tampering_and_orphans(tmp_path: Path) -> No
         aggregate_sidecars(source, tmp_path / "bad-orphan")
 
 
+def test_sidecar_aggregation_rejects_duplicate_raw_identity(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    source = tmp_path / "source"
+    run_cost(config, source, cells=("c_p8_n100",), write_report=False)
+    raw_path = source / "raw_metrics.csv"
+    raw = pd.read_csv(raw_path)
+    pd.concat([raw, raw.iloc[[0]]], ignore_index=True).to_csv(raw_path, index=False)
+    with pytest.raises(ValueError, match="duplicate raw identity"):
+        aggregate_sidecars(source, tmp_path / "duplicate")
+
+
 def test_baseline_report_requires_promised_pair_sidecars(tmp_path: Path) -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     source = tmp_path / "panel"

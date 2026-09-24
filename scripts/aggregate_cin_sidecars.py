@@ -54,6 +54,8 @@ def _raw_promises(raw: pd.DataFrame) -> dict[tuple[Any, ...], dict[str, tuple[st
     promises: dict[tuple[Any, ...], dict[str, tuple[str, pd.Series]]] = {}
     for _, row in raw.iterrows():
         identity = _identity_from_raw(row)
+        if identity in promises:
+            raise ValueError(f"duplicate raw identity: {identity}")
         entry: dict[str, tuple[str, pd.Series]] = {}
         for column, kind in (("pair_sidecar_file", "pairs"), ("stability_sidecar_file", "stability")):
             if column in raw.columns and pd.notna(row.get(column)) and str(row[column]).strip():
