@@ -7600,3 +7600,52 @@ statistical-method validation.
 Consequences: Task 05 may consume the score adapters and `choose_lambda` for
 training-only nested tuning and outer-fold scoring. The CIN estimator remains
 unvalidated, and no public network evidence claim is introduced.
+
+## D-099: Implement CIN Task 05 cross-fitting and fit orchestration
+
+Date: 2026-09-24.
+
+Task 05 of the tracked CIN build plan is now implemented under
+`src/mintnet/cin/fit.py` and `src/mintnet/cin/result.py`. The public
+`fit_network` entry point prepares data once, creates deterministic shared
+outer and inner splits, tunes one penalty per target and outer fold using
+training-only feature spaces, scores full/reduced models through the shared
+ridge omission workspace, and aggregates every unordered pair by held-out
+row sums. The target predictor block is omitted before every score, reduced
+models reuse the same fitted factorization and penalty, and zero-width
+predictor blocks contribute exact zero with a diagnostic flag.
+
+`NetworkFit` now carries Task 6-compatible pair, node, and fold tables plus
+JSON-safe `to_dict()`/`from_dict()` serialization. Pair statuses distinguish
+complete, unsupported, numerical failure, budget exceeded, and not started;
+partial directional sums never become published weights. Signed raw gains are
+preserved while display magnitudes are clamped at zero. Metadata records
+configuration/schema digests, split seed provenance, dependency versions,
+best-effort git revision, fit id, runtime status, factorization counts, and
+phase costs without retaining participant-level data.
+
+Decision: accept Task 05 as the fit-orchestration baseline for the next
+dependency-ordered CIN step. Use the Task 4 score adapters as the sole score
+contract, keep the absolute monotonic deadline externalizable for later
+stability work, and keep `pair_batch_size` and `max_seconds` out of the
+statistical procedure hash. This implementation establishes tested
+orchestration behavior; it is not statistical-method validation or evidence
+that CIN estimates are calibrated for substantive use.
+
+Evidence: the focused Task 5 suite passes with 17 tests, including direct
+restricted-ridge equivalence at relative tolerance `1e-7`, mixed continuous
+and categorical responses, deterministic and batch-size-invariant fits,
+budget and target-local numerical-failure statuses, signed-negative weights,
+and the p=12 factorization bound. The full active unit suite passes with 155
+tests using the available Python 3.12 runtime; `ruff check src tests` passes;
+`git diff --check` passes; and the final feature branch is clean. The
+factorization test asserts the specified maximum of 45 large factorizations;
+peak RSS remains best-effort and is recorded as unavailable in this local
+runner.
+
+Implementation commits: `9f4fc8f`, `4ac6828`, `56b1df0`, `8d3c8fd`, and
+`e1b67ca`. The decision-log update is committed separately after verification.
+
+Consequences: Task 06 may consume `NetworkFit` without refitting or changing
+the fit procedure. The CIN estimator remains unvalidated, and no public
+network evidence claim is introduced.
