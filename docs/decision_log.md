@@ -7689,3 +7689,37 @@ Consequences: Task 07 may provide the stability rule adapter consumed by
 `make_view`, and Task 12 may consume the fit → view → save → reload workflow.
 No substantive network interpretation or statistical-method validation claim
 is introduced by this entry.
+
+## D-101: Implement CIN Task 07 stability estimation and aggregation
+
+Date: 2026-09-24.
+
+Task 07 is now implemented under `src/mintnet/cin/fit.py` and
+`src/mintnet/cin/stability.py`, with public exports from `src/mintnet/cin/__init__.py`.
+The fit path exposes a prepared-data runner with repeat-specific split seeds
+and an absolute deadline while preserving the default `fit_network` behavior.
+Stability estimation derives deterministic child seeds from the fitted seed and
+stable tag `0xC17`, records fit/config/data identity, samples with a minimum
+sample-size guard, performs budget preflight, supports resumable persisted
+results, and marks interrupted repeats explicitly. CSV/JSON persistence accepts
+gzip records, and structural validation rejects mismatched provenance or
+incomplete pair records. `stability_for_rule` returns every schema-order pair
+with explicit requested/completed denominators and applies the requested
+agreement and effect thresholds without refitting. Task 06 views consume the
+stability table lazily and preserve the fit identity boundary.
+
+Decision: accept Task 07 as the deterministic stability and rule-aggregation
+baseline for downstream CIN examples and reporting. Stability results are
+reproducible and resumable under the recorded procedure identity, but the
+implementation makes no inferential, calibration, or substantive network claim.
+
+Evidence: the full active unit suite passes with 187 tests; three optional
+matplotlib plot cases are skipped because matplotlib is absent from the
+prepared local runner; `ruff check src tests` passes; and `git diff --check`
+is clean. Implementation commits are `883fb9b`, `47c1773`, `ab3a851`, and
+`f790728`.
+
+Consequences: downstream CIN documentation may consume `estimate_stability`,
+`load_stability`, and `stability_for_rule`; Task 06 views can request the
+stability filter without refitting. No substantive network interpretation or
+statistical-method validation claim is introduced by this entry.
