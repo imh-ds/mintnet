@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .config import CINConfig, prepare_data
+from .fit import _fit_prepared
+from .result import NetworkFit
 
 STABILITY_TAG = 0xC17
 STABILITY_COLUMNS = (
@@ -30,6 +34,7 @@ __all__ = [
     "STABILITY_COLUMNS",
     "STABILITY_TAG",
     "StabilityResult",
+    "estimate_stability",
     "load_stability",
 ]
 
@@ -78,6 +83,301 @@ def _sample_indices(
         retained_count, size=sample_size, replace=False
     )
     return np.sort(np.asarray(indices, dtype=np.intp))
+
+
+def _fit_definition(fit: NetworkFit) -> tuple[dict[str, Any], dict[str, Any], CINConfig]:
+    if not isinstance(fit, NetworkFit):
+        raise ValueError("fit must be a NetworkFit")
+    metadata = fit.metadata
+    schema = metadata.get("schema")
+    config_payload = metadata.get("config")
+    if not isinstance(schema, Mapping) or not isinstance(config_payload, Mapping):
+        raise ValueError("fit metadata must contain schema and config")
+    if not isinstance(metadata.get("fit_id"), str) or not metadata["fit_id"]:
+        raise ValueError("fit metadata must contain fit_id")
+    digests = metadata.get("digests")
+    if not isinstance(digests, Mapping) or not {
+        "data_digest",
+        "row_identity_digest",
+    } <= set(digests):
+        raise ValueError("fit metadata must contain data and row identity digests")
+    config_values = dict(config_payload)
+    if isinstance(config_values.get("lambda_grid"), list):
+        config_values["lambda_grid"] = tuple(config_values["lambda_grid"])
+    return copy.deepcopy(dict(schema)), copy.deepcopy(dict(metadata)), CINConfig(**config_values)
+
+
+def _validate_request(repeats: int, fraction: float, max_seconds: float) -> None:
+    if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
+        raise ValueError("repeats must be a positive integer")
+    if isinstance(fraction, bool) or not isinstance(fraction, (int, float)):
+        raise ValueError("fraction must be a finite number in (0, 1]")
+    if not np.isfinite(float(fraction)) or not 0 < float(fraction) <= 1:
+        raise ValueError("fraction must be a finite number in (0, 1]")
+    if isinstance(max_seconds, bool) or not isinstance(max_seconds, (int, float)):
+        raise ValueError("max_seconds must be a positive finite number")
+    if not np.isfinite(float(max_seconds)) or float(max_seconds) <= 0:
+        raise ValueError("max_seconds must be a positive finite number")
+
+
+def _base_metadata(
+    fit_metadata: Mapping[str, Any],
+    *,
+    config: CINConfig,
+    repeats: int,
+    fraction: float,
+    sample_size: int,
+    repeat_seeds: tuple[int, ...],
+    status: str,
+    completed_repeat_ids: list[int],
+    preflight: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "fit_id": fit_metadata["fit_id"],
+        "config_hash": fit_metadata["config_hash"],
+        "digests": copy.deepcopy(fit_metadata["digests"]),
+        "schema": copy.deepcopy(fit_metadata["schema"]),
+        "seed": int(config.seed),
+        "stability_tag": STABILITY_TAG,
+        "repeats_requested": int(repeats),
+        "B": int(repeats),
+        "fraction": float(fraction),
+        "sample_size": int(sample_size),
+        "repeat_seeds": list(repeat_seeds),
+        "completed_repeat_ids": sorted(int(value) for value in completed_repeat_ids),
+        "repeats_completed": len(completed_repeat_ids),
+        "status": status,
+        "preflight": _json_safe(preflight),
+    }
+
+
+def _empty_records() -> pd.DataFrame:
+    return pd.DataFrame(columns=STABILITY_COLUMNS)
+
+
+def _validate_resume(
+    resume: StabilityResult,
+    fit_metadata: Mapping[str, Any],
+    *,
+    config: CINConfig,
+    repeats: int,
+    fraction: float,
+    repeat_seeds: tuple[int, ...],
+) -> tuple[pd.DataFrame, set[int]]:
+    metadata = resume.metadata
+    if resume.fit_id != fit_metadata["fit_id"]:
+        raise ValueError("resume fit_id does not match the point fit")
+    if metadata.get("config_hash") != fit_metadata.get("config_hash"):
+        raise ValueError("resume config_hash does not match the point fit")
+    if metadata.get("digests") != fit_metadata.get("digests"):
+        raise ValueError("resume data digests do not match the point fit")
+    if metadata.get("schema") != fit_metadata.get("schema"):
+        raise ValueError("resume schema does not match the point fit")
+    if metadata.get("seed") != config.seed:
+        raise ValueError("resume seed does not match the point fit")
+    if metadata.get("repeats_requested") != repeats:
+        raise ValueError("resume repeat count does not match the request")
+    if not np.isclose(float(metadata.get("fraction")), fraction, rtol=0, atol=0):
+        raise ValueError("resume fraction does not match the request")
+    if tuple(int(seed) for seed in metadata.get("repeat_seeds", ())) != repeat_seeds:
+        raise ValueError("resume repeat seeds do not match the request")
+    completed = {int(value) for value in metadata.get("completed_repeat_ids", ())}
+    records = resume.records.loc[resume.records["repeat_id"].isin(completed)].copy()
+    return records, completed
+
+
+def _records_from_fit(
+    fit: NetworkFit,
+    *,
+    fit_id: str,
+    repeat_id: int,
+    repeat_seed: int,
+    interrupted: bool,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for record in fit.pairs.to_dict(orient="records"):
+        status = "interrupted" if interrupted else str(record["status"])
+        available = not interrupted and status == "complete"
+        rows.append(
+            {
+                "fit_id": fit_id,
+                "repeat_id": int(repeat_id),
+                "repeat_seed": int(repeat_seed),
+                "node_i": str(record["node_i"]),
+                "node_j": str(record["node_j"]),
+                "gain_i_to_j": float(record["gain_i_to_j"]) if available else np.nan,
+                "gain_j_to_i": float(record["gain_j_to_i"]) if available else np.nan,
+                "weight_nats_raw": float(record["weight_nats_raw"]) if available else np.nan,
+                "status": status,
+            }
+        )
+    return rows
+
+
+def _run_repeat(
+    frame: pd.DataFrame,
+    schema: Mapping[str, Mapping[str, Any]],
+    config: CINConfig,
+    *,
+    repeat_seed: int,
+    deadline: float,
+) -> NetworkFit:
+    prepared = prepare_data(frame, schema, config)
+    return _fit_prepared(
+        prepared,
+        schema,
+        config,
+        deadline=deadline,
+        split_seed=repeat_seed,
+    )
+
+
+def estimate_stability(
+    fit: NetworkFit | None = None,
+    frame: Any = None,
+    *,
+    repeats: int = 10,
+    fraction: float = 0.8,
+    max_seconds: float = 600.0,
+    resume: StabilityResult | str | Path | None = None,
+    elapsed_estimate: float | None = None,
+) -> StabilityResult:
+    """Estimate reproducibility by explicitly repeating fit/subsample work."""
+
+    if fit is None:
+        raise NotImplementedError("estimate_stability requires a NetworkFit")
+    if frame is None:
+        raise ValueError("estimate_stability requires a frame")
+    _validate_request(repeats, fraction, max_seconds)
+    schema, fit_metadata, config = _fit_definition(fit)
+    from .config import prepare_data
+
+    prepared = prepare_data(frame, schema, config)
+    expected_digests = fit_metadata["digests"]
+    if prepared.data_digest != expected_digests["data_digest"]:
+        raise ValueError("data_digest does not match the point fit")
+    if prepared.row_identity_digest != expected_digests["row_identity_digest"]:
+        raise ValueError("row_identity_digest does not match the point fit")
+
+    sample_size = int(np.floor(float(fraction) * prepared.n_retained))
+    repeat_seeds = _repeat_seeds(config.seed, repeats)
+    prior_records = _empty_records()
+    completed: set[int] = set()
+    if resume is not None:
+        if isinstance(resume, (str, Path)):
+            resume = load_stability(resume)
+        if not isinstance(resume, StabilityResult):
+            raise ValueError("resume must be a StabilityResult or result directory")
+        prior_records, completed = _validate_resume(
+            resume,
+            fit_metadata,
+            config=config,
+            repeats=repeats,
+            fraction=float(fraction),
+            repeat_seeds=repeat_seeds,
+        )
+
+    runtime_metadata = fit_metadata.get("runtime", {})
+    recorded_elapsed = runtime_metadata.get("elapsed_seconds")
+    if elapsed_estimate is None:
+        elapsed_estimate = recorded_elapsed
+    if (
+        elapsed_estimate is None
+        or isinstance(elapsed_estimate, bool)
+        or not isinstance(elapsed_estimate, (int, float))
+        or not np.isfinite(float(elapsed_estimate))
+        or float(elapsed_estimate) <= 0
+    ):
+        raise ValueError("a positive elapsed_estimate is required for stability preflight")
+
+    preflight = {
+        "elapsed_estimate": float(elapsed_estimate),
+        "estimated_seconds": 0.0,
+        "max_seconds": float(max_seconds),
+        "sample_size": sample_size,
+    }
+    if sample_size < 30:
+        metadata = _base_metadata(
+            fit_metadata,
+            config=config,
+            repeats=repeats,
+            fraction=float(fraction),
+            sample_size=sample_size,
+            repeat_seeds=repeat_seeds,
+            status="unsupported_repeat_request",
+            completed_repeat_ids=sorted(completed),
+            preflight=preflight,
+        )
+        return StabilityResult(prior_records, metadata)
+
+    remaining = [repeat_id for repeat_id in range(repeats) if repeat_id not in completed]
+    preflight["estimated_seconds"] = 1.5 * len(remaining) * float(elapsed_estimate)
+    if not remaining or preflight["estimated_seconds"] > float(max_seconds):
+        status = "complete" if not remaining else "budget_not_started"
+        metadata = _base_metadata(
+            fit_metadata,
+            config=config,
+            repeats=repeats,
+            fraction=float(fraction),
+            sample_size=sample_size,
+            repeat_seeds=repeat_seeds,
+            status=status,
+            completed_repeat_ids=sorted(completed),
+            preflight=preflight,
+        )
+        return StabilityResult(prior_records, metadata)
+
+    retained_frame = frame.loc[prepared.index]
+    deadline = time.monotonic() + float(max_seconds)
+    new_rows: list[dict[str, Any]] = []
+    overall_status = "complete"
+    for repeat_id in remaining:
+        if time.monotonic() >= deadline:
+            overall_status = "interrupted"
+            break
+        indices = _sample_indices(prepared.n_retained, sample_size, config.seed, repeat_id)
+        repeat_frame = retained_frame.iloc[indices].copy()
+        repeat_fit = _run_repeat(
+            repeat_frame,
+            schema,
+            config,
+            repeat_seed=repeat_seeds[repeat_id],
+            deadline=deadline,
+        )
+        repeat_complete = bool(repeat_fit.metadata.get("complete")) and (
+            repeat_fit.metadata.get("runtime", {}).get("status") == "complete"
+        )
+        new_rows.extend(
+            _records_from_fit(
+                repeat_fit,
+                fit_id=str(fit_metadata["fit_id"]),
+                repeat_id=repeat_id,
+                repeat_seed=repeat_seeds[repeat_id],
+                interrupted=not repeat_complete,
+            )
+        )
+        if not repeat_complete:
+            overall_status = "interrupted"
+            break
+        completed.add(repeat_id)
+
+    new_records = pd.DataFrame(new_rows, columns=STABILITY_COLUMNS)
+    records = pd.concat([prior_records, new_records], ignore_index=True)
+    if not records.empty:
+        records = records.loc[:, list(STABILITY_COLUMNS)]
+    metadata = _base_metadata(
+        fit_metadata,
+        config=config,
+        repeats=repeats,
+        fraction=float(fraction),
+        sample_size=sample_size,
+        repeat_seeds=repeat_seeds,
+        status="complete" if len(completed) == repeats else overall_status,
+        completed_repeat_ids=sorted(completed),
+        preflight=preflight,
+    )
+    metadata["preflight"]["elapsed_seconds"] = float(time.monotonic() - (deadline - float(max_seconds)))
+    return StabilityResult(records, metadata)
 
 
 def _validate_metadata(metadata: Mapping[str, Any]) -> None:
