@@ -7763,3 +7763,46 @@ Consequences: Task 09 may derive replicate seeds and consume the stable A–I
 generator contract; Tasks 11/12 may use the audit report as population-property
 evidence. No fitted-weight, recovery-score, inferential, causal, or substantive
 network claim is introduced by this entry.
+
+## D-103: Implement CIN Task 09 runner and Actions infrastructure
+
+Date: 2026-09-24.
+
+Task 09 is now implemented in the active runner surface. Shared utilities in
+`src/mintnet/experiments/cin_common.py` provide the fixed five-child full-grid
+seed bundle, incremental CSV flushing, one-thread limits, resolved-config
+hashing, sidecar naming, provenance, and Windows-safe RSS semantics. The cost
+runner and statistical-panel runner expose frozen YAML configuration loaders,
+full-grid shard selectors, deterministic paired methods, durable failure rows,
+gzip pair/stability sidecars, and runner-specific reports. The method matrix
+runs `cin` for every A–I case and the regression fixture, with `cin_linear` and
+`ebicglasso` only on continuous cases. Comparator failures remain explicit
+`status=error` rows and are never converted into empty successful graphs.
+
+`scripts/aggregate_cin_sidecars.py` validates sidecar hashes, row counts,
+promises, duplicate identities, missing files, and orphan files before writing
+combined tables. The generic workflow and `scripts/aggregate_shards.py` were
+left unchanged; CIN modules enforce their one-thread policy before numerical
+imports and inside each fit. The compute ledger is frozen at its header until
+an Actions run is actually dispatched, and `docs/cin_user_guide.md` records the
+verified dispatch shapes without dispatching expensive jobs locally.
+
+Decision: accept Task 09 as the deterministic, auditable runner foundation for
+the Task 10 cost pilot and Task 11 statistical panel. Local smoke and shard
+equivalence runs establish correctness only; they do not establish hosted-run
+timing gates, statistical recovery, inferential validity, or substantive network
+interpretation.
+
+Evidence: the fresh complete repository suite passes with 254 tests and three
+optional matplotlib skips; the focused integration suite covers configuration,
+cost/panel smoke, shard equivalence, sidecar tamper/orphan/duplicate detection,
+incremental failure behavior, comparator failure semantics, generic aggregation,
+metadata/thread provenance, reports, ledger, and workflow documentation. Ruff
+passes for the runner surface and sidecar script, and `git diff --check` is
+clean. Implementation commits are `2c632a1`, `1a43d40`, `a24f68e`, `cbea833`,
+`ef8bb7c`, `c80d5cb`, `171c110`, `d5bff51`, and `97de039`.
+
+Consequences: Task 10 may run the frozen cost matrix through the documented
+runner and record hosted timings in the ledger; Task 11 may run the bounded
+panel using the paired A–I simulation contract. No expensive workflow was
+dispatched and no publication or release claim is introduced by this entry.
