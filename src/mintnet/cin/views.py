@@ -262,16 +262,87 @@ class NetworkView:
         """Return the deterministic Task 6 methods and limitations text."""
 
         metadata = self.settings.get("metadata", {})
+        config = metadata.get("config", {})
+        diagnostics = metadata.get("data_diagnostics", {})
+        retained = metadata.get("retained_count", "not recorded")
+        excluded = metadata.get("excluded_count", "not recorded")
+        outer_folds = config.get("outer_folds", "not recorded")
+        inner_folds = config.get("inner_folds", "not recorded")
+        lambda_grid = config.get("lambda_grid", "not recorded")
+        if isinstance(lambda_grid, (list, tuple)):
+            grid_text = "[" + ", ".join(f"{float(value):g}" for value in lambda_grid) + "]"
+        else:
+            grid_text = str(lambda_grid)
+        missing = config.get("missing", "not recorded")
+        node_diagnostics = pd.DataFrame(self.settings.get("node_diagnostics", []))
+        penalty_summary: list[str] = []
+        lambda_columns = [column for column in node_diagnostics if str(column).startswith("lambda_fold_")]
+        if "node" in node_diagnostics and lambda_columns:
+            for record in node_diagnostics.to_dict(orient="records"):
+                penalties = [record[column] for column in lambda_columns if pd.notna(record[column])]
+                penalty_summary.append(f"{record['node']}={_plain(penalties)}")
+        penalty_text = "; ".join(penalty_summary) if penalty_summary else "not recorded"
+
+        warnings: list[str] = []
+        node_count = len(self.node_order)
+        if isinstance(retained, (int, float)) and retained < max(30, 5 * node_count):
+            warnings.append(f"low retained N ({retained})")
+        if bool(diagnostics.get("p_ge_n", False)):
+            warnings.append("p >= N")
+        if diagnostics.get("rare_levels"):
+            warnings.append("rare categorical levels")
+        if diagnostics.get("few_unique_continuous"):
+            warnings.append("few-unique continuous variables")
+        if (
+            "variance_floor_hits" in node_diagnostics
+            and pd.to_numeric(node_diagnostics["variance_floor_hits"], errors="coerce").fillna(0).sum()
+            > 0
+        ):
+            warnings.append("variance-floor hits")
+        incomplete = int((self.all_pairs["status"] != "complete").sum())
+        if incomplete:
+            warnings.append(f"incomplete pairs ({incomplete})")
+        if diagnostics.get("q_estimate") is not None and diagnostics.get("q_limit") is not None:
+            if diagnostics["q_estimate"] > diagnostics["q_limit"]:
+                warnings.append("expanded feature estimate exceeds configured limit")
+        warning_text = "Warnings: " + ("; ".join(warnings) if warnings else "none") + "."
+
+        stability_text = "stability was not applied"
+        if self.settings.get("min_stability") is not None:
+            stability = self.stability_meta or {}
+            repeats = stability.get("B", stability.get("repeats", "not recorded"))
+            fraction = stability.get("fraction", stability.get("subsample_fraction", "not recorded"))
+            stability_text = (
+                f"stability means reproducibility under B={repeats} subsamples of fraction {fraction}"
+            )
+        presentation = "no presentation limit"
+        if self.settings.get("presentation_limit"):
+            presentation = (
+                f"presentation limit retained {len(self.edges)} of "
+                f"{self.settings.get('edges_passing')} passing edges"
+            )
+        filter_text = (
+            f"Filters: min_effect={self.settings['min_effect']:g} nats; "
+            f"require_both_positive={self.settings['require_both_positive']}; "
+            f"{stability_text}; {presentation}."
+        )
         return (
-            "CIN views summarize all-other-variable conditional predictive information "
-            "from the fitted model in nats per observation. The model uses linear and "
-            "at most two curvature terms for continuous variables and an LSPC-type "
-            "probability model for categorical variables, conditioning on all other "
-            "included variables. Pair weights are the undirected average of the two "
-            "prediction orientations. This view applies the recorded complete-pair, "
-            "positive-weight, threshold, agreement, stability, and presentation filters. "
-            f"Fit ID: {self.fit_id}."
-            f" Metadata: {_plain(metadata)}."
+            "The CIN model estimates all-other-variable conditional predictive information "
+            "in nats per observation. Continuous variables use linear plus at most two "
+            "curvature terms; categorical variables use an LSPC-type probability model. "
+            "The conditioning set is all other included variables, and each pair uses "
+            "an undirected average of its two prediction orientations. "
+            f"Outer K={outer_folds}, inner J={inner_folds}, lambda grid={grid_text}; "
+            f"per-node tuned penalties: {penalty_text}. "
+            f"Missing-data policy={missing}; retained N={retained}; excluded N={excluded}. "
+            "Standardization and basis construction use training partitions only; at a "
+            "fixed lambda, exact omission is used for the reduced model. "
+            f"{filter_text} A value such as 0.01 is only an illustrative relevance threshold. "
+            "The result is model-based, not true CMI, and cannot capture variance-only or "
+            "XOR dependence. It uses a Gaussian response approximation and assumes independent "
+            "rows. It is not a significance test and provides no causal interpretation, "
+            "confidence interval, or p-value; unvalidated delta is reported only as a diagnostic. "
+            f"{warning_text}"
         )
 
     def save(self, directory: str | Path, *, plots: bool = True) -> None:
@@ -409,6 +480,7 @@ def make_view(
         "edges_passing": passing_count,
         "edges_cut": edges_cut,
         "metadata": _plain(fit.metadata),
+        "node_diagnostics": _plain(fit.nodes.to_dict(orient="records")),
     }
     labels: list[str] = []
     if min_effect > 0:

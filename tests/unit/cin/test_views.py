@@ -267,6 +267,82 @@ def test_view_save_writes_documented_artifacts(tmp_path) -> None:
     assert payload["fit_id"] == view.fit_id
 
 
+def test_methods_text_reports_model_configuration_filters_and_limitations() -> None:
+    fit = _sample_fit()
+    metadata = dict(fit.metadata)
+    metadata.update(
+        {
+            "config": {
+                "outer_folds": 3,
+                "inner_folds": 2,
+                "lambda_grid": [0.1, 1.0],
+                "missing": "complete_case",
+            },
+            "retained_count": 30,
+            "excluded_count": 2,
+        }
+    )
+    fit = NetworkFit(fit.pairs, fit.nodes, fit.folds, metadata)
+    text = make_view(fit, min_effect=0.01, require_both_positive=True).methods_text()
+
+    for phrase in (
+        "conditional predictive information",
+        "nats per observation",
+        "undirected average",
+        "all other included variables",
+        "linear",
+        "LSPC-type",
+        "K=3",
+        "J=2",
+        "0.1, 1",
+        "complete_case",
+        "retained N=30",
+        "training partitions only",
+        "exact omission",
+        "not a significance test",
+        "not true CMI",
+        "variance-only",
+        "XOR",
+        "Gaussian",
+        "independent rows",
+        "causal interpretation",
+        "confidence interval",
+        "p-value",
+        "unvalidated delta",
+    ):
+        assert phrase in text, phrase
+    assert "significant" not in text
+
+
+def test_methods_text_lists_triggered_diagnostic_warnings() -> None:
+    fit = _sample_fit()
+    metadata = dict(fit.metadata)
+    metadata.update(
+        {
+            "retained_count": 12,
+            "data_diagnostics": {
+                "few_unique_continuous": ["alpha"],
+                "rare_levels": [["group", "rare", 2]],
+                "p_ge_n": True,
+                "q_estimate": 20,
+                "q_limit": 10,
+            },
+        }
+    )
+    nodes = fit.nodes.copy()
+    nodes["variance_floor_hits"] = [1, 0, 0]
+    fit = NetworkFit(fit.pairs, nodes, fit.folds, metadata)
+
+    text = make_view(fit).methods_text()
+
+    assert "Warnings:" in text
+    assert "low retained N" in text
+    assert "p >= N" in text
+    assert "rare categorical levels" in text
+    assert "variance-floor hits" in text
+    assert "incomplete pairs" in text
+
+
 @pytest.mark.parametrize("node_count", [2, 8, 100])
 def test_view_plots_have_one_line_collection_per_displayed_edge(node_count: int) -> None:
     matplotlib = pytest.importorskip("matplotlib")
