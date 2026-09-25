@@ -28,6 +28,7 @@ def _validation_raw(*, ap_prevalence: float = 0.25, e_gain: float = 0.2) -> pd.D
                     "method": method,
                     "status": "complete",
                     "charter_sha256": config.charter_sha256,
+                    "pair_sidecar_file": f"{case}_validation_{replicate}_{method}_pairs.csv.gz",
                     "ap": ap,
                     "prevalence": 0.05,
                     "ap_minus_prevalence": ap_prevalence if case in {"A", "B", "F", "G", "H"} else ap - 0.05,
@@ -88,4 +89,12 @@ def test_validation_gates_refuse_charter_mismatch() -> None:
     raw = _validation_raw()
     raw.loc[0, "charter_sha256"] = "wrong"
     with pytest.raises(ValueError, match="charter"):
+        evaluate_validation_gates(raw, config, selected_delta=0.01, charter_sha256=config.charter_sha256)
+
+
+def test_validation_gates_refuse_missing_complete_pair_sidecar_promise() -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline.yaml")
+    raw = _validation_raw()
+    raw.loc[0, "pair_sidecar_file"] = None
+    with pytest.raises(ValueError, match="pair sidecar"):
         evaluate_validation_gates(raw, config, selected_delta=0.01, charter_sha256=config.charter_sha256)

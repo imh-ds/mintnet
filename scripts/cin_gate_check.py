@@ -100,6 +100,12 @@ def _validate_input(
     missing = {"status", "ap", "prevalence", "ap_minus_prevalence"} - set(raw.columns)
     if missing:
         raise ValueError(f"validation rows are missing required fields: {sorted(missing)}")
+    if "pair_sidecar_file" not in raw.columns:
+        raise ValueError("validation rows are missing pair sidecar promises")
+    complete = raw["status"].eq("complete")
+    promised = raw["pair_sidecar_file"].notna() & raw["pair_sidecar_file"].astype(str).str.strip().ne("")
+    if (complete & ~promised).any():
+        raise ValueError("complete validation rows are missing a pair sidecar promise")
 
 
 def evaluate_validation_gates(
