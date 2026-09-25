@@ -211,6 +211,77 @@ def test_cost_report_does_not_claim_recovery_metrics(tmp_path: Path) -> None:
     assert "recovery" not in report.lower()
 
 
+def _gate_row(
+    *,
+    cell: str,
+    repeat: int,
+    p: int,
+    elapsed: float,
+    peak: float = 900.0,
+    status: str = "complete",
+    factors: int = 40,
+    fallback: float = 0.0,
+) -> dict[str, object]:
+    return {
+        "cell": cell,
+        "repeat": repeat,
+        "p": p,
+        "n": 100,
+        "elapsed_seconds": elapsed,
+        "peak_rss_mb": peak,
+        "n_large_factorizations": factors,
+        "fallback_fraction": fallback,
+        "status": status,
+        "n_pairs_complete": 1 if status == "complete" else 0,
+        "n_pairs_total": 1,
+        "status_histogram_json": json.dumps({status: 1}),
+    }
+
+
+def test_cost_gate_evaluation_uses_slower_repeat_and_strict_memory_limit() -> None:
+    from mintnet.experiments.cin_cost_reporting import evaluate_gates
+
+    raw = pd.DataFrame([
+        _gate_row(cell="c_p100_n100", repeat=1, p=100, elapsed=150.0),
+        _gate_row(cell="c_p100_n100", repeat=2, p=100, elapsed=181.0),
+    ])
+    config = load_cost_config(ROOT / "configs" / "cin_cost.yaml")
+    result = evaluate_gates(raw, config)
+    cell = result.loc[result["cell"] == "c_p100_n100"].iloc[0]
+    assert cell["effective_elapsed_seconds"] == 181.0
+    assert cell["G-time-100"] == "fail"
+    assert bool(cell["repeat_required"]) is True
+    assert bool(cell["repeat_satisfied"]) is True
+
+    raw.loc[:, "peak_rss_mb"] = 1024.0
+    result = evaluate_gates(raw, config)
+    assert result["G-mem"].eq("fail").all()
+
+
+def test_cost_gate_evaluation_preserves_status_and_boundary_repeat_requirements() -> None:
+    from mintnet.experiments.cin_cost_reporting import evaluate_gates
+
+    raw = pd.DataFrame([
+        _gate_row(cell="c_p8_n100", repeat=1, p=8, elapsed=25.0, status="numerical_failure"),
+    ])
+    result = evaluate_gates(raw, load_cost_config(ROOT / "configs" / "cin_cost.yaml"))
+    cell = result.loc[result["cell"] == "c_p8_n100"].iloc[0]
+    assert bool(cell["repeat_required"]) is True
+    assert bool(cell["repeat_satisfied"]) is False
+    assert cell["G-complete"] == "fail"
+
+
+def test_cost_report_contains_gate_columns_and_the_exact_cost_nonclaim(tmp_path: Path) -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    raw = pd.DataFrame([_gate_row(cell="c_p8_n100", repeat=1, p=8, elapsed=1.0)])
+    cin_cost_reporting.write_report(raw, config, tmp_path)
+    summary = pd.read_csv(tmp_path / "cost_summary.csv")
+    report = (tmp_path / "cost_report.md").read_text(encoding="utf-8")
+    assert "G-complete" in summary.columns
+    assert "This is a cost pilot; timings are single-dataset measurements on shared hosted runners." in report
+    assert "recovery" not in report.lower()
+
+
 def test_panel_method_matrix_and_full_phase_combinations() -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     assert PANEL_COMBINATION_COLUMNS == ("case", "phase", "method")
