@@ -110,6 +110,12 @@ def test_cost_config_has_eight_cells_and_disjoint_replicate_defaults() -> None:
     assert config.repeats == (1, 2)
 
 
+def test_cost_smoke_preserves_eight_ids_and_uses_tiny_dimensions() -> None:
+    config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    assert all(cell.p <= 12 and cell.n <= 60 for cell in config.cells)
+    assert next(cell for cell in config.cells if cell.cell_id == "k10_p100_n200").kind == "categorical10"
+
+
 def test_cost_configs_declare_the_frozen_charter_and_same_cell_ids() -> None:
     full = load_cost_config(ROOT / "configs" / "cin_cost.yaml")
     smoke = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
