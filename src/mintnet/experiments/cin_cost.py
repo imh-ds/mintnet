@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass
 import json
 import os
+import platform
 from pathlib import Path
 import time
 from typing import Any
@@ -24,6 +25,7 @@ from .cin_common import (  # noqa: E402
     load_yaml,
     peak_rss_mb,
     sha256_file,
+    threadpool_info,
     thread_limits,
     write_gzip_frame,
     write_provenance,
@@ -164,6 +166,8 @@ def _run_cell(config: CostConfig, output_dir: Path, cell: CostCell, repeat: int,
         probability_floor = cost.get("probability_floor", {})
         environment = {
             "dependencies": fit.metadata.get("dependencies", {}),
+            "blas": threadpool_info(),
+            "cpu": platform.processor() or None,
             "thread_environment": {
                 name: os.environ.get(name)
                 for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS")
