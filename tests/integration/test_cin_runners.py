@@ -476,3 +476,10 @@ def test_user_guide_contains_verified_commands_and_full_shard_axes() -> None:
     assert "c_p8_n100,c_p30_n100,c_p100_n100,c_p100_n300,c_p100_n1000,k5_p30_n150,k10_p100_n200,mix_p100_n200" in guide
     assert "--workers 1" in guide
     assert "python scripts/aggregate_cin_sidecars.py" in guide
+
+
+def test_sharded_workflow_exposes_src_package_path() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(
+        encoding="utf-8"
+    )
+    assert workflow.count("PYTHONPATH: src") == 2

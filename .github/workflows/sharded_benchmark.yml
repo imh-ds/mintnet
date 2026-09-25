@@ -95,6 +95,7 @@ jobs:
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
     runs-on: ubuntu-latest
     env:
+      PYTHONPATH: src
       OMP_NUM_THREADS: "2"
       OPENBLAS_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
@@ -106,6 +107,7 @@ jobs:
           python-version: "3.11"
       - run: pip install -e .
       - env:
+          PYTHONPATH: src
           RUNNER_MODULE: ${{ inputs.runner_module }}
           CONFIG: ${{ inputs.config }}
           DIM1_FLAG: ${{ inputs.dim1_flag }}
