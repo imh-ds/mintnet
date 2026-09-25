@@ -26,6 +26,7 @@ from mintnet.experiments.cin_cost import (
 )
 from mintnet.experiments import cin_cost_reporting
 from mintnet.experiments import cin_baseline_reporting
+from mintnet.experiments import cin_baseline
 from scripts.aggregate_cin_sidecars import aggregate_sidecars
 from scripts.aggregate_shards import aggregate as aggregate_generic
 from mintnet.experiments.cin_common import (
@@ -144,6 +145,33 @@ def test_panel_config_has_phase_ranges_and_smoke_overrides() -> None:
     assert smoke.development_replicates == (0, 1)
     assert smoke.validation_replicates == (1000, 1001)
     assert smoke.n_overrides == {"A": 40, "F": 40}
+
+
+def test_panel_config_has_frozen_charter_and_statistical_controls() -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline.yaml")
+    smoke = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    charter = ROOT / "docs" / "cin_baseline_charter.md"
+    expected_hash = hashlib.sha256(charter.read_bytes()).hexdigest()
+
+    assert config.charter_path == charter
+    assert smoke.charter_path == charter
+    assert config.charter_sha256 == expected_hash
+    assert smoke.charter_sha256 == expected_hash
+    assert config.delta_candidates == (0.005, 0.01, 0.02)
+    assert config.strong_edge_threshold == 0.01
+    assert config.point_fit_max_seconds == 600.0
+    assert config.stability_max_seconds == 600.0
+
+
+def test_panel_smoke_persists_charter_identity(tmp_path: Path) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    raw = run_baseline(config, tmp_path / "panel", write_report=False)
+    expected_hash = hashlib.sha256(config.charter_path.read_bytes()).hexdigest()
+
+    assert raw["charter_sha256"].eq(expected_hash).all()
+    metadata = json.loads((tmp_path / "panel" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["charter_sha256"] == expected_hash
+    assert raw["charter_sha256"].nunique() == 1
 
 
 def test_invalid_config_is_rejected(tmp_path: Path) -> None:
@@ -294,7 +322,9 @@ def test_panel_method_matrix_and_full_phase_combinations() -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     assert PANEL_COMBINATION_COLUMNS == ("case", "phase", "method")
     assert methods_for_case("A") == ("cin", "cin_linear", "ebicglasso")
+    assert methods_for_case("E") == ("cin", "cin_linear", "ebicglasso")
     assert methods_for_case("F") == ("cin",)
+    assert methods_for_case("regression") == ("cin",)
     assert expected_panel_rows(config) == 16
     combinations = expected_panel_combinations(config)
     assert len(combinations) == 8
@@ -311,8 +341,63 @@ def test_panel_smoke_writes_rows_for_supported_methods(tmp_path: Path) -> None:
     assert set(raw["status"]) <= {"complete", "incomplete"}
     assert set(raw.loc[raw["case"] == "F", "method"]) == {"cin"}
     assert set(raw.loc[raw["case"] == "A", "method"]) == {"cin", "cin_linear", "ebicglasso"}
+    task11_columns = {
+        "charter_sha256", "n_true_edges", "n_nonempty_delta_views",
+        "n_nonempty_agreement_views", "oracle_cmi_mae_true", "oracle_cmi_mae_all",
+        "orientation_gap_q50", "variance_floor_hits", "probability_clipped_fraction",
+        "zero_sum_fallbacks", "minimum_probability",
+    }
+    assert task11_columns <= set(raw.columns)
+    assert raw["charter_sha256"].notna().all()
+    assert raw["n_true_edges"].notna().all()
+    assert raw["n_nonempty_delta_views"].notna().all()
     assert (output / "raw_metrics.csv").exists()
     assert len(list((output / "sidecars").glob("*_pairs.csv.gz"))) == 16
+
+
+def test_panel_metrics_record_complete_pair_truth_and_population_diagnostics() -> None:
+    pair_frame = pd.DataFrame(
+        [
+            {"node_i": "A", "node_j": "B", "gain_i_to_j": 0.2, "gain_j_to_i": 0.2, "weight_nats_raw": 0.2, "orientation_gap": 0.1, "status": "complete"},
+            {"node_i": "A", "node_j": "C", "gain_i_to_j": 0.1, "gain_j_to_i": -0.1, "weight_nats_raw": 0.1, "orientation_gap": 0.2, "status": "complete"},
+            {"node_i": "B", "node_j": "C", "gain_i_to_j": 0.0, "gain_j_to_i": 0.0, "weight_nats_raw": 0.0, "orientation_gap": np.nan, "status": "complete"},
+        ]
+    )
+    row = {column: None for column in cin_baseline.PANEL_RAW_COLUMNS}
+    cin_baseline._metrics(
+        row,
+        pair_frame,
+        frozenset({("A", "B"), ("B", "C")} ),
+        {("A", "B"): 0.2, ("A", "C"): 0.05, ("B", "C"): 0.04},
+        strong_edge_threshold=0.01,
+    )
+
+    assert row["n_true_edges"] == 2
+    assert row["n_strong_edges"] == 2
+    assert row["n_pairs_complete"] == 3
+    assert row["n_failed_pairs"] == 0
+    assert row["strong_edge_recall"] == 0.5
+    assert row["oracle_cmi_mae_true"] == pytest.approx(0.02)
+    assert row["oracle_cmi_mae_all"] == pytest.approx((0.0 + 0.05 + 0.04) / 3)
+    assert row["delta_01_empty"] is False
+    assert row["agreement_delta_0_displayed_count"] == 1
+    assert row["n_nonempty_delta_views"] == 4
+    assert row["n_nonempty_agreement_views"] == 4
+    assert row["orientation_gap_q50"] == pytest.approx(0.15)
+
+
+def test_panel_metrics_make_empty_precision_unavailable() -> None:
+    pair_frame = pd.DataFrame(
+        [
+            {"node_i": "A", "node_j": "B", "gain_i_to_j": 0.0, "gain_j_to_i": 0.0, "weight_nats_raw": 0.0, "orientation_gap": 0.0, "status": "complete"},
+        ]
+    )
+    row = {column: None for column in cin_baseline.PANEL_RAW_COLUMNS}
+    cin_baseline._metrics(row, pair_frame, frozenset({("A", "B")} ), None, strong_edge_threshold=0.01)
+
+    assert row["delta_0_empty"] is True
+    assert np.isnan(row["delta_0_precision"])
+    assert row["n_nonempty_delta_views"] == 0
 
 
 def test_sidecar_aggregation_combines_cost_pairs_and_manifest(tmp_path: Path) -> None:
@@ -477,6 +562,10 @@ def test_user_guide_contains_verified_commands_and_full_shard_axes() -> None:
     assert "c_p8_n100,c_p30_n100,c_p100_n100,c_p100_n300,c_p100_n1000,k5_p30_n150,k10_p100_n200,mix_p100_n200" in guide
     assert "--workers 1" in guide
     assert "python scripts/aggregate_cin_sidecars.py" in guide
+    assert "development_selection.json" in guide
+    assert "python scripts/cin_gate_check.py" in guide
+    assert "validation once" in guide
+    assert "12 aggregate runner-hours" in guide
 
 
 def test_sharded_workflow_exposes_src_package_path() -> None:
