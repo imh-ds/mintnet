@@ -482,4 +482,4 @@ def test_sharded_workflow_exposes_src_package_path() -> None:
     workflow = (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(
         encoding="utf-8"
     )
-    assert workflow.count("PYTHONPATH: src") == 2
+    assert workflow.count('export PYTHONPATH="$GITHUB_WORKSPACE/src"') == 2
