@@ -5,9 +5,10 @@ from __future__ import annotations
 import time
 import platform
 import subprocess
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from importlib import metadata as importlib_metadata
-from typing import Any
+from typing import Any, Iterator
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ from .result import NetworkFit, compute_fit_id
 __all__ = [
     "Budget",
     "BudgetExceeded",
+    "COST_PHASES",
     "CostCounters",
     "FoldScore",
     "InnerSplit",
@@ -28,10 +30,23 @@ __all__ = [
     "aggregate",
     "fit_network",
     "make_splits",
+    "phase_timer",
     "score_partition",
     "target_supported",
     "tune_lambdas",
 ]
+
+
+COST_PHASES = (
+    "prepare",
+    "features",
+    "gram_factor",
+    "H",
+    "omission",
+    "score",
+    "aggregate",
+    "outputs",
+)
 
 
 def _readonly(values: Any, *, dtype: Any = np.intp) -> np.ndarray:
@@ -139,7 +154,106 @@ class CostCounters:
     q: int = 0
     t: int = 0
     n_fallbacks: int = 0
-    phase_seconds: dict[str, float] = field(default_factory=dict)
+    phase_seconds: dict[str, float] = field(
+        default_factory=lambda: {phase: 0.0 for phase in COST_PHASES}
+    )
+    first_scaled_normal_residual: float | None = None
+    requested_directional_outer_fits: int = 0
+    variance_floor_hits: int = 0
+    variance_floor_observations: int = 0
+    probability_clipped_fraction_sum: float = 0.0
+    probability_observations: int = 0
+    probability_min: float | None = None
+    zero_sum_fallbacks: int = 0
+    tuned_penalty_values: list[float] = field(default_factory=list)
+
+
+@contextmanager
+def phase_timer(counters: CostCounters, phase: str) -> Iterator[None]:
+    """Accumulate wall time for one named cost-pilot phase."""
+
+    if phase not in COST_PHASES:
+        raise ValueError(f"unknown CIN cost phase: {phase}")
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        counters.phase_seconds[phase] += time.perf_counter() - started
+
+
+def _record_solution_diagnostics(solution: Any, counters: CostCounters) -> None:
+    counters.q = max(counters.q, int(solution.q))
+    counters.t = max(counters.t, int(solution.t))
+    if counters.first_scaled_normal_residual is None:
+        counters.first_scaled_normal_residual = float(solution.scaled_normal_residual())
+
+
+def _record_score_diagnostics(info: Any, counters: CostCounters) -> None:
+    if not isinstance(info, dict):
+        return
+    if "variance_floor_hit" in info:
+        counters.variance_floor_observations += 1
+        counters.variance_floor_hits += int(bool(info["variance_floor_hit"]))
+    if "clipped_fraction" in info:
+        counters.probability_observations += 1
+        counters.probability_clipped_fraction_sum += float(info["clipped_fraction"])
+        minimum = float(info["min_probability"])
+        counters.probability_min = (
+            minimum if counters.probability_min is None else min(counters.probability_min, minimum)
+        )
+        counters.zero_sum_fallbacks += int(info.get("zero_sum_count", 0))
+
+
+def _cost_metadata(
+    counters: CostCounters,
+    *,
+    pair_status_counts: dict[str, int] | None,
+) -> dict[str, Any]:
+    total_variance = counters.variance_floor_observations
+    total_probability = counters.probability_observations
+    values = counters.tuned_penalty_values
+    histogram: dict[str, int] = {}
+    for value in values:
+        key = format(value, ".17g")
+        histogram[key] = histogram.get(key, 0) + 1
+    minimum = min(values) if values else None
+    maximum = max(values) if values else None
+    return {
+        "n_large_factorizations": int(counters.n_large_factorizations),
+        "q": int(counters.q),
+        "t": int(counters.t),
+        "phase_seconds": _metadata_value(counters.phase_seconds),
+        "peak_rss_mb": None,
+        "n_fallbacks": int(counters.n_fallbacks),
+        "requested_directional_outer_fits": int(counters.requested_directional_outer_fits),
+        "first_scaled_normal_residual": counters.first_scaled_normal_residual,
+        "variance_floor_hit_rate": (
+            counters.variance_floor_hits / total_variance if total_variance else 0.0
+        ),
+        "probability_floor": {
+            "clipped_fraction": (
+                counters.probability_clipped_fraction_sum / total_probability
+                if total_probability
+                else 0.0
+            ),
+            "min_probability": counters.probability_min,
+            "zero_sum_fallbacks": int(counters.zero_sum_fallbacks),
+        },
+        "tuned_penalty_histogram": {
+            "counts": histogram,
+            "min_fraction": (
+                sum(value == minimum for value in values) / len(values)
+                if values and minimum is not None
+                else 0.0
+            ),
+            "max_fraction": (
+                sum(value == maximum for value in values) / len(values)
+                if values and maximum is not None
+                else 0.0
+            ),
+        },
+        "pair_status_counts": pair_status_counts or {},
+    }
 
 
 @dataclass(frozen=True)
@@ -216,7 +330,6 @@ def tune_lambdas(
     selected = np.full((len(split_plan.outer), n_targets), np.nan, dtype=np.float64)
     supported = np.zeros((len(split_plan.outer), n_targets), dtype=bool)
     diagnostics: list[dict[str, Any]] = []
-    phase_start = time.perf_counter()
 
     for fold_index, outer in enumerate(split_plan.outer):
         budget.check(f"tuning fold {fold_index}")
@@ -230,22 +343,25 @@ def tune_lambdas(
         }
         for inner_index, inner in enumerate(outer.inner):
             budget.check(f"tuning fold {fold_index} inner {inner_index}")
-            feature_space = fit_feature_space(prepared, inner.train_rows, config)
-            train_design = feature_space.design(inner.train_rows)
-            eval_design = feature_space.design(inner.eval_rows)
-            train_responses = feature_space.responses(inner.train_rows)
-            inner_support = np.asarray(
-                [target_supported(prepared, feature_space, target, inner.train_rows) for target in range(n_targets)],
-                dtype=bool,
-            )
+            with phase_timer(counters, "features"):
+                feature_space = fit_feature_space(prepared, inner.train_rows, config)
+                train_design = feature_space.design(inner.train_rows)
+                eval_design = feature_space.design(inner.eval_rows)
+                train_responses = feature_space.responses(inner.train_rows)
+                inner_support = np.asarray(
+                    [target_supported(prepared, feature_space, target, inner.train_rows) for target in range(n_targets)],
+                    dtype=bool,
+                )
             fold_supported &= inner_support
             for lambda_index, lam in enumerate(config.lambda_grid):
                 budget.check(f"tuning fold {fold_index} lambda {lambda_index}")
-                solution = RidgeSolution(train_design, train_responses, lam, config)
+                with phase_timer(counters, "gram_factor"):
+                    solution = RidgeSolution(train_design, train_responses, lam, config)
+                with phase_timer(counters, "H"):
+                    solution.H()
+                _record_solution_diagnostics(solution, counters)
                 counters.n_large_factorizations += 1
                 fold_diagnostics["inner_factorizations"] += 1
-                counters.q = max(counters.q, solution.q)
-                counters.t = max(counters.t, solution.t)
                 workspace = OmissionWorkspace(
                     solution,
                     {"train": train_design, "eval": eval_design},
@@ -257,27 +373,30 @@ def tune_lambdas(
                     response_start, response_stop = (
                         int(value) for value in feature_space.R[target]
                     )
-                    train_prediction, _ = workspace.predict_omit(
-                        "train",
-                        np.arange(start, stop, dtype=np.intp),
-                        np.arange(response_start, response_stop, dtype=np.intp),
-                    )
-                    eval_prediction, _ = workspace.predict_omit(
-                        "eval",
-                        np.arange(start, stop, dtype=np.intp),
-                        np.arange(response_start, response_stop, dtype=np.intp),
-                    )
-                    logq, _ = _score_target(
-                        prepared,
-                        feature_space,
-                        target,
-                        inner.train_rows,
-                        inner.eval_rows,
-                        train_responses,
-                        train_prediction,
-                        eval_prediction,
-                        config,
-                    )
+                    with phase_timer(counters, "omission"):
+                        train_prediction, _ = workspace.predict_omit(
+                            "train",
+                            np.arange(start, stop, dtype=np.intp),
+                            np.arange(response_start, response_stop, dtype=np.intp),
+                        )
+                        eval_prediction, _ = workspace.predict_omit(
+                            "eval",
+                            np.arange(start, stop, dtype=np.intp),
+                            np.arange(response_start, response_stop, dtype=np.intp),
+                        )
+                    with phase_timer(counters, "score"):
+                        logq, info = _score_target(
+                            prepared,
+                            feature_space,
+                            target,
+                            inner.train_rows,
+                            inner.eval_rows,
+                            train_responses,
+                            train_prediction,
+                            eval_prediction,
+                            config,
+                        )
+                    _record_score_diagnostics(info, counters)
                     if not np.isfinite(logq).all():
                         fold_supported[target] = False
                         continue
@@ -299,9 +418,6 @@ def tune_lambdas(
             selected[fold_index, target] = lambda_value
             supported[fold_index, target] = True
         diagnostics.append(fold_diagnostics)
-    counters.phase_seconds["tuning"] = counters.phase_seconds.get("tuning", 0.0) + (
-        time.perf_counter() - phase_start
-    )
     return TuningResult(
         lambda_by_fold=np.ascontiguousarray(selected),
         supported_by_fold=np.ascontiguousarray(supported),
@@ -399,19 +515,21 @@ def score_partition(
         "fallbacks": 0,
         "status": "complete",
     }
-    train_design = feature_space.design(train_rows)
-    eval_design = feature_space.design(eval_rows)
-    train_responses = feature_space.responses(train_rows)
+    with phase_timer(counters, "features"):
+        train_design = feature_space.design(train_rows)
+        eval_design = feature_space.design(eval_rows)
+        train_responses = feature_space.responses(train_rows)
     distinct_lambdas = sorted({float(value) for value in lambdas if np.isfinite(value)})
-    phase_start = time.perf_counter()
 
     for lambda_index, lam in enumerate(distinct_lambdas):
         budget.check(f"outer fold {fold_index} lambda {lambda_index}")
-        solution = RidgeSolution(train_design, train_responses, lam, config)
+        with phase_timer(counters, "gram_factor"):
+            solution = RidgeSolution(train_design, train_responses, lam, config)
+        with phase_timer(counters, "H"):
+            solution.H()
+        _record_solution_diagnostics(solution, counters)
         counters.n_large_factorizations += 1
         fold_diagnostics["factorizations"] += 1
-        counters.q = max(counters.q, solution.q)
-        counters.t = max(counters.t, solution.t)
         workspace = OmissionWorkspace(
             solution,
             {"train": train_design, "eval": eval_design},
@@ -429,26 +547,30 @@ def score_partition(
             self_columns = np.arange(s_start, s_stop, dtype=np.intp)
             response_columns = np.arange(r_start, r_stop, dtype=np.intp)
             try:
-                full_train, _ = workspace.predict_omit("train", self_columns, response_columns)
-                full_eval, _ = workspace.predict_omit("eval", self_columns, response_columns)
-                full_logq, full_info = _score_target(
-                    prepared,
-                    feature_space,
-                    target,
-                    train_rows,
-                    eval_rows,
-                    train_responses,
-                    full_train,
-                    full_eval,
-                    config,
-                )
-                intercept_logq, intercept_info = _intercept_score(
-                    prepared,
-                    feature_space,
-                    target,
-                    eval_rows,
-                    config,
-                )
+                with phase_timer(counters, "omission"):
+                    full_train, _ = workspace.predict_omit("train", self_columns, response_columns)
+                    full_eval, _ = workspace.predict_omit("eval", self_columns, response_columns)
+                with phase_timer(counters, "score"):
+                    full_logq, full_info = _score_target(
+                        prepared,
+                        feature_space,
+                        target,
+                        train_rows,
+                        eval_rows,
+                        train_responses,
+                        full_train,
+                        full_eval,
+                        config,
+                    )
+                    intercept_logq, intercept_info = _intercept_score(
+                        prepared,
+                        feature_space,
+                        target,
+                        eval_rows,
+                        config,
+                    )
+                _record_score_diagnostics(full_info, counters)
+                _record_score_diagnostics(intercept_info, counters)
                 if not np.isfinite(full_logq).all() or not np.isfinite(intercept_logq).all():
                     raise RidgeNumericalFailure("non-finite full or intercept score")
                 node_score_sum[target] = (float(np.sum(full_logq)), float(np.sum(intercept_logq)))
@@ -487,23 +609,26 @@ def score_partition(
                         np.concatenate((self_columns, np.arange(p_start, p_stop, dtype=np.intp)))
                     )
                     try:
-                        reduced_train, _ = workspace.predict_omit(
-                            "train", omit_columns, response_columns
-                        )
-                        reduced_eval, _ = workspace.predict_omit(
-                            "eval", omit_columns, response_columns
-                        )
-                        reduced_logq, _ = _score_target(
-                            prepared,
-                            feature_space,
-                            target,
-                            train_rows,
-                            eval_rows,
-                            train_responses,
-                            reduced_train,
-                            reduced_eval,
-                            config,
-                        )
+                        with phase_timer(counters, "omission"):
+                            reduced_train, _ = workspace.predict_omit(
+                                "train", omit_columns, response_columns
+                            )
+                            reduced_eval, _ = workspace.predict_omit(
+                                "eval", omit_columns, response_columns
+                            )
+                        with phase_timer(counters, "score"):
+                            reduced_logq, reduced_info = _score_target(
+                                prepared,
+                                feature_space,
+                                target,
+                                train_rows,
+                                eval_rows,
+                                train_responses,
+                                reduced_train,
+                                reduced_eval,
+                                config,
+                            )
+                        _record_score_diagnostics(reduced_info, counters)
                         if not np.isfinite(reduced_logq).all():
                             raise RidgeNumericalFailure("non-finite reduced score")
                         directional_sum[source, target] += float(
@@ -516,9 +641,6 @@ def score_partition(
         fold_diagnostics["fallbacks"] += workspace.fallback_count
         workspace.check_fallback_rate(config.fallback_stop_fraction)
 
-    counters.phase_seconds["outer_scoring"] = counters.phase_seconds.get("outer_scoring", 0.0) + (
-        time.perf_counter() - phase_start
-    )
     return FoldScore(
         directional_sum=directional_sum,
         directional_rows=directional_rows,
@@ -690,6 +812,12 @@ def aggregate(
     node_frame = pd.DataFrame(node_rows)
     fold_frame = pd.DataFrame(fold_records)
     result_metadata = dict(metadata)
+    cost_metadata = dict(result_metadata.get("cost", {}))
+    cost_metadata["pair_status_counts"] = {
+        str(status): int(count)
+        for status, count in pair_frame["status"].value_counts().sort_index().items()
+    }
+    result_metadata["cost"] = cost_metadata
     result_metadata["complete"] = bool(
         result_metadata.get("complete", False)
         and all(record["status"] == "complete" for record in pair_records)
@@ -773,7 +901,7 @@ def _fit_metadata(prepared: Any, schema: Any, config: CINConfig, split_plan: Spl
             "n_large_factorizations": 0,
             "q": 0,
             "t": 0,
-            "phase_seconds": {},
+            "phase_seconds": {phase: 0.0 for phase in COST_PHASES},
             "peak_rss_mb": None,
             "n_fallbacks": 0,
         },
@@ -803,6 +931,7 @@ def _fit_prepared(
     *,
     deadline: float | None = None,
     split_seed: int | None = None,
+    counters: CostCounters | None = None,
 ) -> NetworkFit:
     """Fit a prepared CIN network with an optional external deadline and seed."""
 
@@ -816,7 +945,8 @@ def _fit_prepared(
     )
     budget = Budget(actual_deadline)
     metadata = _fit_metadata(prepared, schema, config, split_plan)
-    counters = CostCounters()
+    counters = counters or CostCounters()
+    counters.requested_directional_outer_fits = len(prepared.names) * (len(prepared.names) - 1) * config.outer_folds
     n_targets = len(prepared.names)
     (
         directional_sum,
@@ -844,7 +974,8 @@ def _fit_prepared(
         for fold_index, outer in enumerate(split_plan.outer):
             budget.check(f"outer fold {fold_index}")
             outer_started = True
-            feature_space = fit_feature_space(prepared, outer.train_rows, config)
+            with phase_timer(counters, "features"):
+                feature_space = fit_feature_space(prepared, outer.train_rows, config)
             fold_score = score_partition(
                 prepared,
                 feature_space,
@@ -884,28 +1015,36 @@ def _fit_prepared(
     metadata["complete"] = complete
     metadata["runtime"]["status"] = "complete" if complete else "incomplete"
     metadata["runtime"]["elapsed_seconds"] = float(time.monotonic() - started_at)
-    metadata["cost"] = {
+    if tuning_started:
+        counters.tuned_penalty_values.extend(
+            float(value)
+            for value in tuning.lambda_by_fold.ravel()
+            if np.isfinite(value)
+        )
+    metadata["cost"] = _cost_metadata(counters, pair_status_counts=None)
+    metadata["cost"].update({
         "n_large_factorizations": int(counters.n_large_factorizations),
         "q": int(counters.q),
         "t": int(counters.t),
-        "phase_seconds": _metadata_value(counters.phase_seconds),
-        "peak_rss_mb": None,
         "n_fallbacks": int(counters.n_fallbacks),
-    }
-    return aggregate(
-        prepared,
-        directional_sum,
-        directional_rows,
-        directional_folds,
-        directional_started,
-        directional_failure,
-        unsupported_targets,
-        pair_flags,
-        node_records,
-        fold_records,
-        metadata,
-        expected_folds=config.outer_folds,
-    )
+    })
+    with phase_timer(counters, "aggregate"):
+        result = aggregate(
+            prepared,
+            directional_sum,
+            directional_rows,
+            directional_folds,
+            directional_started,
+            directional_failure,
+            unsupported_targets,
+            pair_flags,
+            node_records,
+            fold_records,
+            metadata,
+            expected_folds=config.outer_folds,
+        )
+    result.metadata["cost"]["phase_seconds"] = _metadata_value(counters.phase_seconds)
+    return result
 
 
 def fit_network(
@@ -923,7 +1062,9 @@ def fit_network(
     from .config import prepare_data
 
     started_at = time.monotonic()
-    prepared = prepare_data(frame, schema, config)
+    counters = CostCounters()
+    with phase_timer(counters, "prepare"):
+        prepared = prepare_data(frame, schema, config)
     actual_deadline = (
         float(deadline) if deadline is not None else started_at + float(config.max_seconds)
     )
@@ -932,4 +1073,5 @@ def fit_network(
         schema,
         config,
         deadline=actual_deadline,
+        counters=counters,
     )

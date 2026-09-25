@@ -11,6 +11,7 @@ from mintnet.cin.features import fit_feature_space
 from mintnet.cin.fit import (
     Budget,
     BudgetExceeded,
+    COST_PHASES,
     CostCounters,
     aggregate,
     _fit_prepared,
@@ -79,6 +80,21 @@ def test_public_fit_network_still_uses_the_existing_default_seed() -> None:
 
     pd.testing.assert_frame_equal(public.pairs, direct.pairs)
     assert public.metadata["config_hash"] == direct.metadata["config_hash"]
+
+
+def test_fit_cost_metadata_has_task10_phases_and_diagnostics() -> None:
+    frame, schema, config = _continuous_fixture()
+    result = fit_network(frame, schema, config)
+    cost = result.metadata["cost"]
+
+    assert tuple(cost["phase_seconds"]) == COST_PHASES
+    assert all(value >= 0.0 and np.isfinite(value) for value in cost["phase_seconds"].values())
+    assert cost["requested_directional_outer_fits"] == len(schema) * (len(schema) - 1) * config.outer_folds
+    assert np.isfinite(cost["first_scaled_normal_residual"])
+    assert cost["n_large_factorizations"] <= 45
+    assert "variance_floor_hit_rate" in cost
+    assert "probability_floor" in cost
+    assert "tuned_penalty_histogram" in cost
 
 
 def test_budget_raises_with_phase() -> None:
