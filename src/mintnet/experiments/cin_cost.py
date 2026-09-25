@@ -44,6 +44,7 @@ class CostConfig:
     repeats: tuple[int, ...]
     master_seed: int
     source_path: Path
+    charter_path: Path
 
 
 COMBINATION_COLUMNS = ("cell", "repeat")
@@ -87,7 +88,9 @@ def load_config(path: Path) -> CostConfig:
     master_seed = int(payload.get("master_seed", -1))
     if master_seed < 0:
         raise ValueError("master_seed must be nonnegative")
-    return CostConfig(tuple(cells), repeats, master_seed, source.resolve())
+    charter_value = str(payload.get("charter", "docs/cin_cost_charter.md"))
+    charter_path = (source.parent.parent / charter_value).resolve()
+    return CostConfig(tuple(cells), repeats, master_seed, source.resolve(), charter_path)
 
 
 def expected_row_count(config: CostConfig) -> int:
@@ -189,6 +192,8 @@ def run_cost(
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
     (target / "sidecars").mkdir(parents=True, exist_ok=True)
+    if not config.charter_path.is_file():
+        raise ValueError(f"cost charter does not exist: {config.charter_path}")
     full_payload = load_yaml(config.source_path)
     write_resolved_config(target, full_payload)
     selected_cells = set(cells) if cells is not None else {cell.cell_id for cell in config.cells}
@@ -215,7 +220,8 @@ def run_cost(
     finally:
         writer.close()
     write_provenance(
-        target, config_payload=full_payload, source_path=config.source_path, charter_path=None,
+        target, config_payload=full_payload, source_path=config.source_path,
+        charter_path=config.charter_path,
         runtime_seconds=time.perf_counter() - started, peak_rss_mb=peak_rss_mb(),
     )
     raw = pd.DataFrame(rows, columns=COST_RAW_COLUMNS)

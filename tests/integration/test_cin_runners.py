@@ -110,6 +110,24 @@ def test_cost_config_has_eight_cells_and_disjoint_replicate_defaults() -> None:
     assert config.repeats == (1, 2)
 
 
+def test_cost_configs_declare_the_frozen_charter_and_same_cell_ids() -> None:
+    full = load_cost_config(ROOT / "configs" / "cin_cost.yaml")
+    smoke = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
+    expected = (
+        "c_p8_n100", "c_p30_n100", "c_p100_n100", "c_p100_n300",
+        "c_p100_n1000", "k5_p30_n150", "k10_p100_n200", "mix_p100_n200",
+    )
+    assert tuple(cell.cell_id for cell in full.cells) == expected
+    assert tuple(cell.cell_id for cell in smoke.cells) == expected
+    assert full.repeats == (1, 2)
+    assert smoke.repeats == (1,)
+    assert full.charter_path == ROOT / "docs" / "cin_cost_charter.md"
+    charter = full.charter_path.read_text(encoding="utf-8")
+    for gate in ("G-time-small", "G-time-100", "G-mem", "G-complete", "G-factor", "G-fallback"):
+        assert gate in charter
+    assert "This is a cost pilot; timings are single-dataset measurements on shared hosted runners." in charter
+
+
 def test_panel_config_has_phase_ranges_and_smoke_overrides() -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline.yaml")
     smoke = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
