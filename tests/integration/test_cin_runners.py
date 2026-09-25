@@ -321,7 +321,9 @@ def test_panel_method_matrix_and_full_phase_combinations() -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     assert PANEL_COMBINATION_COLUMNS == ("case", "phase", "method")
     assert methods_for_case("A") == ("cin", "cin_linear", "ebicglasso")
+    assert methods_for_case("E") == ("cin", "cin_linear", "ebicglasso")
     assert methods_for_case("F") == ("cin",)
+    assert methods_for_case("regression") == ("cin",)
     assert expected_panel_rows(config) == 16
     combinations = expected_panel_combinations(config)
     assert len(combinations) == 8

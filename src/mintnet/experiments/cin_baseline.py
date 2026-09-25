@@ -40,7 +40,7 @@ from .cin_common import (  # noqa: E402
 
 
 CASE_ORDER = tuple("ABCDEFGHI") + ("regression",)
-CONTINUOUS_CASES = frozenset(("A", "B", "C", "D", "E", "regression"))
+COMPARATOR_CASES = frozenset(("A", "B", "C", "D", "E"))
 PANEL_COMBINATION_COLUMNS = ("case", "phase", "method")
 COMBINATION_COLUMNS = PANEL_COMBINATION_COLUMNS
 METHODS = ("cin", "cin_linear", "ebicglasso")
@@ -176,7 +176,7 @@ def load_config(path: Path) -> PanelConfig:
 def methods_for_case(case: str) -> tuple[str, ...]:
     if case not in CASE_ORDER:
         raise ValueError(f"unknown case: {case}")
-    return METHODS if case in CONTINUOUS_CASES else ("cin",)
+    return METHODS if case in COMPARATOR_CASES else ("cin",)
 
 
 def expected_row_count(config: PanelConfig) -> int:

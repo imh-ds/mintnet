@@ -28,6 +28,15 @@ from sklearn.covariance import graphical_lasso
 from sklearn.exceptions import ConvergenceWarning
 
 
+class EBICglassoFailure(RuntimeError):
+    """Raised when no point on the EBICglasso path converges."""
+
+    def __init__(self, message: str, *, attempted_points: int, successful_points: int) -> None:
+        super().__init__(message)
+        self.attempted_points = attempted_points
+        self.successful_points = successful_points
+
+
 @dataclass(frozen=True)
 class EBICglassoResult:
     adjacency: np.ndarray
@@ -37,6 +46,8 @@ class EBICglassoResult:
     ebic_by_lambda: tuple[float, ...]
     lambda_grid: tuple[float, ...]
     n_edges: int
+    converged: bool
+    successful_path_points: int
 
 
 def _lambda_max(empirical_covariance: np.ndarray) -> float:
@@ -84,20 +95,16 @@ def fit_ebicglasso(
     best_index = -1
     best_precision: np.ndarray | None = None
     ebic_values: list[float] = []
+    successful_path_points = 0
     for index, lam in enumerate(grid):
         try:
             with warnings.catch_warnings():
-                # Near lambda_min (the path's densest, least-penalized end),
-                # coordinate descent can fail to fully converge within
-                # max_iter; EBIC's own edge-count penalty makes these
-                # low-lambda points unlikely to be selected regardless, so
-                # this is expected path behavior, not silently swallowed
-                # numerical error -- non-convergence never raises here.
-                warnings.simplefilter("ignore", ConvergenceWarning)
+                warnings.simplefilter("error", ConvergenceWarning)
                 _, precision = graphical_lasso(empirical_covariance, alpha=float(lam), max_iter=max_iter)
-        except Exception:
+        except (ConvergenceWarning, Exception):
             ebic_values.append(float("inf"))
             continue
+        successful_path_points += 1
         ebic = _extended_bic(precision, empirical_covariance, n, gamma)
         ebic_values.append(ebic)
         if ebic < best_ebic:
@@ -106,11 +113,11 @@ def fit_ebicglasso(
             best_precision = precision
 
     if best_precision is None:
-        # Every point on the path failed numerically -- fall back to the
-        # empty graph (the diagonal precision), the same "no evidence"
-        # behavior a fully sparse fit at lambda_max already represents.
-        best_precision = np.diag(1.0 / np.diag(empirical_covariance))
-        best_index = len(grid) - 1
+        raise EBICglassoFailure(
+            "no lambda point converged on the EBICglasso path",
+            attempted_points=len(grid),
+            successful_points=successful_path_points,
+        )
 
     adjacency = np.abs(best_precision) > edge_tolerance
     np.fill_diagonal(adjacency, False)
@@ -124,4 +131,6 @@ def fit_ebicglasso(
         ebic_by_lambda=tuple(ebic_values),
         lambda_grid=tuple(float(v) for v in grid),
         n_edges=n_edges,
+        converged=True,
+        successful_path_points=successful_path_points,
     )
