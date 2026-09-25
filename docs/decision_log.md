@@ -7847,3 +7847,49 @@ Implementation commits: `63dabf7`, `48a7e34`, `401ea3b`, `67bed7f`,
 Consequences: Task 11 may run the bounded statistical panel against the
 accepted runner and compute envelope. No broad statistical or publication
 claim follows from this cost pilot.
+
+## D-105: Implement CIN Task 11 statistical-panel contract
+
+Date: 2026-09-24.
+
+Task 11 is implemented and merged to `main` at `8adf3fe`. The committed
+charter in `docs/cin_baseline_charter.md` fixes the A-I plus historical
+regression scope, paired method matrix, development/validation seed ranges,
+display-delta candidates, stability limits, 12 runner-hour ceiling, metric
+definitions, nonclaims, and one-correction protocol. The panel runner now
+persists the charter hash, complete raw truth/diagnostic metrics, oracle-CMI
+descriptives, thresholded effect/agreement views, categorical loss, null
+quantiles, and pair/stability sidecar promises. EBICglasso path failures are
+explicit failure rows rather than empty successful graphs.
+
+The reporting layer selects a display delta from development CIN A/B rows only,
+records counts and Monte Carlo standard errors, and marks A/F correctness-only
+smoke selection unavailable when B is absent. `scripts/cin_gate_check.py`
+validates frozen validation identities, provenance, sidecar promises, count
+coverage, and the named A/B, E, F/G/H, and C gates while preserving D/I and
+other non-gated scopes as descriptive or unavailable.
+
+Decision: accept the Task 11 implementation contract as ready for hosted
+development/validation execution. Do not accept a statistical validation,
+recovery, inferential, causal, FDR, tail-probability, or substantive network
+claim yet; the hosted development and one-time validation panel was not
+dispatched from this environment because authenticated GitHub CLI access was
+unavailable. Task 11 remains in Relay review pending that evidence rather than
+being marked done.
+
+Evidence: the local A/F smoke command exited successfully with 16 ordinary
+rows, 16 pair sidecars, a frozen charter hash
+`0e846c6445ff4eac87c49db336ba714c86faa12facf8794080155c784c970d7c`, and
+successful sidecar aggregation. The fabricated gate suite covers pass, fail,
+unavailable, development contamination, count mismatch, charter mismatch, and
+missing-sidecar refusal. The merged `main` suite passes with 274 tests and 3
+optional matplotlib skips; Ruff passes and `git diff --check` is clean. No
+Task 11 runner-hours ledger row was added because no hosted run occurred.
+
+Implementation commits: `4aaf94b`, `91db295`, `47cc602`, `57c4b1f`,
+`1b3549d`, `0a02339`, and `8759735`; merge commit `8adf3fe`.
+
+Consequences: Task 12 may consume the charter, reports, gate checker, and
+explicit scope boundary for final documentation, but it must not close the
+statistical evidence claim until the hosted development/validation artifacts
+and gate table exist.
