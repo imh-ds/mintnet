@@ -26,6 +26,7 @@ from mintnet.experiments.cin_cost import (
 )
 from mintnet.experiments import cin_cost_reporting
 from mintnet.experiments import cin_baseline_reporting
+from mintnet.experiments import cin_baseline
 from scripts.aggregate_cin_sidecars import aggregate_sidecars
 from scripts.aggregate_shards import aggregate as aggregate_generic
 from mintnet.experiments.cin_common import (
@@ -340,8 +341,63 @@ def test_panel_smoke_writes_rows_for_supported_methods(tmp_path: Path) -> None:
     assert set(raw["status"]) <= {"complete", "incomplete"}
     assert set(raw.loc[raw["case"] == "F", "method"]) == {"cin"}
     assert set(raw.loc[raw["case"] == "A", "method"]) == {"cin", "cin_linear", "ebicglasso"}
+    task11_columns = {
+        "charter_sha256", "n_true_edges", "n_nonempty_delta_views",
+        "n_nonempty_agreement_views", "oracle_cmi_mae_true", "oracle_cmi_mae_all",
+        "orientation_gap_q50", "variance_floor_hits", "probability_clipped_fraction",
+        "zero_sum_fallbacks", "minimum_probability",
+    }
+    assert task11_columns <= set(raw.columns)
+    assert raw["charter_sha256"].notna().all()
+    assert raw["n_true_edges"].notna().all()
+    assert raw["n_nonempty_delta_views"].notna().all()
     assert (output / "raw_metrics.csv").exists()
     assert len(list((output / "sidecars").glob("*_pairs.csv.gz"))) == 16
+
+
+def test_panel_metrics_record_complete_pair_truth_and_population_diagnostics() -> None:
+    pair_frame = pd.DataFrame(
+        [
+            {"node_i": "A", "node_j": "B", "gain_i_to_j": 0.2, "gain_j_to_i": 0.2, "weight_nats_raw": 0.2, "orientation_gap": 0.1, "status": "complete"},
+            {"node_i": "A", "node_j": "C", "gain_i_to_j": 0.1, "gain_j_to_i": -0.1, "weight_nats_raw": 0.1, "orientation_gap": 0.2, "status": "complete"},
+            {"node_i": "B", "node_j": "C", "gain_i_to_j": 0.0, "gain_j_to_i": 0.0, "weight_nats_raw": 0.0, "orientation_gap": np.nan, "status": "complete"},
+        ]
+    )
+    row = {column: None for column in cin_baseline.PANEL_RAW_COLUMNS}
+    cin_baseline._metrics(
+        row,
+        pair_frame,
+        frozenset({("A", "B"), ("B", "C")} ),
+        {("A", "B"): 0.2, ("A", "C"): 0.05, ("B", "C"): 0.04},
+        strong_edge_threshold=0.01,
+    )
+
+    assert row["n_true_edges"] == 2
+    assert row["n_strong_edges"] == 2
+    assert row["n_pairs_complete"] == 3
+    assert row["n_failed_pairs"] == 0
+    assert row["strong_edge_recall"] == 0.5
+    assert row["oracle_cmi_mae_true"] == pytest.approx(0.02)
+    assert row["oracle_cmi_mae_all"] == pytest.approx((0.0 + 0.05 + 0.04) / 3)
+    assert row["delta_01_empty"] is False
+    assert row["agreement_delta_0_displayed_count"] == 1
+    assert row["n_nonempty_delta_views"] == 4
+    assert row["n_nonempty_agreement_views"] == 4
+    assert row["orientation_gap_q50"] == pytest.approx(0.15)
+
+
+def test_panel_metrics_make_empty_precision_unavailable() -> None:
+    pair_frame = pd.DataFrame(
+        [
+            {"node_i": "A", "node_j": "B", "gain_i_to_j": 0.0, "gain_j_to_i": 0.0, "weight_nats_raw": 0.0, "orientation_gap": 0.0, "status": "complete"},
+        ]
+    )
+    row = {column: None for column in cin_baseline.PANEL_RAW_COLUMNS}
+    cin_baseline._metrics(row, pair_frame, frozenset({("A", "B")} ), None, strong_edge_threshold=0.01)
+
+    assert row["delta_0_empty"] is True
+    assert np.isnan(row["delta_0_precision"])
+    assert row["n_nonempty_delta_views"] == 0
 
 
 def test_sidecar_aggregation_combines_cost_pairs_and_manifest(tmp_path: Path) -> None:

@@ -72,9 +72,15 @@ PANEL_RAW_COLUMNS = (
     "charter_sha256",
     "error_type", "error", "elapsed_seconds", "peak_rss_mb", "ap", "prevalence",
     "ap_minus_prevalence", "n_pairs_complete", "n_pairs_total", "n_failed_pairs",
-    "strong_edge_recall", "oracle_cmi_mae", "oracle_cmi_bias", "categorical_excess_loss",
+    "n_true_edges", "n_strong_edges", "strong_edge_set_available",
+    "n_nonempty_delta_views", "n_nonempty_agreement_views", "strong_edge_recall",
+    "oracle_cmi_mae", "oracle_cmi_bias", "oracle_cmi_mae_true", "oracle_cmi_bias_true",
+    "oracle_cmi_mae_all", "oracle_cmi_bias_all", "categorical_excess_loss",
     "positive_weight_q50", "positive_weight_q90", "positive_weight_q95", "positive_weight_q99",
-    "positive_weight_max", "tie_fraction",
+    "positive_weight_max", "tie_fraction", "orientation_gap_q50", "orientation_gap_q90",
+    "orientation_gap_q95", "orientation_gap_q99", "orientation_gap_max",
+    "variance_floor_hits", "variance_floor_observations", "variance_floor_hit_rate",
+    "probability_clipped_fraction", "zero_sum_fallbacks", "minimum_probability",
     *tuple(
         field
         for prefix in ("delta", "agreement_delta")
@@ -285,7 +291,7 @@ def _quantile(row: dict[str, Any], prefix: str, values: np.ndarray) -> None:
         row["positive_weight_max"] = float(np.max(positive))
 
 
-def _display_metrics(row: dict[str, Any], pair_frame: pd.DataFrame, truth: frozenset[tuple[str, str]], prefix: str, agreement: bool) -> None:
+def _display_metrics(row: dict[str, Any], pair_frame: pd.DataFrame, truth: frozenset[tuple[str, str]], prefix: str, agreement: bool) -> int:
     weights = pd.to_numeric(pair_frame["weight_nats_raw"], errors="coerce")
     complete = pair_frame["status"].eq("complete") & weights.notna()
     if agreement:
@@ -300,11 +306,23 @@ def _display_metrics(row: dict[str, Any], pair_frame: pd.DataFrame, truth: froze
         row[f"{prefix}_{token}_precision"] = float(tp / count) if count else np.nan
         row[f"{prefix}_{token}_recall"] = float(tp / len(truth)) if truth else np.nan
         row[f"{prefix}_{token}_empty"] = count == 0
+    return sum(
+        not bool(row[f"{prefix}_{token}_empty"])
+        for token in DELTA_TOKENS
+    )
 
 
-def _metrics(row: dict[str, Any], pair_frame: pd.DataFrame, truth: frozenset[tuple[str, str]], population_cmi: dict[tuple[str, str], float] | None) -> None:
+def _metrics(
+    row: dict[str, Any],
+    pair_frame: pd.DataFrame,
+    truth: frozenset[tuple[str, str]],
+    population_cmi: dict[tuple[str, str], float] | None,
+    *,
+    strong_edge_threshold: float = 0.01,
+) -> None:
     weights = pd.to_numeric(pair_frame["weight_nats_raw"], errors="coerce").to_numpy(dtype=float)
     complete = pair_frame["status"].eq("complete").to_numpy() & np.isfinite(weights)
+    row["n_true_edges"] = len(truth)
     row["n_pairs_complete"] = int(complete.sum())
     row["n_failed_pairs"] = int(len(pair_frame) - int(complete.sum()))
     _quantile(row, "positive_weight", weights)
@@ -318,17 +336,50 @@ def _metrics(row: dict[str, Any], pair_frame: pd.DataFrame, truth: frozenset[tup
         row["ap"] = float(average_precision_score(labels, weights))
         row["prevalence"] = float(labels.mean())
         row["ap_minus_prevalence"] = row["ap"] - row["prevalence"]
-    _display_metrics(row, pair_frame, truth, "delta", False)
-    _display_metrics(row, pair_frame, truth, "agreement_delta", True)
-    if population_cmi is not None and truth:
-        differences = [float(pair_frame.loc[(pair_frame["node_i"] == left) & (pair_frame["node_j"] == right), "weight_nats_raw"].iloc[0]) - float(value) for (left, right), value in population_cmi.items() if (left, right) in truth]
-        if differences:
-            row["oracle_cmi_mae"] = float(np.mean(np.abs(differences)))
-            row["oracle_cmi_bias"] = float(np.mean(differences))
-        strong = {edge for edge, value in population_cmi.items() if edge in truth and value >= .01}
+    row["n_nonempty_delta_views"] = _display_metrics(row, pair_frame, truth, "delta", False)
+    row["n_nonempty_agreement_views"] = _display_metrics(row, pair_frame, truth, "agreement_delta", True)
+    orientation_series = pair_frame["orientation_gap"] if "orientation_gap" in pair_frame else pd.Series(dtype=float)
+    orientation = pd.to_numeric(orientation_series, errors="coerce").to_numpy(dtype=float)
+    orientation = orientation[np.isfinite(orientation)]
+    if orientation.size:
+        for token, quantile in (("q50", .50), ("q90", .90), ("q95", .95), ("q99", .99)):
+            row[f"orientation_gap_{token}"] = float(np.quantile(orientation, quantile))
+        row["orientation_gap_max"] = float(np.max(orientation))
+    if population_cmi is not None:
+        row["strong_edge_set_available"] = bool(truth)
+        strong = {
+            edge for edge, value in population_cmi.items()
+            if edge in truth and float(value) >= strong_edge_threshold
+        }
+        row["n_strong_edges"] = len(strong)
         if strong:
-            selected = set(zip(pair_frame.loc[complete & (pair_frame["weight_nats_raw"] > 0), "node_i"], pair_frame.loc[complete & (pair_frame["weight_nats_raw"] > 0), "node_j"]))
+            selected = set(
+                zip(
+                    pair_frame.loc[complete & (pair_frame["weight_nats_raw"] > 0), "node_i"],
+                    pair_frame.loc[complete & (pair_frame["weight_nats_raw"] > 0), "node_j"],
+                )
+            )
             row["strong_edge_recall"] = float(len(selected & strong) / len(strong))
+        weights_by_pair = {
+            (str(left), str(right)): float(weight)
+            for left, right, weight in zip(pair_frame["node_i"], pair_frame["node_j"], weights)
+            if np.isfinite(weight)
+        }
+        differences_by_edge = {
+            edge: weights_by_pair[edge] - float(value)
+            for edge, value in population_cmi.items()
+            if edge in weights_by_pair and np.isfinite(float(value))
+        }
+        all_differences = list(differences_by_edge.values())
+        true_differences = [difference for edge, difference in differences_by_edge.items() if edge in truth]
+        if all_differences:
+            row["oracle_cmi_mae_all"] = float(np.mean(np.abs(all_differences)))
+            row["oracle_cmi_bias_all"] = float(np.mean(all_differences))
+        if true_differences:
+            row["oracle_cmi_mae_true"] = float(np.mean(np.abs(true_differences)))
+            row["oracle_cmi_bias_true"] = float(np.mean(true_differences))
+            row["oracle_cmi_mae"] = row["oracle_cmi_mae_true"]
+            row["oracle_cmi_bias"] = row["oracle_cmi_bias_true"]
 
 
 def _fit_method(method: str, frame: pd.DataFrame, schema: dict[str, dict[str, Any]], seeds: Any) -> tuple[pd.DataFrame, Any, float | None]:
@@ -360,11 +411,27 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
         row["status"] = "complete" if pair_frame["status"].eq("complete").all() else "incomplete"
         row["elapsed_seconds"] = time.perf_counter() - started
         row["peak_rss_mb"] = peak_rss_mb()
-        _metrics(row, pair_frame, truth, population_cmi)
+        _metrics(row, pair_frame, truth, population_cmi, strong_edge_threshold=config.strong_edge_threshold)
         if method == "cin" and hasattr(fit_result, "nodes"):
             node_gain = pd.to_numeric(fit_result.nodes.get("full_minus_intercept"), errors="coerce")
             if node_gain.notna().any() and any(schema[name].get("kind") == "categorical" for name in schema):
                 row["categorical_excess_loss"] = float(-node_gain.mean())
+            variance_hits = pd.to_numeric(fit_result.nodes.get("variance_floor_hits"), errors="coerce")
+            if variance_hits.notna().any():
+                row["variance_floor_hits"] = int(variance_hits.fillna(0).sum())
+                row["variance_floor_observations"] = int(variance_hits.notna().sum())
+                row["variance_floor_hit_rate"] = float(
+                    row["variance_floor_hits"] / row["variance_floor_observations"]
+                ) if row["variance_floor_observations"] else 0.0
+            clipped = pd.to_numeric(fit_result.nodes.get("clipped_fraction_mean"), errors="coerce")
+            if clipped.notna().any():
+                row["probability_clipped_fraction"] = float(clipped.mean())
+            zero_sum = pd.to_numeric(fit_result.nodes.get("zero_sum_fallbacks"), errors="coerce")
+            if zero_sum.notna().any():
+                row["zero_sum_fallbacks"] = int(zero_sum.fillna(0).sum())
+            minimum = pd.to_numeric(fit_result.nodes.get("min_probability"), errors="coerce")
+            if minimum.notna().any():
+                row["minimum_probability"] = float(minimum.min())
         if case in config.stability_cases and phase == "validation" and method in {"cin", "cin_linear"} and hasattr(fit_result, "metadata"):
             stability = estimate_stability(
                 fit_result,
