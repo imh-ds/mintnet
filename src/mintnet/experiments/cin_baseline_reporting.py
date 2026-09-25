@@ -100,6 +100,19 @@ def select_development_delta(raw: pd.DataFrame, config: PanelConfig) -> dict[str
             "mean_strong_recall": float(np.mean(valid_recalls)) if len(valid_recalls) == 2 else float("nan"),
         })
 
+    if any(not (development["case"] == case).any() for case in ("A", "B")):
+        return {
+            "selection_phase": "development",
+            "selection_status": "unavailable",
+            "selected_delta": None,
+            "selected_token": None,
+            "expected_gate_failure": True,
+            "fallback_reason": "A/B development rows are required for threshold selection",
+            "rule": "qualify A/B at precision >= 0.70 and nonempty fraction >= 0.80; maximize strong recall, then choose smaller delta",
+            "charter_sha256": config.charter_sha256,
+            "candidates": candidates,
+        }
+
     qualified = [candidate for candidate in candidates if candidate["qualified"]]
     if qualified:
         selected = max(
@@ -124,6 +137,7 @@ def select_development_delta(raw: pd.DataFrame, config: PanelConfig) -> dict[str
 
     return {
         "selection_phase": "development",
+        "selection_status": "selected",
         "selected_delta": selected["delta"],
         "selected_token": selected["token"],
         "expected_gate_failure": expected_gate_failure,

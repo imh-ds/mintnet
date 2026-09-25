@@ -80,6 +80,17 @@ def test_select_development_delta_marks_fallback_when_no_candidate_qualifies() -
     assert selection["fallback_reason"] == "no candidate met development precision/nonempty rule"
 
 
+def test_select_development_delta_is_unavailable_without_both_cases() -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    raw = pd.DataFrame([_row(case="A", phase="development", replicate=0, precision=0.9, strong_recall=0.5)])
+
+    selection = select_development_delta(raw, config)
+
+    assert selection["selected_delta"] is None
+    assert selection["selection_status"] == "unavailable"
+    assert selection["expected_gate_failure"] is True
+
+
 def test_aggregate_panel_metrics_preserves_counts_and_mcse() -> None:
     config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     raw = pd.DataFrame(

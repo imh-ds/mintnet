@@ -48,10 +48,29 @@ python scripts/aggregate_cin_sidecars.py --shards-dir shards --output results/ge
 
 The generic aggregator checks expected raw coverage and duplicate identities. The sidecar aggregator separately checks every promised file, byte hash, declared row count, pair cardinality, stability cardinality, duplicate identity, and orphan file before writing `pairs_all.csv.gz` and `stability_all.csv.gz` when applicable. Reports must preserve counts behind means and must retain incomplete or failed rows.
 
+## Task 11 development and validation sequence
+
+Run the full development matrix first. The report writes `development_selection.json`; its display delta is selected from development CIN A/B rows only and must be treated as frozen before validation:
+
+```text
+python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir development-shards --output results/generated/cin_baseline_development
+python scripts/aggregate_cin_sidecars.py --shards-dir development-shards --output results/generated/cin_baseline_development
+```
+
+Run validation once on the new validation seeds after the development selection is frozen, aggregate its raw rows and sidecars, and then evaluate the named gates without retuning:
+
+```text
+python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir validation-shards --output results/generated/cin_baseline_validation
+python scripts/aggregate_cin_sidecars.py --shards-dir validation-shards --output results/generated/cin_baseline_validation
+python scripts/cin_gate_check.py --raw results/generated/cin_baseline_validation/raw_metrics.csv --config configs/cin_baseline.yaml --selection results/generated/cin_baseline_development/development_selection.json --output results/generated/cin_baseline_validation/gate_results.json
+```
+
+The gate checker refuses development contamination, duplicate or missing validation identities, count mismatch, missing provenance, and charter mismatch. D/I, regression, null, variance-only/XOR, stability, and high-p categorical outputs are descriptive or unsupported where no gate applies. Counts and Monte Carlo standard errors remain visible; the panel does not claim causal effects, precise tail probabilities, FDR control, or broad recovery beyond the named scopes.
+
 ## Reproducibility contract
 
 Every dataset derives a `CINSeedBundle` from `SeedSequence([master_seed, 9009, case_index, phase_index, replicate])`. Its fields are `structure`, `sample`, `cin_fit`, `comparator_fit`, and `stability`. Case indices come from the full order `A` through `I`, then `regression`; phase index `0` is development and `1` is validation. Development ids are `[0, 10)` and validation ids are `[1000, 1020)`, with `val0` and `val1` splitting validation at the midpoint.
 
 Each shard writes the full resolved configuration, config and code hashes, package/platform details, BLAS thread settings, CPU information, runtime, and platform-specific RSS. Windows RSS is explicitly `null` because the Linux `resource` measurement is unavailable. A failed comparator is `status=error` with an error type and message; it is never a successful empty graph. A valid fit with unsupported or incomplete pairs remains visible as `status=incomplete`.
 
-The compute ceiling for the statistical panel is 12 aggregate runner-hours. The ledger is intentionally empty until an Actions run is actually dispatched; no local smoke command should add a timing claim to it.
+The compute ceiling for the statistical panel is 12 aggregate runner-hours. Task 10's accepted hosted cost envelope is the preflight budget baseline; local smoke is correctness-only and must not add timing claims to `docs/cin_compute_ledger.csv`. Any replicate reduction required to remain within the ceiling must be disclosed before validation is frozen.
