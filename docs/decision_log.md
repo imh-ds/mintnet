@@ -7806,3 +7806,44 @@ Consequences: Task 10 may run the frozen cost matrix through the documented
 runner and record hosted timings in the ledger; Task 11 may run the bounded
 panel using the paired A–I simulation contract. No expensive workflow was
 dispatched and no publication or release claim is introduced by this entry.
+
+## D-104: Implement CIN Task 10 cost pilot and hosted completion gate
+
+Date: 2026-09-24.
+
+Task 10 is now implemented as the frozen cost-pilot contract. The charter in
+`docs/cin_cost_charter.md` fixes the eight continuous, categorical, and mixed
+cells, repeats, seeds, one-thread runner policy, phase timings, diagnostic
+fields, resource gates, profiling rule, and nonclaims. The cost runner records
+the declared phases and completion diagnostics; the report evaluates the
+timing, memory, completion, factorization, and fallback gates. The generic
+sharded workflow now explicitly exports the `src` package root in shard and
+aggregation shells so the repository's src-layout package is invocable on
+hosted runners.
+
+Decision: accept Task 10 as the hosted cost and completion baseline and permit
+Task 11 to proceed. This acceptance establishes only the declared operating
+envelope and reproducible cost evidence; it does not establish statistical
+recovery, inferential validity, causal validity, or substantive network claims.
+
+Evidence: hosted GitHub Actions run
+`https://github.com/imh-ds/mintnet/actions/runs/36096470047` on revision
+`f1bf556` completed all 16 shards and the aggregate job successfully. The
+aggregate report contains 16 configured rows, 16 complete rows, zero failed
+rows, and all 80 applicable gate checks pass: p≤30 timings are below 30
+seconds, p=100 timings are below 180 seconds, peak RSS is below 1 GB,
+ordinary pairs are complete, large factorizations are at most 45, and fallback
+fractions are at most 1%. No cell required a repeat under the declared timing
+band. The hosted rows carry charter SHA-256
+`3f15d4473e7ef1e5497c392c478d7f81e5cbaf859e3e1fe999179aa0905a0cf1`, CPU and
+BLAS/threadpool provenance, and one-thread environment settings. The compute
+ledger records 18 jobs, 0.0258333333 maximum wall hours, and 0.22 runner
+hours. Local verification also passes with 261 tests and three optional
+matplotlib skips, plus the relevant Ruff and diff checks.
+
+Implementation commits: `63dabf7`, `48a7e34`, `401ea3b`, `67bed7f`,
+`4804ddf`, `06bc242`, `29210d5`, and `f1bf556`.
+
+Consequences: Task 11 may run the bounded statistical panel against the
+accepted runner and compute envelope. No broad statistical or publication
+claim follows from this cost pilot.

@@ -456,11 +456,12 @@ def test_metadata_preserves_thread_and_resolved_config_provenance(tmp_path: Path
     assert "peak_rss_mb" in metadata
 
 
-def test_compute_ledger_has_frozen_header_without_dispatch_rows() -> None:
+def test_compute_ledger_records_task_10_dispatch() -> None:
     ledger = ROOT / "docs" / "cin_compute_ledger.csv"
     lines = ledger.read_text(encoding="utf-8").splitlines()
     assert lines == [
-        "phase,workflow_run_id,jobs,wall_hours_max,runner_hours_sum,dispatched_by,date,purpose"
+        "phase,workflow_run_id,jobs,wall_hours_max,runner_hours_sum,dispatched_by,date,purpose",
+        "cost_pilot,36096470047,18,0.0258333333,0.22,codex:codex,2026-09-24,Task 10 hosted CIN cost and completion gate"
     ]
 
 

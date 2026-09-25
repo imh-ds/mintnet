@@ -1,1 +1,2 @@
 phase,workflow_run_id,jobs,wall_hours_max,runner_hours_sum,dispatched_by,date,purpose
+cost_pilot,36096470047,18,0.0258333333,0.22,codex:codex,2026-09-24,Task 10 hosted CIN cost and completion gate
