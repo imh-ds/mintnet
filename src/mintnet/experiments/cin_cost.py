@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import time
@@ -54,7 +55,12 @@ COST_RAW_COLUMNS = (
     "prepare_seconds", "features_seconds", "gram_factor_seconds", "h_seconds",
     "omission_seconds", "score_seconds", "aggregate_seconds", "outputs_seconds",
     "n_large_factorizations", "q", "t", "n_fallbacks", "fallback_fraction",
-    "n_pairs_complete", "n_pairs_total", "peak_rss_mb", "pair_sidecar_file",
+    "n_requested_omissions", "n_pairs_complete", "n_pairs_total", "peak_rss_mb",
+    "pair_sidecar_file", "requested_directional_outer_fits", "status_histogram_json",
+    "variance_floor_hit_rate", "probability_clipped_fraction", "probability_min",
+    "zero_sum_fallbacks", "tuned_penalty_min_fraction", "tuned_penalty_max_fraction",
+    "tuned_penalty_histogram_json", "first_scaled_normal_residual", "environment_json",
+    "charter_sha256",
 )
 MANIFEST_COLUMNS = ("file", "cell", "repeat", "method", "kind", "n_rows", "sha256")
 
@@ -135,21 +141,34 @@ def _run_cell(config: CostConfig, output_dir: Path, cell: CostCell, repeat: int,
         fit_config = CINConfig(seed=seeds.cin_fit)
         with thread_limits():
             fit = fit_network(frame, schema, fit_config)
-        elapsed = time.perf_counter() - started
         cost = fit.metadata.get("cost", {})
         pairs = fit.pairs.copy()
         sidecar_name = f"{cell.cell_id}_{repeat}_cin_pairs.csv.gz"
         sidecar_path = output_dir / "sidecars" / sidecar_name
+        outputs_started = time.perf_counter()
         n_rows = write_gzip_frame(pairs, sidecar_path)
         _write_manifest_row(output_dir, {
             "file": sidecar_name, "cell": cell.cell_id, "repeat": repeat,
             "method": "cin", "kind": "pairs", "n_rows": n_rows,
             "sha256": sha256_file(sidecar_path),
         })
+        cost.setdefault("phase_seconds", {})["outputs"] = time.perf_counter() - outputs_started
+        elapsed = time.perf_counter() - started
         complete = int((pairs["status"] == "complete").sum()) if "status" in pairs else 0
         total = len(pairs)
         factor_count = int(cost.get("n_large_factorizations", 0) or 0)
         fallback_count = int(cost.get("n_fallbacks", 0) or 0)
+        requested_omissions = int(cost.get("n_requested_omissions", 0) or 0)
+        status_counts = pairs["status"].value_counts().sort_index().to_dict()
+        penalty_histogram = cost.get("tuned_penalty_histogram", {})
+        probability_floor = cost.get("probability_floor", {})
+        environment = {
+            "dependencies": fit.metadata.get("dependencies", {}),
+            "thread_environment": {
+                name: os.environ.get(name)
+                for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS")
+            },
+        }
         row.update({
             "status": "complete" if bool(fit.metadata.get("complete", False)) else "incomplete",
             "elapsed_seconds": elapsed,
@@ -163,9 +182,22 @@ def _run_cell(config: CostConfig, output_dir: Path, cell: CostCell, repeat: int,
             "outputs_seconds": _phase_seconds(cost, "outputs"),
             "n_large_factorizations": factor_count, "q": cost.get("q"), "t": cost.get("t"),
             "n_fallbacks": fallback_count,
-            "fallback_fraction": fallback_count / factor_count if factor_count else 0.0,
+            "fallback_fraction": fallback_count / requested_omissions if requested_omissions else 0.0,
+            "n_requested_omissions": requested_omissions,
             "n_pairs_complete": complete, "n_pairs_total": total,
             "peak_rss_mb": peak_rss_mb(), "pair_sidecar_file": sidecar_name,
+            "requested_directional_outer_fits": cost.get("requested_directional_outer_fits"),
+            "status_histogram_json": json.dumps(status_counts, sort_keys=True, separators=(",", ":")),
+            "variance_floor_hit_rate": cost.get("variance_floor_hit_rate"),
+            "probability_clipped_fraction": probability_floor.get("clipped_fraction"),
+            "probability_min": probability_floor.get("min_probability"),
+            "zero_sum_fallbacks": probability_floor.get("zero_sum_fallbacks"),
+            "tuned_penalty_min_fraction": penalty_histogram.get("min_fraction"),
+            "tuned_penalty_max_fraction": penalty_histogram.get("max_fraction"),
+            "tuned_penalty_histogram_json": json.dumps(penalty_histogram, sort_keys=True, separators=(",", ":")),
+            "first_scaled_normal_residual": cost.get("first_scaled_normal_residual"),
+            "environment_json": json.dumps(environment, sort_keys=True, separators=(",", ":")),
+            "charter_sha256": sha256_file(config.charter_path),
         })
     except Exception as exc:  # noqa: BLE001 - failure rows are part of the contract.
         row.update({

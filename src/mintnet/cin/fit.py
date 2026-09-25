@@ -154,6 +154,7 @@ class CostCounters:
     q: int = 0
     t: int = 0
     n_fallbacks: int = 0
+    requested_omissions: int = 0
     phase_seconds: dict[str, float] = field(
         default_factory=lambda: {phase: 0.0 for phase in COST_PHASES}
     )
@@ -403,6 +404,7 @@ def tune_lambdas(
                     score_sums[target, lambda_index] += float(np.sum(logq))
                     score_rows[target, lambda_index] += logq.size
                 counters.n_fallbacks += workspace.fallback_count
+                counters.requested_omissions += workspace.requested_omissions
                 workspace.check_fallback_rate(config.fallback_stop_fraction)
 
         for target in range(n_targets):
@@ -638,6 +640,7 @@ def score_partition(
                     except (RidgeNumericalFailure, ValueError, FloatingPointError):
                         directional_failure[source, target] = True
         counters.n_fallbacks += workspace.fallback_count
+        counters.requested_omissions += workspace.requested_omissions
         fold_diagnostics["fallbacks"] += workspace.fallback_count
         workspace.check_fallback_rate(config.fallback_stop_fraction)
 
@@ -1027,6 +1030,7 @@ def _fit_prepared(
         "q": int(counters.q),
         "t": int(counters.t),
         "n_fallbacks": int(counters.n_fallbacks),
+        "n_requested_omissions": int(counters.requested_omissions),
     })
     with phase_timer(counters, "aggregate"):
         result = aggregate(

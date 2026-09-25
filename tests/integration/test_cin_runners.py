@@ -160,6 +160,22 @@ def test_cost_smoke_writes_incremental_raw_rows_and_pair_sidecars(tmp_path: Path
     raw = run_cost(config, output)
 
     assert list(raw.columns) == list(COST_RAW_COLUMNS)
+    task10_columns = {
+        "requested_directional_outer_fits", "status_histogram_json",
+        "variance_floor_hit_rate", "probability_clipped_fraction",
+        "probability_min", "zero_sum_fallbacks", "tuned_penalty_min_fraction",
+        "tuned_penalty_max_fraction", "tuned_penalty_histogram_json",
+        "first_scaled_normal_residual", "environment_json", "charter_sha256",
+    }
+    assert task10_columns <= set(raw.columns)
+    assert raw["requested_directional_outer_fits"].notna().all()
+    assert raw["status_histogram_json"].map(json.loads).map(lambda value: isinstance(value, dict)).all()
+    assert raw["tuned_penalty_histogram_json"].map(json.loads).map(lambda value: isinstance(value, dict)).all()
+    assert raw["charter_sha256"].nunique() == 1
+    categorical = raw.loc[raw["kind"] == "categorical10"].iloc[0]
+    assert categorical["q"] > 0
+    assert categorical["t"] > 0
+    assert categorical["n_requested_omissions"] > 0
     assert len(raw) == expected_cost_rows(config) == 8
     assert set(raw["status"]) == {"complete"}
     assert (output / "raw_metrics.csv").exists()
