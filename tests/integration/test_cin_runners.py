@@ -146,6 +146,33 @@ def test_panel_config_has_phase_ranges_and_smoke_overrides() -> None:
     assert smoke.n_overrides == {"A": 40, "F": 40}
 
 
+def test_panel_config_has_frozen_charter_and_statistical_controls() -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline.yaml")
+    smoke = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    charter = ROOT / "docs" / "cin_baseline_charter.md"
+    expected_hash = hashlib.sha256(charter.read_bytes()).hexdigest()
+
+    assert config.charter_path == charter
+    assert smoke.charter_path == charter
+    assert config.charter_sha256 == expected_hash
+    assert smoke.charter_sha256 == expected_hash
+    assert config.delta_candidates == (0.005, 0.01, 0.02)
+    assert config.strong_edge_threshold == 0.01
+    assert config.point_fit_max_seconds == 600.0
+    assert config.stability_max_seconds == 600.0
+
+
+def test_panel_smoke_persists_charter_identity(tmp_path: Path) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    raw = run_baseline(config, tmp_path / "panel", write_report=False)
+    expected_hash = hashlib.sha256(config.charter_path.read_bytes()).hexdigest()
+
+    assert raw["charter_sha256"].eq(expected_hash).all()
+    metadata = json.loads((tmp_path / "panel" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["charter_sha256"] == expected_hash
+    assert raw["charter_sha256"].nunique() == 1
+
+
 def test_invalid_config_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "invalid.yaml"
     path.write_text(yaml.safe_dump({"master_seed": 1, "cases": ["Z"]}), encoding="utf-8")

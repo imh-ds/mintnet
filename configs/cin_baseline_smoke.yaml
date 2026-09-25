@@ -1,4 +1,5 @@
 master_seed: 20260924
+charter: ../docs/cin_baseline_charter.md
 cases: [A, F]
 development_replicates: [0, 1]
 validation_replicates: [1000, 1001]
@@ -6,3 +7,7 @@ n_overrides: {A: 40, F: 40}
 stability_cases: []
 stability_repeats: 0
 stability_fraction: 0.8
+delta_candidates: [0.005, 0.01, 0.02]
+strong_edge_threshold: 0.01
+point_fit_max_seconds: 600.0
+stability_max_seconds: 600.0

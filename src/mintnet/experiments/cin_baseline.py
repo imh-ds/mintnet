@@ -57,12 +57,19 @@ class PanelConfig:
     stability_cases: tuple[str, ...]
     stability_repeats: int
     stability_fraction: float
+    charter_path: Path
+    charter_sha256: str
+    delta_candidates: tuple[float, ...]
+    strong_edge_threshold: float
+    point_fit_max_seconds: float
+    stability_max_seconds: float
     source_path: Path
 
 
 PANEL_RAW_COLUMNS = (
     "case", "phase", "replicate", "method", "structure_seed", "sample_seed",
     "cin_fit_seed", "comparator_fit_seed", "stability_seed", "n", "p", "status",
+    "charter_sha256",
     "error_type", "error", "elapsed_seconds", "peak_rss_mb", "ap", "prevalence",
     "ap_minus_prevalence", "n_pairs_complete", "n_pairs_total", "n_failed_pairs",
     "strong_edge_recall", "oracle_cmi_mae", "oracle_cmi_bias", "categorical_excess_loss",
@@ -128,6 +135,25 @@ def load_config(path: Path) -> PanelConfig:
     stability_fraction = float(payload.get("stability_fraction", 0.0))
     if stability_repeats < 0 or not 0.0 < stability_fraction <= 1.0:
         raise ValueError("invalid stability settings")
+    charter_value = payload.get("charter", "../docs/cin_baseline_charter.md")
+    if not isinstance(charter_value, str) or not charter_value.strip():
+        raise ValueError("charter must be a non-empty path")
+    charter_path = Path(charter_value)
+    if not charter_path.is_absolute():
+        charter_path = (source.parent / charter_path).resolve()
+    if not charter_path.is_file():
+        raise ValueError(f"charter does not exist: {charter_path}")
+    delta_value = payload.get("delta_candidates", [0.005, 0.01, 0.02])
+    if not isinstance(delta_value, list) or not delta_value:
+        raise ValueError("delta_candidates must be a non-empty list")
+    delta_candidates = tuple(float(value) for value in delta_value)
+    if any(value <= 0 for value in delta_candidates) or tuple(sorted(delta_candidates)) != delta_candidates:
+        raise ValueError("delta_candidates must be positive and ascending")
+    strong_edge_threshold = float(payload.get("strong_edge_threshold", 0.01))
+    point_fit_max_seconds = float(payload.get("point_fit_max_seconds", 600.0))
+    stability_max_seconds = float(payload.get("stability_max_seconds", 600.0))
+    if strong_edge_threshold <= 0 or point_fit_max_seconds <= 0 or stability_max_seconds <= 0:
+        raise ValueError("statistical panel thresholds and time limits must be positive")
     return PanelConfig(
         cases=cases,
         master_seed=master_seed,
@@ -137,6 +163,12 @@ def load_config(path: Path) -> PanelConfig:
         stability_cases=stability_cases,
         stability_repeats=stability_repeats,
         stability_fraction=stability_fraction,
+        charter_path=charter_path,
+        charter_sha256=sha256_file(charter_path),
+        delta_candidates=delta_candidates,
+        strong_edge_threshold=strong_edge_threshold,
+        point_fit_max_seconds=point_fit_max_seconds,
+        stability_max_seconds=stability_max_seconds,
         source_path=source.resolve(),
     )
 
@@ -171,6 +203,12 @@ def _config_payload(config: PanelConfig) -> dict[str, Any]:
         "stability_cases": list(config.stability_cases),
         "stability_repeats": config.stability_repeats,
         "stability_fraction": config.stability_fraction,
+        "charter": str(config.charter_path),
+        "charter_sha256": config.charter_sha256,
+        "delta_candidates": list(config.delta_candidates),
+        "strong_edge_threshold": config.strong_edge_threshold,
+        "point_fit_max_seconds": config.point_fit_max_seconds,
+        "stability_max_seconds": config.stability_max_seconds,
     }
 
 
@@ -310,6 +348,7 @@ def _fit_method(method: str, frame: pd.DataFrame, schema: dict[str, dict[str, An
 
 def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, replicate: int, method: str, seeds: Any, frame: pd.DataFrame, schema: dict[str, dict[str, Any]], truth: frozenset[tuple[str, str]], population_cmi: dict[tuple[str, str], float] | None) -> dict[str, Any]:
     row = _empty_row(case, phase, replicate, method, seeds, len(frame), len(frame.columns))
+    row["charter_sha256"] = config.charter_sha256
     started = time.perf_counter()
     try:
         with thread_limits():
@@ -332,7 +371,7 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
                 frame,
                 repeats=config.stability_repeats,
                 fraction=config.stability_fraction,
-                max_seconds=600.0,
+                max_seconds=config.stability_max_seconds,
                 elapsed_estimate=elapsed_estimate,
             )
             stability_name = canonical_stability_sidecar_name(case, phase, replicate, method)
@@ -386,6 +425,7 @@ def run_baseline(
                     except Exception as exc:  # keep every method identity durable after a dataset failure.
                         for method in methods_for_case(case):
                             failure = _empty_row(case, phase, replicate, method, seeds, n_override or 300, 0)
+                            failure["charter_sha256"] = config.charter_sha256
                             failure.update({"status": "error", "error_type": type(exc).__name__, "error": str(exc)})
                             writer.append(failure)
                             rows.append(failure)
@@ -397,7 +437,7 @@ def run_baseline(
     finally:
         writer.close()
     write_provenance(
-        target, config_payload=payload, source_path=config.source_path, charter_path=None,
+        target, config_payload=payload, source_path=config.source_path, charter_path=config.charter_path,
         runtime_seconds=time.perf_counter() - started, peak_rss_mb=peak_rss_mb(),
     )
     raw = pd.DataFrame(rows, columns=PANEL_RAW_COLUMNS)
