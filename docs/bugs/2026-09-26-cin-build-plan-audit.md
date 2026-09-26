@@ -4,6 +4,8 @@ Audit date: 2026-09-26. Scope: all task plans 01–12 in `docs/design/cin/build-
 
 Priority convention: P1 affects result integrity, availability, or evidence acceptance; P2 is a material contract or reporting gap; P3 is lower-impact exactness. Reproduction probes used small fabricated or synthetic inputs. The full local suite on repository Python 3.11 finished **277 passed, 1 failed, 3 warnings in 233.30 s**; BUG-23 describes the failure. Passing tests do not establish the correctness of untested branches described below.
 
+Follow-up verification on 2026-09-26 used Python 3.12.14: **290 passed, 1 failed, 3 skipped in 196.68 s**. The one failure is the existing BUG-23 cost-ledger snapshot assertion; the three skips require optional matplotlib. This run includes the BUG-04–06 regression tests.
+
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
 | Issue | Priority | Theme | Short description | Status | Related commits |
@@ -11,9 +13,9 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-01](#bug-01) | P2 | Input contracts | Reject exact constant decimal inputs and training partitions | Fixed | `48d4b75`, `b50b69b` |
 | [BUG-02](#bug-02) | P2 | Input contracts | Reject complex values before lossy float conversion | Fixed | `3d5b8cf` |
 | [BUG-03](#bug-03) | P2 | Input contracts | Match equivalent NumPy and Python category strings | Fixed | `e1081f9` |
-| [BUG-04](#bug-04) | P1 | Fit and stability | Return an incomplete fit when tuning is interrupted | Open | — |
-| [BUG-05](#bug-05) | P1 | Fit and stability | Keep valid pair stability when another pair is unsupported | Open | — |
-| [BUG-06](#bug-06) | P1 | Fit and stability | Validate all completed-repeat records and seeds on stability resume | Open | — |
+| [BUG-04](#bug-04) | P1 | Fit and stability | Return an incomplete fit when tuning is interrupted | Fixed | `7e79b96` |
+| [BUG-05](#bug-05) | P1 | Fit and stability | Keep valid pair stability when another pair is unsupported | Fixed | `97afd2a` |
+| [BUG-06](#bug-06) | P1 | Fit and stability | Validate all completed-repeat records and seeds on stability resume | Fixed | `3b739ca` |
 | [BUG-07](#bug-07) | P2 | Fit and stability | Keep point-fit evidence if optional stability errors | Open | — |
 | [BUG-08](#bug-08) | P2 | Fit and stability | Complete required continuous-node diagnostics | Open | — |
 | [BUG-09](#bug-09) | P1 | Persistence and methods | Preserve schema order when saving fits and stability | Open | — |
@@ -92,6 +94,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Inject budget and numerical failures during inner tuning; require a returned NetworkFit with all pairs and explicit incomplete statuses.
 
+**Fix update (2026-09-26).** Commit `7e79b96` initializes tuning diagnostics as unavailable until `tune_lambdas` returns, then records penalty counters only after a successful return. Budget and numerical failures during tuning now return an incomplete `NetworkFit` with `budget_exceeded` or `numerical_failure` pair statuses and NaN weights instead of raising `UnboundLocalError`. Both injected-failure regression cases passed; all 22 focused fit tests passed.
+
 ### BUG-05: Keep valid pair stability when another pair is unsupported
 
 **Priority:** P1. **Source:** `src/mintnet/cin/stability.py:348–363`. **Build plan:** Task 07 §4.
@@ -104,6 +108,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** The rare-category fixture must yield two valid a–b records and unavailable c pairs; true deadline interruption remains separately tested.
 
+**Fix update (2026-09-26).** Commit `97afd2a` determines repeat execution completion from `runtime.status`, which distinguishes a finished computation from a fit summary made incomplete by pair-level unsupported or numerical statuses. A rare-category regression fixture now retains both completed a–b records and continues through the requested repeats while preserving unavailable c-incident pairs. The full focused stability suite passed (18 tests), including the deadline-interruption checks.
+
 ### BUG-06: Validate all completed-repeat records and seeds on stability resume
 
 **Priority:** P1. **Source:** `src/mintnet/cin/stability.py:175–187,441–468`. **Build plan:** Task 07; D-101.
@@ -115,6 +121,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Require every canonical pair exactly once per completed repeat and cross-check repeat IDs/seeds/statuses before resuming.
 
 **Regression check.** Reject a deleted pair/repeat, altered seed, and duplicate/missing pair combination; intact saved results resume.
+
+**Fix update (2026-09-26).** Commit `3b739ca` validates each record's repeat ID and seed against metadata, requires every claimed completed repeat to contain the full canonical pair set without interrupted rows, and revalidates an in-memory result before resume. This catches record-table changes made after construction as well as corrupt saved results. Regression cases for a removed pair and altered seed are rejected; the focused stability suite passed (18 tests).
 
 ### BUG-07: Keep point-fit evidence if optional stability errors
 
