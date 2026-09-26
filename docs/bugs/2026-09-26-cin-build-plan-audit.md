@@ -10,7 +10,7 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | --- | --- | --- | --- | --- | --- |
 | [BUG-01](#bug-01) | P2 | Input contracts | Reject exact constant decimal inputs and training partitions | Fixed | `48d4b75`, `b50b69b` |
 | [BUG-02](#bug-02) | P2 | Input contracts | Reject complex values before lossy float conversion | Fixed | `3d5b8cf` |
-| [BUG-03](#bug-03) | P2 | Input contracts | Match equivalent NumPy and Python category strings | Open | — |
+| [BUG-03](#bug-03) | P2 | Input contracts | Match equivalent NumPy and Python category strings | Fixed | `e1081f9` |
 | [BUG-04](#bug-04) | P1 | Fit and stability | Return an incomplete fit when tuning is interrupted | Open | — |
 | [BUG-05](#bug-05) | P1 | Fit and stability | Keep valid pair stability when another pair is unsupported | Open | — |
 | [BUG-06](#bug-06) | P1 | Fit and stability | Validate all completed-repeat records and seeds on stability resume | Open | — |
@@ -75,6 +75,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Canonicalize equivalent NumPy scalars or use equality-based matching while retaining intentional `True` versus `1` separation.
 
 **Regression check.** Check NumPy/Python strings both ways, cross-type duplicate levels, and boolean/numeric separation.
+
+**Fix update (2026-09-26).** Commit `e1081f9` normalizes NumPy Unicode scalars to builtin Python strings when constructing categorical keys. Observed values and declared levels now match in either direction, and mixed NumPy/Python duplicate levels are rejected. The numeric-category key path remains separate, preserving the `True` versus `1` distinction. Added tests for both matching directions and duplicate rejection. Focused config tests passed (7 tests). The full active suite finished with 288 passed and one existing stale ledger assertion (BUG-23); three existing matplotlib deprecation warnings remain.
 
 ## Fit and stability
 
