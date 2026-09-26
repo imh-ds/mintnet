@@ -313,6 +313,50 @@ def test_interrupted_repeat_rows_cannot_be_complete_or_pass(monkeypatch) -> None
     assert interrupted[["gain_i_to_j", "gain_j_to_i", "weight_nats_raw"]].isna().all().all()
 
 
+def test_pair_level_unsupported_status_does_not_interrupt_stability_repeats() -> None:
+    rows = np.arange(80, dtype=np.float64)
+    frame = pd.DataFrame(
+        {
+            "a": np.sin(rows / 4.0) + rows / 100.0,
+            "b": np.cos(rows / 5.0) - rows / 90.0,
+            "c": np.asarray([1, 1] + [0] * 78, dtype=np.intp),
+        }
+    )
+    schema = {
+        "a": {"kind": "continuous"},
+        "b": {"kind": "continuous"},
+        "c": {"kind": "categorical", "levels": [0, 1]},
+    }
+    config = CINConfig(seed=17, lambda_grid=(0.1,))
+    fit = fit_network(frame, schema, config)
+
+    assert fit.metadata["complete"] is False
+    assert fit.metadata["runtime"]["status"] == "complete"
+    assert set(
+        fit.pairs.loc[fit.pairs.node_i.eq("a") & fit.pairs.node_j.eq("b"), "status"]
+    ) == {"complete"}
+
+    result = stability.estimate_stability(
+        fit,
+        frame,
+        repeats=2,
+        fraction=0.8,
+        max_seconds=30.0,
+        elapsed_estimate=0.01,
+    )
+
+    valid_pair = result.records.loc[
+        result.records.node_i.eq("a") & result.records.node_j.eq("b")
+    ]
+    assert result.status == "complete"
+    assert result.repeats_completed == 2
+    assert len(valid_pair) == 2
+    assert set(valid_pair.status) == {"complete"}
+    assert not result.records.loc[
+        result.records.node_i.eq("c") | result.records.node_j.eq("c"), "status"
+    ].eq("interrupted").any()
+
+
 def test_resume_matches_uninterrupted_records(monkeypatch) -> None:
     fit, frame, _, _ = _fit_and_frame()
 

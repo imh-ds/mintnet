@@ -345,9 +345,10 @@ def estimate_stability(
             repeat_seed=repeat_seeds[repeat_id],
             deadline=deadline,
         )
-        repeat_complete = bool(repeat_fit.metadata.get("complete")) and (
-            repeat_fit.metadata.get("runtime", {}).get("status") == "complete"
-        )
+        # Pair-level unsupported/numerical statuses make the fit's `complete`
+        # summary false even when every requested computation finished. Only
+        # the runtime status tells us whether this repeat was interrupted.
+        repeat_complete = repeat_fit.metadata.get("runtime", {}).get("status") == "complete"
         new_rows.extend(
             _records_from_fit(
                 repeat_fit,
