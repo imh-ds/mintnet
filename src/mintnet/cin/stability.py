@@ -166,6 +166,8 @@ def _validate_resume(
     repeat_seeds: tuple[int, ...],
 ) -> tuple[pd.DataFrame, set[int]]:
     metadata = resume.metadata
+    _validate_metadata(metadata)
+    _validate_records(resume.records, metadata)
     if resume.fit_id != fit_metadata["fit_id"]:
         raise ValueError("resume fit_id does not match the point fit")
     if metadata.get("config_hash") != fit_metadata.get("config_hash"):
@@ -445,23 +447,55 @@ def _validate_records(records: pd.DataFrame, metadata: Mapping[str, Any]) -> Non
         raise ValueError(f"stability records are missing columns: {missing!r}")
     if list(records.columns) != list(STABILITY_COLUMNS):
         raise ValueError("stability records have an unexpected column order")
+    expected_pairs = _canonical_pairs(metadata["schema"])
+    repeat_seeds = tuple(int(seed) for seed in metadata["repeat_seeds"])
+    completed = {int(value) for value in metadata["completed_repeat_ids"]}
+    pairs_by_completed_repeat = {repeat_id: set() for repeat_id in completed}
     if not records.empty:
         if records["fit_id"].astype(str).ne(str(metadata["fit_id"])).any():
             raise ValueError("stability records contain another fit id")
-        expected_pairs = _canonical_pairs(metadata["schema"])
-        key_frame = records.loc[:, ["repeat_id", "node_i", "node_j"]].copy()
+        key_frame = records.loc[
+            :, ["repeat_id", "repeat_seed", "node_i", "node_j", "status"]
+        ].copy()
         keys: list[tuple[int, str, str]] = []
         for record in key_frame.to_dict(orient="records"):
-            repeat_id = int(record["repeat_id"])
-            left = str(record["node_i"])
-            right = str(record["node_j"])
+            try:
+                repeat_value = float(record["repeat_id"])
+            except (TypeError, ValueError, OverflowError):
+                repeat_value = np.nan
+            if not np.isfinite(repeat_value) or not repeat_value.is_integer():
+                raise ValueError("stability records contain an invalid repeat id")
+            repeat_id = int(repeat_value)
             if repeat_id < 0 or repeat_id >= int(metadata["repeats_requested"]):
                 raise ValueError("stability records contain an invalid repeat id")
+            seed_value = record["repeat_seed"]
+            try:
+                repeat_seed = int(seed_value)
+            except (TypeError, ValueError, OverflowError):
+                repeat_seed = None
+            if (
+                repeat_seed is None
+                or isinstance(seed_value, (float, np.floating))
+                and (not np.isfinite(seed_value) or seed_value != repeat_seed)
+                or repeat_seed != repeat_seeds[repeat_id]
+            ):
+                raise ValueError("stability records contain a repeat seed that disagrees with metadata")
+            left = str(record["node_i"])
+            right = str(record["node_j"])
             if (left, right) not in expected_pairs:
                 raise ValueError("stability records contain a non-canonical pair")
+            if repeat_id in completed:
+                if str(record["status"]) == "interrupted":
+                    raise ValueError("completed repeat records cannot have interrupted status")
+                pairs_by_completed_repeat[repeat_id].add((left, right))
             keys.append((repeat_id, left, right))
         if len(set(keys)) != len(keys):
             raise ValueError("stability records contain duplicate repeat/pair keys")
+    for repeat_id, observed_pairs in pairs_by_completed_repeat.items():
+        if observed_pairs != expected_pairs:
+            raise ValueError(
+                f"completed repeat {repeat_id} is missing canonical pair records"
+            )
 
 
 @dataclass(frozen=True)

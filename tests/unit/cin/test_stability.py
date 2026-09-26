@@ -432,6 +432,40 @@ def test_resume_loads_from_directory_and_rejects_fraction_mismatch(monkeypatch, 
         )
 
 
+@pytest.mark.parametrize("corruption", ["missing_pair", "wrong_seed"])
+def test_resume_rejects_inconsistent_completed_repeat_records(
+    monkeypatch, corruption: str
+) -> None:
+    fit, frame, _, _ = _fit_and_frame()
+    monkeypatch.setattr(stability, "_run_repeat", lambda *args, **kwargs: _fake_repeat_fit())
+    result = stability.estimate_stability(
+        fit,
+        frame,
+        repeats=2,
+        fraction=0.8,
+        max_seconds=30.0,
+        elapsed_estimate=0.01,
+    )
+
+    if corruption == "missing_pair":
+        result.records.drop(index=result.records.index[0], inplace=True)
+        expected_error = "completed repeat.*pair"
+    else:
+        result.records.loc[result.records.index[0], "repeat_seed"] = -1
+        expected_error = "repeat seed"
+
+    with pytest.raises(ValueError, match=expected_error):
+        stability.estimate_stability(
+            fit,
+            frame,
+            repeats=2,
+            fraction=0.8,
+            max_seconds=30.0,
+            resume=result,
+            elapsed_estimate=0.01,
+        )
+
+
 def test_estimate_stability_runs_the_internal_fit_runner() -> None:
     fit, frame, _, _ = _fit_and_frame(n=40)
 
