@@ -121,15 +121,16 @@ def _fit_continuous_block(
     values = _validate_finite_vector(x, "x")
     rows = _validate_rows(train_rows, values.size, unique=True)
     train = values[rows]
-    mean = float(np.mean(train))
-    sd = float(np.std(train, ddof=0))
     train_min = float(np.min(train))
     train_max = float(np.max(train))
+    constant = train_min == train_max
+    mean = train_min if constant else float(np.mean(train))
+    sd = 0.0 if constant else float(np.std(train, ddof=0))
     empty_coef = _readonly_array(np.empty((2, 0), dtype=np.float64))
     empty_directions = _readonly_array(np.empty((0, 0), dtype=np.float64))
     empty_vector = _readonly_array(np.empty(0, dtype=np.float64))
 
-    if sd == 0.0:
+    if constant or sd == 0.0:
         return ContinuousBlock(
             mean=mean,
             sd=sd,
@@ -296,8 +297,9 @@ def _fit_response_spec(
     if spec.kind == "continuous":
         values = _validate_finite_vector(prepared.values[:, column], spec.name)
         train = values[train_rows]
-        mean = float(np.mean(train))
-        sd = float(np.std(train, ddof=0))
+        constant = bool(np.min(train) == np.max(train))
+        mean = float(train[0]) if constant else float(np.mean(train))
+        sd = 0.0 if constant else float(np.std(train, ddof=0))
         if sd == 0.0:
             return ResponseSpec(
                 kind="continuous",

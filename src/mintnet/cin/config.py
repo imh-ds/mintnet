@@ -291,7 +291,7 @@ def prepare_data(
                         )
             if not np.isfinite(numeric).all():
                 raise ValueError(f"{spec.name}: continuous data must be finite")
-            if np.std(numeric, ddof=0) == 0:
+            if np.min(numeric) == np.max(numeric):
                 raise ValueError(f"{spec.name}: continuous variable is constant")
             values[:, column] = numeric
             if np.unique(numeric).size <= 7:
