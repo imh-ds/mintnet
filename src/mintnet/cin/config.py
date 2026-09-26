@@ -43,6 +43,8 @@ def _category_key(value: Any) -> tuple[Any, ...]:
         return ("bool", bool(value))
     if isinstance(value, Real):
         return ("number", float(value))
+    if isinstance(value, np.str_):
+        value = str(value)
     try:
         hash(value)
     except TypeError as exc:

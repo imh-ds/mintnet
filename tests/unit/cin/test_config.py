@@ -322,6 +322,41 @@ def test_numeric_category_equivalence_preserves_boolean_distinction() -> None:
     assert prepared.codes[:3, 1].tolist() == [0, 1, 2]
 
 
+@pytest.mark.parametrize(
+    ("numpy_observations", "numpy_levels"),
+    [(False, True), (True, False)],
+    ids=("python-values-numpy-levels", "numpy-values-python-levels"),
+)
+def test_numpy_string_categories_match_python_strings(
+    numpy_observations: bool,
+    numpy_levels: bool,
+) -> None:
+    frame = valid_frame()
+    labels = ["a", "b"] * 15
+    if numpy_observations:
+        labels = [np.str_(value) for value in labels]
+    frame["sleep_item"] = pd.Series(labels, dtype=object)
+    levels = np.array(["a", "b"]) if numpy_levels else ["a", "b"]
+
+    prepared = prepare_data(
+        frame,
+        {
+            "stress": {"kind": "continuous"},
+            "sleep_item": {"kind": "categorical", "levels": list(levels)},
+        },
+        CINConfig(seed=1),
+    )
+
+    assert prepared.codes[:4, 1].tolist() == [0, 1, 0, 1]
+
+
+def test_schema_rejects_duplicate_numpy_and_python_string_levels() -> None:
+    with pytest.raises(ValueError, match="x.*unique"):
+        parse_schema(
+            {"x": {"kind": "categorical", "levels": [np.str_("a"), "a"]}}
+        )
+
+
 def test_unknown_categorical_values_are_rejected() -> None:
     frame = valid_frame()
     frame.loc[0, "sleep_item"] = 9
