@@ -9,7 +9,7 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | Issue | Priority | Theme | Short description | Status | Related commits |
 | --- | --- | --- | --- | --- | --- |
 | [BUG-01](#bug-01) | P2 | Input contracts | Reject exact constant decimal inputs and training partitions | Fixed | `48d4b75`, `b50b69b` |
-| [BUG-02](#bug-02) | P2 | Input contracts | Reject complex values before lossy float conversion | Open | — |
+| [BUG-02](#bug-02) | P2 | Input contracts | Reject complex values before lossy float conversion | Fixed | `3d5b8cf` |
 | [BUG-03](#bug-03) | P2 | Input contracts | Match equivalent NumPy and Python category strings | Open | — |
 | [BUG-04](#bug-04) | P1 | Fit and stability | Return an incomplete fit when tuning is interrupted | Open | — |
 | [BUG-05](#bug-05) | P1 | Fit and stability | Keep valid pair stability when another pair is unsupported | Open | — |
@@ -61,6 +61,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Reject non-real complex values before casting, naming the affected variable.
 
 **Regression check.** Complex dtype and object scalars with nonzero imaginary parts must error; real numeric data must still work.
+
+**Fix update (2026-09-26).** Commit `3d5b8cf` checks parsed continuous values for a complex dtype before converting to float64. Inputs with nonzero imaginary components now raise a variable-named `ValueError`; complex representations with an all-zero imaginary component are converted to their real values. Added regression coverage for both complex NumPy arrays and complex object columns, plus the zero-imaginary control. The focused numeric-conversion tests passed (6 tests). The full active suite finished with 285 passed and one unrelated stale ledger assertion (BUG-23); three existing matplotlib deprecation warnings remain.
 
 ### BUG-03: Match equivalent NumPy and Python category strings
 
