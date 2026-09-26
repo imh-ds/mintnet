@@ -145,6 +145,22 @@ def test_continuous_edge_cases_keep_actual_widths() -> None:
     assert np.isfinite(tied.transform(space.prepared.values[:20, 4])).all()
 
 
+def test_decimal_constant_training_partition_has_no_predictor_or_response() -> None:
+    frame = _frame()
+    frame["constant_partition"] = np.r_[np.full(20, 0.1), np.linspace(0.2, 1.1, 10)]
+
+    space = _fit(frame)
+    block = _block(space, "constant_partition")
+    response = space.response_specs[space.prepared.names.index("constant_partition")]
+
+    assert block.width == 0
+    assert "constant_in_partition" in block.flags
+    assert block.transform(np.array([0.1, 0.2])).shape == (2, 0)
+    assert response.columns == 0
+    assert "constant_response" in response.flags
+    assert space.responses(np.arange(20))[:, _response_slice(space, "constant_partition")].shape == (20, 0)
+
+
 def test_categorical_block_is_centered_and_level_stable() -> None:
     space = _fit()
     block = _block(space, "category")

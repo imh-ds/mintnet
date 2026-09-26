@@ -338,6 +338,24 @@ def test_constant_continuous_variable_is_rejected() -> None:
         prepare_data(frame, valid_schema(), CINConfig(seed=1))
 
 
+@pytest.mark.parametrize("value", [0.1, -0.1, 1e20])
+def test_exact_constant_continuous_decimal_is_rejected(value: float) -> None:
+    frame = valid_frame()
+    frame["stress"] = np.full(len(frame), value)
+
+    with pytest.raises(ValueError, match="stress.*constant"):
+        prepare_data(frame, valid_schema(), CINConfig(seed=1))
+
+
+def test_small_but_nonzero_continuous_variation_is_retained() -> None:
+    frame = valid_frame()
+    frame["stress"] = np.r_[np.full(15, 0.1), np.full(15, 0.1 + 1e-12)]
+
+    prepared = prepare_data(frame, valid_schema(), CINConfig(seed=1))
+
+    assert np.unique(prepared.values[:, 0]).size == 2
+
+
 def test_constant_categorical_variable_is_rejected() -> None:
     frame = valid_frame()
     frame["sleep_item"] = 1
