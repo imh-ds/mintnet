@@ -157,6 +157,13 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_text_file(path: Path) -> str:
+    """Hash UTF-8 text with platform line endings normalized to LF."""
+
+    content = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
+
+
 def _git_revision() -> str | None:
     try:
         completed = subprocess.run(
@@ -216,7 +223,7 @@ def write_provenance(
         "config": _to_builtin(config_payload),
         "config_sha256": config_sha256,
         "source_config_sha256": source_config_sha256,
-        "charter_sha256": sha256_file(Path(charter_path)) if charter_path else None,
+        "charter_sha256": sha256_text_file(Path(charter_path)) if charter_path else None,
         "git_commit": _git_revision(),
         "python": platform.python_version(),
         "platform": platform.platform(),

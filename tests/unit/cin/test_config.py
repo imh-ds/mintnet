@@ -12,6 +12,7 @@ import pytest
 
 from mintnet.cin import CINConfig, estimate_stability, fit_network, make_view
 from mintnet.cin.config import parse_schema, prepare_data
+from mintnet.experiments.cin_common import sha256_text_file
 
 
 def valid_schema() -> dict[str, dict[str, object]]:
@@ -120,6 +121,15 @@ def test_config_hash_ignores_only_batch_and_timing() -> None:
     }
     for field, value in changed.items():
         assert replace(config, **{field: value}).config_hash() != config.config_hash(), field
+
+
+def test_charter_hash_is_stable_across_text_line_endings(tmp_path: Path) -> None:
+    lf = tmp_path / "charter-lf.md"
+    crlf = tmp_path / "charter-crlf.md"
+    lf.write_bytes(b"line one\nline two\n")
+    crlf.write_bytes(b"line one\r\nline two\r\n")
+
+    assert sha256_text_file(lf) == sha256_text_file(crlf)
 
 
 def test_public_import_is_lightweight() -> None:

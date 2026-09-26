@@ -25,6 +25,7 @@ from .cin_common import (  # noqa: E402
     load_yaml,
     peak_rss_mb,
     sha256_file,
+    sha256_text_file,
     threadpool_info,
     thread_limits,
     write_gzip_frame,
@@ -201,7 +202,7 @@ def _run_cell(config: CostConfig, output_dir: Path, cell: CostCell, repeat: int,
             "tuned_penalty_histogram_json": json.dumps(penalty_histogram, sort_keys=True, separators=(",", ":")),
             "first_scaled_normal_residual": cost.get("first_scaled_normal_residual"),
             "environment_json": json.dumps(environment, sort_keys=True, separators=(",", ":")),
-            "charter_sha256": sha256_file(config.charter_path),
+            "charter_sha256": sha256_text_file(config.charter_path),
         })
     except Exception as exc:  # noqa: BLE001 - failure rows are part of the contract.
         row.update({

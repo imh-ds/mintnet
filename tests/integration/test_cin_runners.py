@@ -33,6 +33,7 @@ from mintnet.experiments.cin_common import (
     IncrementalCsvWriter,
     canonical_pair_sidecar_name,
     derive_seed_bundle,
+    sha256_text_file,
     write_provenance,
     write_resolved_config,
 )
@@ -89,7 +90,7 @@ def test_provenance_records_hashes_runtime_and_thread_settings(tmp_path: Path) -
     )
     metadata = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["config_sha256"] == hashlib.sha256(config_path.read_bytes()).hexdigest()
-    assert metadata["charter_sha256"] == hashlib.sha256(charter_path.read_bytes()).hexdigest()
+    assert metadata["charter_sha256"] == sha256_text_file(charter_path)
     assert metadata["runtime_seconds"] == 1.25
     assert metadata["peak_rss_mb"] is None
     assert metadata["thread_settings"]["environment"]["OMP_NUM_THREADS"] == "1"
@@ -151,7 +152,7 @@ def test_panel_config_has_frozen_charter_and_statistical_controls() -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline.yaml")
     smoke = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     charter = ROOT / "docs" / "cin_baseline_charter.md"
-    expected_hash = hashlib.sha256(charter.read_bytes()).hexdigest()
+    expected_hash = sha256_text_file(charter)
 
     assert config.charter_path == charter
     assert smoke.charter_path == charter
@@ -166,7 +167,7 @@ def test_panel_config_has_frozen_charter_and_statistical_controls() -> None:
 def test_panel_smoke_persists_charter_identity(tmp_path: Path) -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     raw = run_baseline(config, tmp_path / "panel", write_report=False)
-    expected_hash = hashlib.sha256(config.charter_path.read_bytes()).hexdigest()
+    expected_hash = sha256_text_file(config.charter_path)
 
     assert raw["charter_sha256"].eq(expected_hash).all()
     metadata = json.loads((tmp_path / "panel" / "metadata.json").read_text(encoding="utf-8"))
