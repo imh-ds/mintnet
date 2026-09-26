@@ -7893,3 +7893,55 @@ Consequences: Task 12 may consume the charter, reports, gate checker, and
 explicit scope boundary for final documentation, but it must not close the
 statistical evidence claim until the hosted development/validation artifacts
 and gate table exist.
+
+## D-106: Execute CIN Task 11 hosted development and validation evidence
+
+Date: 2026-09-25.
+
+The hosted Task 11 campaign was executed on revision `6f2f86c` using the
+frozen configuration and charter. Development run
+`https://github.com/imh-ds/mintnet/actions/runs/36216599775` dispatched the
+ten A-I plus regression shards with replicates `0..9`. All ten shard jobs
+completed successfully and produced 200 complete raw rows and 200 validated
+pair sidecars containing 194,460 pair rows. Development-only selection
+qualified the three configured candidates in A/B and froze `delta=0.005`
+(`token=005`) by the prespecified strongest-recall rule. The stable charter
+identity used by hosted evidence is
+`0e846c6445ff4eac87c49db336ba714c86faa12facf8794080155c784c970d7c`.
+
+After selection was frozen, validation was dispatched exactly once in run
+`https://github.com/imh-ds/mintnet/actions/runs/36217428583` with replicates
+`1000..1019`. All 20 validation shard jobs completed successfully. The
+phase-aware aggregate contains all 400 expected identities, 396 complete
+rows, two incomplete rows, and two generation-error rows; sidecar validation
+produced 496 manifest entries and 578,096 sidecar rows. The two error rows
+are F population-CMI-floor failures at replicates 1004 and 1012; the two
+incomplete rows are F replicates 1003 and 1011 with seven failed pairs each.
+The generic workflow aggregate failed because it requires the full 600-row
+development-plus-validation count when given a phase-only dispatch (200 for
+development and 400 for validation). The successful shard artifacts were
+therefore aggregated locally with the existing phase-aware report and
+sidecar validators; this is an infrastructure contract limitation, not a
+shard execution failure.
+
+Decision: record the hosted evidence without retuning or rerunning
+validation. The frozen gate table has 8 passing gates, 2 failing gates, and
+2 descriptive/unavailable rows. A/B, selected-delta, F/G/H, and C runtime
+gates pass. Completion fails at `396/400 = 0.99`, and the E nonlinear-gain
+gate fails at observed `0.049111` versus the `0.10` threshold. D and I remain
+descriptive only. The result does not support closing Task 11 as a completed
+statistical-validation task or making broad recovery, inferential, causal,
+FDR, tail-probability, or substantive network claims; Task 11 remains in
+Relay review with the failure scopes explicitly recorded.
+
+The hosted jobs consumed 0.4175 runner-hours for development and 1.319722
+runner-hours for validation, plus the previously accepted 0.22-hour Task 10
+pilot, for 1.957222 hours against the 12-hour Task 11 envelope. A narrow
+follow-up fix in `e1e51a0` makes charter hashing line-ending-stable across
+Windows and GitHub Actions; focused provenance/config, runner integration,
+and gate-unit verification passes (62, 35, and 4 tests respectively).
+
+Consequences: the evidence is reproducible and auditable, but the failed
+completion and E gates must be reported as unsupported scopes. Task 12 may
+document these outcomes and the generic aggregate workflow limitation; it
+must not repair, retune, or reinterpret the failed validation scopes.
