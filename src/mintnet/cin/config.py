@@ -280,9 +280,15 @@ def prepare_data(
             ):
                 raise ValueError(f"{spec.name}: boolean data must be declared categorical")
             try:
-                numeric = pd.to_numeric(series, errors="raise").to_numpy(dtype=np.float64)
+                parsed_numeric = pd.to_numeric(series, errors="raise")
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{spec.name}: continuous data must be numeric") from exc
+            if pd.api.types.is_complex_dtype(parsed_numeric.dtype):
+                complex_values = parsed_numeric.to_numpy(dtype=np.complex128, copy=False)
+                if np.any(complex_values.imag != 0.0):
+                    raise ValueError(f"{spec.name}: continuous data must be real-valued")
+                parsed_numeric = pd.Series(complex_values.real, index=parsed_numeric.index)
+            numeric = parsed_numeric.to_numpy(dtype=np.float64)
             for raw_value, converted_value in zip(raw_values, numeric):
                 if isinstance(raw_value, Integral) and not isinstance(raw_value, bool):
                     if int(converted_value) != int(raw_value):

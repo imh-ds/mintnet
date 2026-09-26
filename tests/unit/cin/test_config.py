@@ -338,6 +338,32 @@ def test_constant_continuous_variable_is_rejected() -> None:
         prepare_data(frame, valid_schema(), CINConfig(seed=1))
 
 
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.arange(30) + 1j * np.arange(30),
+        np.asarray([complex(index, index) for index in range(30)], dtype=object),
+    ],
+    ids=("complex-dtype", "complex-object"),
+)
+def test_continuous_rejects_complex_values_without_dropping_imaginary_part(values: np.ndarray) -> None:
+    frame = valid_frame()
+    frame["stress"] = values
+
+    with pytest.raises(ValueError, match="stress.*real"):
+        prepare_data(frame, valid_schema(), CINConfig(seed=1))
+
+
+def test_continuous_accepts_complex_representation_with_zero_imaginary_part() -> None:
+    frame = valid_frame()
+    values = np.arange(30, dtype=np.float64).astype(np.complex128)
+    frame["stress"] = values
+
+    prepared = prepare_data(frame, valid_schema(), CINConfig(seed=1))
+
+    np.testing.assert_array_equal(prepared.values[:, 0], values.real)
+
+
 @pytest.mark.parametrize("value", [0.1, -0.1, 1e20])
 def test_exact_constant_continuous_decimal_is_rejected(value: float) -> None:
     frame = valid_frame()
