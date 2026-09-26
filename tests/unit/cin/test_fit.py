@@ -383,6 +383,30 @@ def test_fit_network_expired_deadline_marks_pairs_not_started() -> None:
     assert result.pairs.weight_nats_raw.isna().all()
 
 
+@pytest.mark.parametrize("failure_kind", ["budget", "numerical"])
+def test_fit_network_returns_incomplete_result_when_tuning_fails(
+    monkeypatch: pytest.MonkeyPatch, failure_kind: str
+) -> None:
+    import mintnet.cin.fit as fit_module
+    from mintnet.cin.ridge import RidgeNumericalFailure
+
+    frame, schema, config = _continuous_fixture()
+
+    def fail_tuning(*args: object, **kwargs: object) -> object:
+        if failure_kind == "budget":
+            raise BudgetExceeded("injected tuning deadline")
+        raise RidgeNumericalFailure("injected tuning failure")
+
+    monkeypatch.setattr(fit_module, "tune_lambdas", fail_tuning)
+    result = fit_network(frame, schema, config)
+
+    expected_status = "budget_exceeded" if failure_kind == "budget" else "numerical_failure"
+    assert result.metadata["complete"] is False
+    assert result.metadata["runtime"]["status"] == "incomplete"
+    assert set(result.pairs.status) == {expected_status}
+    assert result.pairs.weight_nats_raw.isna().all()
+
+
 def test_fit_network_isolates_target_numerical_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     import mintnet.cin.fit as fit_module
     from mintnet.cin.ridge import RidgeNumericalFailure

@@ -964,6 +964,7 @@ def _fit_prepared(
     fold_records: list[dict[str, Any]] = []
     complete = True
     tuning_started = False
+    tuning = None
     outer_started = False
 
     try:
@@ -1018,7 +1019,7 @@ def _fit_prepared(
     metadata["complete"] = complete
     metadata["runtime"]["status"] = "complete" if complete else "incomplete"
     metadata["runtime"]["elapsed_seconds"] = float(time.monotonic() - started_at)
-    if tuning_started:
+    if tuning is not None:
         counters.tuned_penalty_values.extend(
             float(value)
             for value in tuning.lambda_by_fold.ravel()
