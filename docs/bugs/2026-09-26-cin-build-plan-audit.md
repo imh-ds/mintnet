@@ -8,6 +8,8 @@ Follow-up verification on 2026-09-26 used Python 3.12.14: **297 passed, 1 failed
 
 Follow-up verification for BUG-12–15 used Python 3.12.14: the final full suite reported **312 passed, 1 failed, 3 skipped in 183.07 s**. The sole failure remains the existing BUG-23 cost-ledger snapshot assertion; the skips require optional matplotlib. The focused panel-selection/gate and shard-equivalence tests passed (25 tests); Ruff and `git diff --check` passed. The implementation is committed as `d69e457`.
 
+Follow-up verification for BUG-16–18 used Python 3.12.14: the full suite reported **315 passed, 1 failed, 3 skipped in 194.14 s**. The only failure remains BUG-23's stale cost-ledger snapshot assertion; the skips require optional matplotlib. All three BUG-16–18 regression tests passed, as did Ruff and `git diff --check`. The implementation is committed as `3b753ee`. This corrects runner behavior going forward; no hosted evidence was regenerated or retuned, and the historical D evidence remains unpaired.
+
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
 | Issue | Priority | Theme | Short description | Status | Related commits |
@@ -27,9 +29,9 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-13](#bug-13) | P1 | Statistical evidence | Require each named case to pass validation gates | Fixed | `d69e457` |
 | [BUG-14](#bug-14) | P1 | Statistical evidence | Enforce the Case C point-fit runtime threshold | Fixed | `d69e457` |
 | [BUG-15](#bug-15) | P1 | Statistical evidence | Validate development identities before freezing delta | Fixed | `d69e457` |
-| [BUG-16](#bug-16) | P2 | Statistical evidence | Use paired B/D dataset seeds in the runner | Open | — |
-| [BUG-17](#bug-17) | P2 | Statistical evidence | Count isolated nodes in population edge density | Open | — |
-| [BUG-18](#bug-18) | P2 | Statistical evidence | Average categorical excess loss over categorical nodes only | Open | — |
+| [BUG-16](#bug-16) | P2 | Statistical evidence | Use paired B/D dataset seeds in the runner | Fixed | `3b753ee` |
+| [BUG-17](#bug-17) | P2 | Statistical evidence | Count isolated nodes in population edge density | Fixed | `3b753ee` |
+| [BUG-18](#bug-18) | P2 | Statistical evidence | Average categorical excess loss over categorical nodes only | Fixed | `3b753ee` |
 | [BUG-19](#bug-19) | P1 | Aggregation and sidecars | Support the prescribed phase-only aggregation sequence | Open | — |
 | [BUG-20](#bug-20) | P1 | Aggregation and sidecars | Stage validated panel sidecars before writing reports | Open | — |
 | [BUG-21](#bug-21) | P1 | Aggregation and sidecars | Reject mixed shard provenance and retain environment details | Open | — |
@@ -268,6 +270,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Capture runner-level datasets for the same phase/replicate: identical truth and latent draws, prescribed transformation only.
 
+**Fix update (2026-09-26).** Commit `3b753ee` derives D's structure and sample seeds from the corresponding B dataset coordinates while retaining D's case-specific CIN-fit, comparator-fit, and stability seeds. Runner regression coverage confirms shared data seeds and truth, the configured sinh transformation, unchanged other columns, and distinct CIN fit seeds. This makes newly generated B/D rows paired; historical hosted D rows remain unpaired and were not retroactively relabeled or regenerated.
+
 ### BUG-17: Count isolated nodes in population edge density
 
 **Priority:** P2. **Source:** `src/mintnet/simulation/cin_networks.py:139–167`. **Build plan:** Task 08.
@@ -280,6 +284,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Check E/H and a small graph with isolates and no oracle CMI.
 
+**Fix update (2026-09-26).** Commit `3b753ee` adds an explicit full-population `node_count` to `population_signal_summary` and supplies it from each simulation generator. Density now uses all declared nodes, including isolated distractors, while unavailable population CMI remains unavailable. The regression checks E at `24/435` and H at `4/28`.
+
 ### BUG-18: Average categorical excess loss over categorical nodes only
 
 **Priority:** P2. **Source:** `src/mintnet/experiments/cin_baseline.py:416–419`. **Build plan:** Task 11.
@@ -291,6 +297,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Filter node diagnostics to declared categorical targets and preserve a contributor count/unavailable state.
 
 **Regression check.** Make categorical and continuous gains differ in a small mixed fixture; only categorical gains may determine the field.
+
+**Fix update (2026-09-26).** Commit `3b753ee` filters `full_minus_intercept` by schema-declared categorical target before calculating `categorical_excess_loss`. Raw panel rows now include `n_categorical_targets`, the number of categorical target diagnostics that contributed; the loss stays unavailable when none contribute. A mixed categorical/continuous runner regression proves the continuous target cannot distort the categorical loss and checks the contributor count.
 
 ## Aggregation and sidecars
 
