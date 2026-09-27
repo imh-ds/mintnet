@@ -143,7 +143,44 @@ For dense fits, inspect the full pair table and matrix and use a presentation li
 
 ## Reproducing the statistical panel
 
-The repository runner commands and shard workflow inputs are maintained in [Task 09](design/cin/build-plan/09_runner_actions_infrastructure.md). A local smoke run checks code paths only; it is not timing or recovery evidence. For a frozen development and validation artifact, use the phase-specific aggregation and mandatory provenance gate commands in that runner guide, and retain raw rows, sidecars, resolved configuration, metadata and gate results together.
+The repository's deterministic runners support local smoke checks and the generic sharded Actions workflow. Local smoke is a code-path check only, not timing or recovery evidence:
+
+```text
+python -m mintnet.experiments.cin_cost --config configs/cin_cost_smoke.yaml --output results/generated/cin_cost_smoke --workers 1
+python -m mintnet.experiments.cin_baseline --config configs/cin_baseline_smoke.yaml --output results/generated/cin_baseline_smoke --workers 1
+```
+
+These commands retain raw rows, resolved configuration, metadata, sidecars, and runner reports. Do not add local smoke timings to the compute ledger.
+
+The following workflow inputs were checked against `.github/workflows/sharded_benchmark.yml`. These are documented examples; this guide did not dispatch new hosted work. Use the complete configured axes when dispatching the frozen panel:
+
+```text
+gh workflow run sharded_benchmark.yml \
+  -f runner_module=mintnet.experiments.cin_baseline \
+  -f config=configs/cin_baseline.yaml \
+  -f dim1_flag=--cases -f dim1_values=A,B,C,D,E,F,G,H,I,regression \
+  -f dim2_flag=--replicate-batches -f dim2_values=dev0,val0,val1
+```
+
+The cost-pilot form uses the same workflow with the cost cells and repeats:
+
+```text
+gh workflow run sharded_benchmark.yml \
+  -f runner_module=mintnet.experiments.cin_cost \
+  -f config=configs/cin_cost.yaml \
+  -f dim1_flag=--cells -f dim1_values=c_p8_n100,c_p30_n100,c_p100_n100,c_p100_n300,c_p100_n1000,k5_p30_n150,k10_p100_n200,mix_p100_n200 \
+  -f dim2_flag=--repeat -f dim2_values=1,2
+```
+
+The runner code limits numerical libraries to one thread. The Actions workflow aggregates the downloaded shards; phase-only aggregation is supported for the panel. Keep development and validation separate, freeze `development_selection.json` from development before validation, and run validation once without retuning. For example:
+
+```text
+python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir development-shards --output results/generated/cin_baseline_development --phase development
+python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir validation-shards --output results/generated/cin_baseline_validation --phase validation
+python scripts/cin_gate_check.py --raw results/generated/cin_baseline_validation/raw_metrics.csv --config configs/cin_baseline.yaml --selection results/generated/cin_baseline_development/development_selection.json --provenance results/generated/cin_baseline_validation/metadata.json --output results/generated/cin_baseline_validation/gate_results.json
+```
+
+Retain raw rows, sidecars, resolved configuration, metadata, and gate results together. See [Task 09](design/cin/build-plan/09_runner_actions_infrastructure.md) for the implementation contract and shard layout. The statistical panel's compute ceiling is 12 aggregate runner-hours.
 
 The hosted results in D-106 are frozen: 396/400 validation rows were complete, two incomplete, and two generation errors. The completion gate failed and the E nonlinear-gain gate failed (0.049111 against 0.10); A/B, selected-delta, F/G/H recovery and C runtime gates passed as recorded. D and I were descriptive. Do not retune or rerun validation to alter these outcomes. High-p categorical recovery is unevidenced. The historical organic-network regression is descriptive only. No broad recovery, causal, inferential, FDR or tail-probability claim follows from the panel.
 
