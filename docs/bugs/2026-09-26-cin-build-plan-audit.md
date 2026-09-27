@@ -10,6 +10,8 @@ Follow-up verification for BUG-12–15 used Python 3.12.14: the final full suite
 
 Follow-up verification for BUG-16–18 used Python 3.12.14: the full suite reported **315 passed, 1 failed, 3 skipped in 194.14 s**. The only failure remains BUG-23's stale cost-ledger snapshot assertion; the skips require optional matplotlib. All three BUG-16–18 regression tests passed, as did Ruff and `git diff --check`. The implementation is committed as `3b753ee`. This corrects runner behavior going forward; no hosted evidence was regenerated or retuned, and the historical D evidence remains unpaired.
 
+Follow-up verification for BUG-19–21 used Python 3.12.14: the final full suite reported **322 passed, 1 failed, 3 skipped in 220.39 s**. The only failure is the existing BUG-23 cost-ledger snapshot assertion; the skips require optional matplotlib. Focused aggregation, provenance, gate-binding, and guide tests passed, as did Ruff and `git diff --check`. The implementation is committed as `95eb893`.
+
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
 | Issue | Priority | Theme | Short description | Status | Related commits |
@@ -32,9 +34,9 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-16](#bug-16) | P2 | Statistical evidence | Use paired B/D dataset seeds in the runner | Fixed | `3b753ee` |
 | [BUG-17](#bug-17) | P2 | Statistical evidence | Count isolated nodes in population edge density | Fixed | `3b753ee` |
 | [BUG-18](#bug-18) | P2 | Statistical evidence | Average categorical excess loss over categorical nodes only | Fixed | `3b753ee` |
-| [BUG-19](#bug-19) | P1 | Aggregation and sidecars | Support the prescribed phase-only aggregation sequence | Open | — |
-| [BUG-20](#bug-20) | P1 | Aggregation and sidecars | Stage validated panel sidecars before writing reports | Open | — |
-| [BUG-21](#bug-21) | P1 | Aggregation and sidecars | Reject mixed shard provenance and retain environment details | Open | — |
+| [BUG-19](#bug-19) | P1 | Aggregation and sidecars | Support the prescribed phase-only aggregation sequence | Fixed | `95eb893` |
+| [BUG-20](#bug-20) | P1 | Aggregation and sidecars | Stage validated panel sidecars before writing reports | Fixed | `95eb893` |
+| [BUG-21](#bug-21) | P1 | Aggregation and sidecars | Reject mixed shard provenance and retain environment details | Fixed | `95eb893` |
 | [BUG-22](#bug-22) | P1 | Aggregation and sidecars | Validate pair identities and requested stability repeat coverage | Open | — |
 | [BUG-23](#bug-23) | P2 | Aggregation and sidecars | Update the cost ledger test for later dispatches | Open | — |
 | [BUG-24](#bug-24) | P2 | Documentation and reporting | Produce the declared descriptive statistical-panel report | Open | — |
@@ -314,6 +316,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Aggregate each smoke phase independently; reject missing/duplicate identities and phase mixing.
 
+**Fix update (2026-09-27).** Commit `95eb893` adds `--phase development|validation` to the generic aggregator for CIN panel runs, with exact configured `(case, phase, replicate, method)` identity checks. It rejects mixed phases, missing/duplicate identities, and foreign replicate IDs. The sidecar combiner accepts the same phase filter, and the manual workflow plus user guide now expose the phase-only sequence. The development smoke aggregation test confirms exact row coverage and phase-scoped sidecars/report output.
+
 ### BUG-20: Stage validated panel sidecars before writing reports
 
 **Priority:** P1. **Source:** `scripts/aggregate_shards.py:74–77; src/mintnet/experiments/cin_baseline_reporting.py:34–49`. **Build plan:** Task 09.
@@ -326,6 +330,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** From clean output, aggregate a complete panel smoke grid and produce its report; deleting a promised sidecar must fail before publication.
 
+**Fix update (2026-09-27).** Commit `95eb893` validates and stages promised pair/stability sidecars before invoking the report writer. Raw metrics, combined sidecars, provenance, and report files are built in a temporary sibling directory and published together only after validation and report generation succeed. A missing promised sidecar now raises before publishing raw metrics or a report. The generic aggregation command performs the complete sequence; a second sidecar command is no longer needed.
+
 ### BUG-21: Reject mixed shard provenance and retain environment details
 
 **Priority:** P1. **Source:** `scripts/aggregate_shards.py:98–127`. **Build plan:** Task 09,11.
@@ -337,6 +343,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Check each required config/charter/code identity, require metadata, preserve per-shard environments and meaningful aggregate summaries. Bind gate input to validated provenance.
 
 **Regression check.** Reject conflicting or missing provenance; confirm a valid aggregate retains package/thread/CPU records.
+
+**Fix update (2026-09-27).** Commit `95eb893` requires every shard's metadata and resolved config; validates resolved/source config hashes, charter hash, git revision, raw-row charter provenance, and agreement across shards before publication. Aggregate metadata retains each shard's package versions, Python/platform, thread settings, CPU, RSS, and runtime, with environment summaries and a clearly labeled summed runtime. The gate CLI now requires `--provenance` and verifies the raw CSV hash, requested config, resolved config, and charter against that aggregate metadata. Regression tests cover mixed revisions, missing metadata, environment retention, and rejection of modified gate input.
 
 ### BUG-22: Validate pair identities and requested stability repeat coverage
 
