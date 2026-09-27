@@ -6,6 +6,8 @@ Priority convention: P1 affects result integrity, availability, or evidence acce
 
 Follow-up verification on 2026-09-26 used Python 3.12.14: **297 passed, 1 failed, 3 skipped in 202.78 s**. The one failure is the existing BUG-23 cost-ledger snapshot assertion; the three skips require optional matplotlib. This run includes the BUG-04–11 regression tests. The focused fit, view, and stability suites passed (61 tests, with three optional matplotlib skips); Ruff and `git diff --check` passed for BUG-09–11.
 
+Follow-up verification for BUG-12–15 used Python 3.12.14: the final full suite reported **312 passed, 1 failed, 3 skipped in 183.07 s**. The sole failure remains the existing BUG-23 cost-ledger snapshot assertion; the skips require optional matplotlib. The focused panel-selection/gate and shard-equivalence tests passed (25 tests); Ruff and `git diff --check` passed. The implementation is committed as `d69e457`.
+
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
 | Issue | Priority | Theme | Short description | Status | Related commits |
@@ -21,10 +23,10 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-09](#bug-09) | P1 | Persistence and methods | Preserve schema order when saving fits and stability | Fixed | `8c4dd7e` |
 | [BUG-10](#bug-10) | P3 | Persistence and methods | Restore exact float64 CSV round trips | Fixed | `8c4dd7e` |
 | [BUG-11](#bug-11) | P2 | Persistence and methods | State the stability cutoff in methods text | Fixed | `8c4dd7e` |
-| [BUG-12](#bug-12) | P1 | Statistical evidence | Compute selected-threshold strong-edge recall correctly | Open | — |
-| [BUG-13](#bug-13) | P1 | Statistical evidence | Require each named case to pass validation gates | Open | — |
-| [BUG-14](#bug-14) | P1 | Statistical evidence | Enforce the Case C point-fit runtime threshold | Open | — |
-| [BUG-15](#bug-15) | P1 | Statistical evidence | Validate development identities before freezing delta | Open | — |
+| [BUG-12](#bug-12) | P1 | Statistical evidence | Compute selected-threshold strong-edge recall correctly | Fixed | `d69e457` |
+| [BUG-13](#bug-13) | P1 | Statistical evidence | Require each named case to pass validation gates | Fixed | `d69e457` |
+| [BUG-14](#bug-14) | P1 | Statistical evidence | Enforce the Case C point-fit runtime threshold | Fixed | `d69e457` |
+| [BUG-15](#bug-15) | P1 | Statistical evidence | Validate development identities before freezing delta | Fixed | `d69e457` |
 | [BUG-16](#bug-16) | P2 | Statistical evidence | Use paired B/D dataset seeds in the runner | Open | — |
 | [BUG-17](#bug-17) | P2 | Statistical evidence | Count isolated nodes in population edge density | Open | — |
 | [BUG-18](#bug-18) | P2 | Statistical evidence | Average categorical excess loss over categorical nodes only | Open | — |
@@ -210,6 +212,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Include mixed weak/strong truth, strong edges above/below delta, and empty views.
 
+**Fix update (2026-09-26).** Commit `d69e457` adds `delta_{token}_strong_recall` for each display threshold and computes it over the declared strong-edge truth set. Delta selection and validation gates now consume that selected-threshold metric while preserving the legacy all-positive-edge recall. Regression coverage distinguishes the two estimands with mixed weak/strong truth and checks the selected-threshold values. No hosted result or frozen charter was recalculated. The focused panel checks passed.
+
 ### BUG-13: Require each named case to pass validation gates
 
 **Priority:** P1. **Source:** `scripts/cin_gate_check.py:132–152`. **Build plan:** Task 11.
@@ -221,6 +225,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Emit per-case gate rows, or make each combined gate require all constituent case means to pass, with case-level counts and unavailable statuses.
 
 **Regression check.** For each pooled quantity, make one case fail and another offset its mean; the verdict must identify the failing case.
+
+**Fix update (2026-09-26).** Commit `d69e457` replaces pooled A/B, F/G/H, and F/G validation conditions with independent per-case gates, so one case cannot mask another. Strong-set availability is also checked across every replicate, with a missing denominator causing that case's gate to fail. Regression tests force one case to fail while its neighbor passes. Focused gate tests passed.
 
 ### BUG-14: Enforce the Case C point-fit runtime threshold
 
@@ -234,6 +240,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Test below, at and above threshold, plus missing, negative and infinite elapsed values.
 
+**Fix update (2026-09-26).** Commit `d69e457` records `point_fit_seconds` from fit runtime metadata and makes the Case C gate require a completed fit with a finite, nonnegative point-fit duration no greater than `point_fit_max_seconds`. Missing runtime evidence fails the gate; this implements the declared reporting gate and does not add a hard interruption budget. Boundary, above-limit, missing, negative, and infinite-value regressions passed.
+
 ### BUG-15: Validate development identities before freezing delta
 
 **Priority:** P1. **Source:** `src/mintnet/experiments/cin_baseline_reporting.py:74–110`. **Build plan:** Task 11.
@@ -245,6 +253,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Require the full configured A/B development identity set, unique permitted replicate IDs, and matching input/config provenance before freezing. Mark partial shard reports unavailable.
 
 **Regression check.** Reject missing, duplicate, out-of-range and wrong-hash input; confirm valid complete input selects deterministically.
+
+**Fix update (2026-09-26).** Commit `d69e457` requires unique A/B development CIN identities to exactly match the configured replicate set and requires every row's charter hash to match the config before selection. Invalid replicate values, partial/extra/duplicate identities, missing required metrics, unavailable strong-edge denominators, or undefined per-threshold strong recall now produce `selection_status=unavailable` rather than a frozen delta. Validation rows remain excluded. The regression suite covers incomplete, duplicate, out-of-range, wrong-charter, and missing-strong-set inputs as well as deterministic valid selection.
 
 ### BUG-16: Use paired B/D dataset seeds in the runner
 
