@@ -201,6 +201,33 @@ def test_stability_result_round_trips_records_and_metadata(tmp_path) -> None:
     assert (tmp_path / "metadata.json").exists()
 
 
+def test_stability_round_trip_preserves_non_alphabetical_schema_order(tmp_path) -> None:
+    result = _sample_stability_result()
+    name_map = {"a": "z", "b": "a", "c": "m"}
+    metadata = copy.deepcopy(result.metadata)
+    metadata["schema"] = {name_map[name]: spec for name, spec in metadata["schema"].items()}
+    metadata["node_order"] = list(metadata["schema"])
+    metadata["fit_id"] = compute_fit_id(
+        metadata["config_hash"],
+        metadata["schema"],
+        metadata["digests"]["data_digest"],
+        "revision",
+    )
+    records = result.records.copy()
+    records["node_i"] = records["node_i"].map(name_map)
+    records["node_j"] = records["node_j"].map(name_map)
+    records["fit_id"] = metadata["fit_id"]
+    non_alphabetical = StabilityResult(records, metadata)
+
+    non_alphabetical.save(tmp_path)
+    restored = load_stability(tmp_path)
+
+    assert restored.metadata["node_order"] == ["z", "a", "m"]
+    assert list(restored.records[["node_i", "node_j"]].itertuples(index=False, name=None)) == list(
+        records[["node_i", "node_j"]].itertuples(index=False, name=None)
+    )
+
+
 def test_stability_result_supports_compressed_records(tmp_path) -> None:
     result = _sample_stability_result()
 
@@ -209,6 +236,33 @@ def test_stability_result_supports_compressed_records(tmp_path) -> None:
 
     assert (tmp_path / "stability_records.csv.gz").exists()
     pd.testing.assert_frame_equal(restored.records, result.records)
+
+
+def test_compressed_stability_csv_round_trip_preserves_exact_float64(tmp_path) -> None:
+    result = _sample_stability_result()
+    exact_weight = np.nextafter(0.1, 1.0)
+    records = result.records.copy()
+    records.loc[0, "weight_nats_raw"] = exact_weight
+    records.loc[0, "gain_i_to_j"] = exact_weight
+    result = StabilityResult(records, result.metadata)
+
+    result.save(tmp_path, compressed=True)
+    restored = load_stability(tmp_path)
+
+    pd.testing.assert_frame_equal(restored.records, result.records, check_exact=True)
+    assert restored.records.loc[0, "weight_nats_raw"] == exact_weight
+
+
+def test_methods_text_states_the_applied_stability_cutoff() -> None:
+    fit = _fit()
+    result = _sample_stability_result()
+
+    lower = make_view(fit, stability=result, min_stability=0.5).methods_text()
+    higher = make_view(fit, stability=result, min_stability=0.9).methods_text()
+
+    assert "stability >= 0.5 (inclusive)" in lower
+    assert "stability >= 0.9 (inclusive)" in higher
+    assert lower != higher
 
 
 def test_identity_guard_runs_before_repeat_runner(monkeypatch) -> None:

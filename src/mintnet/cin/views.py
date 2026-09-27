@@ -312,8 +312,10 @@ class NetworkView:
             stability = self.stability_meta or {}
             repeats = stability.get("B", stability.get("repeats", "not recorded"))
             fraction = stability.get("fraction", stability.get("subsample_fraction", "not recorded"))
+            cutoff = float(self.settings["min_stability"])
             stability_text = (
-                f"stability means reproducibility under B={repeats} subsamples of fraction {fraction}"
+                f"stability means reproducibility under B={repeats} subsamples of fraction {fraction}; "
+                f"applied cutoff: stability >= {cutoff:g} (inclusive)"
             )
         presentation = "no presentation limit"
         if self.settings.get("presentation_limit"):

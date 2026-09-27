@@ -102,10 +102,14 @@ def _fit_definition(fit: NetworkFit) -> tuple[dict[str, Any], dict[str, Any], CI
         "row_identity_digest",
     } <= set(digests):
         raise ValueError("fit metadata must contain data and row identity digests")
+    node_order = metadata.get("node_order", list(schema))
+    if not isinstance(node_order, list) or set(map(str, node_order)) != set(map(str, schema)):
+        raise ValueError("fit metadata node_order does not match schema")
+    ordered_schema = {name: schema[name] for name in node_order}
     config_values = dict(config_payload)
     if isinstance(config_values.get("lambda_grid"), list):
         config_values["lambda_grid"] = tuple(config_values["lambda_grid"])
-    return copy.deepcopy(dict(schema)), copy.deepcopy(dict(metadata)), CINConfig(**config_values)
+    return copy.deepcopy(dict(ordered_schema)), copy.deepcopy(dict(metadata)), CINConfig(**config_values)
 
 
 def _validate_request(repeats: int, fraction: float, max_seconds: float) -> None:
@@ -138,6 +142,7 @@ def _base_metadata(
         "config_hash": fit_metadata["config_hash"],
         "digests": copy.deepcopy(fit_metadata["digests"]),
         "schema": copy.deepcopy(fit_metadata["schema"]),
+        "node_order": list(fit_metadata.get("node_order", fit_metadata["schema"])),
         "seed": int(config.seed),
         "stability_tag": STABILITY_TAG,
         "repeats_requested": int(repeats),
@@ -406,6 +411,18 @@ def _validate_metadata(metadata: Mapping[str, Any]) -> None:
         raise ValueError(f"stability metadata is missing fields: {sorted(missing)!r}")
     if metadata["stability_tag"] != STABILITY_TAG:
         raise ValueError("stability metadata has an unknown seed tag")
+    schema = metadata["schema"]
+    if not isinstance(schema, Mapping):
+        raise ValueError("stability metadata has an invalid schema")
+    schema_names = [str(name) for name in schema]
+    node_order = metadata.get("node_order", schema_names)
+    if (
+        not isinstance(node_order, list)
+        or len(node_order) != len(schema_names)
+        or len({str(name) for name in node_order}) != len(node_order)
+        or {str(name) for name in node_order} != set(schema_names)
+    ):
+        raise ValueError("stability metadata has an invalid node order")
     digests = metadata["digests"]
     if not isinstance(digests, Mapping) or not {
         "data_digest",
@@ -432,8 +449,10 @@ def _validate_metadata(metadata: Mapping[str, Any]) -> None:
         raise ValueError("stability metadata has an inconsistent completion count")
 
 
-def _canonical_pairs(schema: Mapping[str, Any]) -> set[tuple[str, str]]:
-    names = [str(name) for name in schema]
+def _canonical_pairs(
+    schema: Mapping[str, Any], node_order: list[str] | None = None
+) -> set[tuple[str, str]]:
+    names = [str(name) for name in (node_order if node_order is not None else schema)]
     return {
         (names[left], names[right])
         for left in range(len(names))
@@ -447,7 +466,9 @@ def _validate_records(records: pd.DataFrame, metadata: Mapping[str, Any]) -> Non
         raise ValueError(f"stability records are missing columns: {missing!r}")
     if list(records.columns) != list(STABILITY_COLUMNS):
         raise ValueError("stability records have an unexpected column order")
-    expected_pairs = _canonical_pairs(metadata["schema"])
+    expected_pairs = _canonical_pairs(
+        metadata["schema"], metadata.get("node_order")
+    )
     repeat_seeds = tuple(int(seed) for seed in metadata["repeat_seeds"])
     completed = {int(value) for value in metadata["completed_repeat_ids"]}
     pairs_by_completed_repeat = {repeat_id: set() for repeat_id in completed}
@@ -511,6 +532,9 @@ class StabilityResult:
         if not isinstance(self.metadata, dict):
             raise ValueError("metadata must be a dictionary")
         metadata = copy.deepcopy(self.metadata)
+        schema = metadata.get("schema")
+        if isinstance(schema, Mapping):
+            metadata.setdefault("node_order", [str(name) for name in schema])
         _validate_metadata(metadata)
         records = self.records.copy(deep=True)
         missing = [column for column in STABILITY_COLUMNS if column not in records.columns]
@@ -552,7 +576,6 @@ class StabilityResult:
 
 
 def _read_records(path: Path) -> pd.DataFrame:
-    records = pd.read_csv(path, keep_default_na=False, compression="infer")
     numeric_columns = {
         "repeat_id",
         "repeat_seed",
@@ -560,6 +583,13 @@ def _read_records(path: Path) -> pd.DataFrame:
         "gain_j_to_i",
         "weight_nats_raw",
     }
+    records = pd.read_csv(
+        path,
+        keep_default_na=False,
+        na_values={column: [""] for column in numeric_columns},
+        compression="infer",
+        float_precision="round_trip",
+    )
     for column in numeric_columns & set(records.columns):
         records[column] = pd.to_numeric(records[column], errors="coerce")
     return records
@@ -601,7 +631,7 @@ def stability_for_rule(
     if not isinstance(require_both_positive, bool):
         raise ValueError("require_both_positive must be a boolean")
 
-    names = [str(name) for name in result.metadata["schema"]]
+    names = [str(name) for name in result.metadata["node_order"]]
     records = result.records
     rows: list[dict[str, Any]] = []
     for left_index, left in enumerate(names):

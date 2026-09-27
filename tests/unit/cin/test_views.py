@@ -149,6 +149,68 @@ def test_network_fit_save_load_round_trip_preserves_tables_and_metadata(tmp_path
     assert restored.metadata == fit.metadata
 
 
+def test_network_fit_save_load_preserves_non_alphabetical_schema_order(tmp_path) -> None:
+    fit = _sample_fit()
+    name_map = {"alpha": "z", "beta": "a", "gamma": "m"}
+    schema = {name_map[name]: spec for name, spec in fit.metadata["schema"].items()}
+    metadata = dict(fit.metadata)
+    metadata["schema"] = schema
+    metadata["node_order"] = list(schema)
+    metadata["fit_id"] = compute_fit_id(
+        metadata["config_hash"],
+        schema,
+        metadata["digests"]["data_digest"],
+        metadata["git_revision"],
+    )
+    pairs = fit.pairs.copy()
+    pairs["node_i"] = pairs["node_i"].map(name_map)
+    pairs["node_j"] = pairs["node_j"].map(name_map)
+    non_alphabetical = NetworkFit(
+        pairs,
+        pd.DataFrame([{"node": name} for name in schema]),
+        fit.folds,
+        metadata,
+    )
+
+    non_alphabetical.save(tmp_path)
+    restored = load_fit(tmp_path)
+
+    assert restored.metadata["node_order"] == ["z", "a", "m"]
+    assert list(restored.nodes["node"]) == ["z", "a", "m"]
+    assert list(restored.pairs[["node_i", "node_j"]].itertuples(index=False, name=None)) == [
+        ("z", "a"),
+        ("z", "m"),
+        ("a", "m"),
+    ]
+
+    metadata_path = tmp_path / "metadata.json"
+    legacy_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy_metadata.pop("node_order")
+    metadata_path.write_text(json.dumps(legacy_metadata), encoding="utf-8")
+    legacy_restored = load_fit(tmp_path)
+
+    assert legacy_restored.metadata["node_order"] == ["z", "a", "m"]
+
+
+def test_network_fit_csv_round_trip_is_exact_at_inclusive_threshold(tmp_path) -> None:
+    fit = _sample_fit()
+    exact_weight = np.nextafter(0.1, 1.0)
+    pairs = fit.pairs.copy()
+    pairs.loc[0, "weight_nats_raw"] = exact_weight
+    pairs.loc[0, "display_magnitude_nats"] = exact_weight
+    fit = NetworkFit(pairs, fit.nodes, fit.folds, fit.metadata)
+
+    fit.save(tmp_path)
+    restored = load_fit(tmp_path)
+    view = make_view(restored, min_effect=exact_weight)
+
+    pd.testing.assert_frame_equal(restored.pairs, fit.pairs, check_exact=True)
+    assert restored.pairs.loc[0, "display_magnitude_nats"] == exact_weight
+    assert list(view.edges[["node_i", "node_j"]].itertuples(index=False, name=None)) == [
+        ("alpha", "beta")
+    ]
+
+
 def test_network_fit_persists_incomplete_pairs_as_nan_not_zero(tmp_path) -> None:
     fit = _sample_fit()
 

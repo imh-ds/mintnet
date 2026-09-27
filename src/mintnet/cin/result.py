@@ -81,14 +81,23 @@ def compute_fit_id(
 
 def _node_order(metadata: Mapping[str, Any], nodes: pd.DataFrame) -> list[str]:
     schema = metadata.get("schema")
-    if isinstance(schema, Mapping):
-        names = [str(name) for name in schema]
-    elif "node" in nodes.columns:
+    if not isinstance(schema, Mapping):
+        raise ValueError("fit metadata must contain schema variable order")
+    schema_names = [str(name) for name in schema]
+    explicit_order = metadata.get("node_order")
+    if explicit_order is not None:
+        if not isinstance(explicit_order, list):
+            raise ValueError("fit metadata node_order must be a list")
+        names = [str(name) for name in explicit_order]
+    elif "node" in nodes.columns and set(nodes["node"].astype(str)) == set(schema_names):
+        # Older saved fits sorted metadata keys; the node table retained order.
         names = [str(name) for name in nodes["node"]]
     else:
-        raise ValueError("fit metadata must contain schema variable order")
+        names = schema_names
     if len(names) < 2 or len(set(names)) != len(names):
         raise ValueError("fit schema must contain at least two unique node names")
+    if set(names) != set(schema_names):
+        raise ValueError("fit metadata node_order does not match metadata schema")
     if "node" in nodes.columns and [str(name) for name in nodes["node"]] != names:
         raise ValueError("nodes table order does not match metadata schema")
     return names
@@ -125,7 +134,6 @@ def _write_csv(frame: pd.DataFrame, path: Path) -> None:
 
 
 def _read_pairs(path: Path) -> pd.DataFrame:
-    pairs = pd.read_csv(path, keep_default_na=False)
     numeric_columns = {
         "gain_i_to_j",
         "gain_j_to_i",
@@ -136,6 +144,12 @@ def _read_pairs(path: Path) -> pd.DataFrame:
         "n_scored",
         "folds_complete",
     }
+    pairs = pd.read_csv(
+        path,
+        keep_default_na=False,
+        na_values={column: [""] for column in numeric_columns},
+        float_precision="round_trip",
+    )
     for column in numeric_columns & set(pairs.columns):
         pairs[column] = pd.to_numeric(pairs[column], errors="coerce")
     return pairs
@@ -161,10 +175,14 @@ class NetworkFit:
         pairs = pairs.loc[:, [*PAIR_COLUMNS, *extra]]
         if not isinstance(self.metadata, dict):
             raise ValueError("metadata must be a dictionary")
+        metadata = copy.deepcopy(self.metadata)
+        schema = metadata.get("schema")
+        if isinstance(schema, Mapping):
+            metadata.setdefault("node_order", [str(name) for name in schema])
         object.__setattr__(self, "pairs", pairs)
         object.__setattr__(self, "nodes", nodes)
         object.__setattr__(self, "folds", folds)
-        object.__setattr__(self, "metadata", copy.deepcopy(self.metadata))
+        object.__setattr__(self, "metadata", metadata)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe payload suitable for the Task 6 writer."""
@@ -219,7 +237,7 @@ class NetworkFit:
 
 
 def _read_matrix(path: Path, names: list[str]) -> pd.DataFrame:
-    matrix = pd.read_csv(path, index_col=0)
+    matrix = pd.read_csv(path, index_col=0, float_precision="round_trip")
     matrix.index = matrix.index.astype(str)
     matrix.columns = matrix.columns.astype(str)
     if list(matrix.index) != names or list(matrix.columns) != names:
@@ -259,9 +277,10 @@ def load_fit(directory: str | Path) -> NetworkFit:
     if not isinstance(metadata, dict):
         raise ValueError("metadata.json must contain an object")
     pairs = _read_pairs(source / "pairs.csv")
-    nodes = pd.read_csv(source / "nodes.csv")
-    folds = pd.read_csv(source / "folds.csv")
+    nodes = pd.read_csv(source / "nodes.csv", float_precision="round_trip")
+    folds = pd.read_csv(source / "folds.csv", float_precision="round_trip")
     names = _node_order(metadata, nodes)
+    metadata.setdefault("node_order", names)
     expected_pair_count = len(names) * (len(names) - 1) // 2
     if len(pairs) != expected_pair_count:
         raise ValueError("pairs table has the wrong pair count")
