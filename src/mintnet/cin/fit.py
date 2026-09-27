@@ -275,6 +275,34 @@ def target_supported(prepared: Any, feature_space: Any, target: int, rows: np.nd
     return bool(np.std(prepared.values[rows, target], ddof=0) > 0.0)
 
 
+def _continuous_evaluation_diagnostics(
+    prepared: Any,
+    target: int,
+    train_rows: np.ndarray,
+    eval_rows: np.ndarray,
+    residual: np.ndarray,
+    variance: float,
+) -> dict[str, float | int]:
+    standardized = np.asarray(residual, dtype=np.float64) / np.sqrt(float(variance))
+    centered = standardized - float(np.mean(standardized))
+    second_moment = float(np.mean(centered * centered))
+    if standardized.size < 2 or not np.isfinite(second_moment) or second_moment <= 0.0:
+        skew = kurtosis = float("nan")
+    else:
+        skew = float(np.mean(centered**3) / second_moment**1.5)
+        kurtosis = float(np.mean(centered**4) / second_moment**2 - 3.0)
+
+    train_values = np.asarray(prepared.values[train_rows, target], dtype=np.float64)
+    eval_values = np.asarray(prepared.values[eval_rows, target], dtype=np.float64)
+    outside_range = (eval_values < np.min(train_values)) | (eval_values > np.max(train_values))
+    return {
+        "evaluation_residual_skew": skew,
+        "evaluation_residual_kurtosis": kurtosis,
+        "evaluation_range_excursion_fraction": float(np.mean(outside_range)),
+        "n_evaluation": int(eval_values.size),
+    }
+
+
 def _score_target(
     prepared: Any,
     feature_space: Any,
@@ -293,13 +321,24 @@ def _score_target(
     if response.kind == "continuous":
         y_train = train_responses[:, start]
         y_eval = feature_space.responses(eval_rows)[:, start]
-        return gaussian_logscore(
+        logq, info = gaussian_logscore(
             y_eval,
             eval_prediction[:, 0],
             y_train - train_prediction[:, 0],
             float(response.y_sd),
             config.variance_floor,
         )
+        info.update(
+            _continuous_evaluation_diagnostics(
+                prepared,
+                target,
+                train_rows,
+                eval_rows,
+                y_eval - eval_prediction[:, 0],
+                float(info["variance"]),
+            )
+        )
+        return logq, info
     assert response.prevalence is not None
     assert response.train_counts is not None
     return categorical_logscore(
@@ -445,6 +484,7 @@ def _intercept_score(
     prepared: Any,
     feature_space: Any,
     target: int,
+    train_rows: np.ndarray,
     eval_rows: np.ndarray,
     config: CINConfig,
 ) -> tuple[np.ndarray, dict[str, Any]]:
@@ -453,12 +493,24 @@ def _intercept_score(
     response = feature_space.response_specs[target]
     start, _ = (int(value) for value in feature_space.R[target])
     if response.kind == "continuous":
-        return intercept_scores(
+        observed = feature_space.responses(eval_rows)[:, start]
+        logq, info = intercept_scores(
             "continuous",
-            feature_space.responses(eval_rows)[:, start],
+            observed,
             sd_y=float(response.y_sd),
             variance_floor=config.variance_floor,
         )
+        info.update(
+            _continuous_evaluation_diagnostics(
+                prepared,
+                target,
+                train_rows,
+                eval_rows,
+                observed,
+                float(info["variance"]),
+            )
+        )
+        return logq, info
     assert response.prevalence is not None
     assert response.train_counts is not None
     return intercept_scores(
@@ -568,6 +620,7 @@ def score_partition(
                         prepared,
                         feature_space,
                         target,
+                        train_rows,
                         eval_rows,
                         config,
                     )
@@ -577,18 +630,18 @@ def score_partition(
                     raise RidgeNumericalFailure("non-finite full or intercept score")
                 node_score_sum[target] = (float(np.sum(full_logq)), float(np.sum(intercept_logq)))
                 node_score_rows[target] = full_logq.size
-                node_diagnostics.append(
-                    {
-                        "node": prepared.names[target],
-                        "fold": int(fold_index),
-                        "lambda": float(lam),
-                        "full_score_sum": float(np.sum(full_logq)),
-                        "intercept_score_sum": float(np.sum(intercept_logq)),
-                        "n_rows": int(full_logq.size),
-                        "full_info": full_info,
-                        "intercept_info": intercept_info,
-                    }
-                )
+                node_record = {
+                    "node": prepared.names[target],
+                    "fold": int(fold_index),
+                    "lambda": float(lam),
+                    "full_score_sum": float(np.sum(full_logq)),
+                    "intercept_score_sum": float(np.sum(intercept_logq)),
+                    "n_rows": int(full_logq.size),
+                    "full_info": full_info,
+                    "intercept_info": intercept_info,
+                    "reduced_infos": [],
+                }
+                node_diagnostics.append(node_record)
             except (RidgeNumericalFailure, ValueError, FloatingPointError):
                 _mark_target_failure(directional_failure, target)
                 continue
@@ -633,6 +686,7 @@ def score_partition(
                         _record_score_diagnostics(reduced_info, counters)
                         if not np.isfinite(reduced_logq).all():
                             raise RidgeNumericalFailure("non-finite reduced score")
+                        node_record["reduced_infos"].append(reduced_info)
                         directional_sum[source, target] += float(
                             np.sum(full_logq - reduced_logq)
                         )
@@ -761,8 +815,27 @@ def aggregate(
             "n_predictions_intercept": scored_rows,
             "diagnostic_flags": "",
             "variance_floor_hits": 0,
+            "variance_floor_hits_full": 0,
+            "variance_floor_observations_full": 0,
+            "variance_floor_hits_reduced": 0,
+            "variance_floor_observations_reduced": 0,
+            "variance_floor_hits_intercept": 0,
+            "variance_floor_observations_intercept": 0,
             "training_mse_mean": float("nan"),
             "evaluation_mse_mean": float("nan"),
+            "training_mse_full_mean": float("nan"),
+            "evaluation_mse_full_mean": float("nan"),
+            "evaluation_residual_skew_full_mean": float("nan"),
+            "evaluation_residual_kurtosis_full_mean": float("nan"),
+            "training_mse_reduced_mean": float("nan"),
+            "evaluation_mse_reduced_mean": float("nan"),
+            "evaluation_residual_skew_reduced_mean": float("nan"),
+            "evaluation_residual_kurtosis_reduced_mean": float("nan"),
+            "training_mse_intercept_mean": float("nan"),
+            "evaluation_mse_intercept_mean": float("nan"),
+            "evaluation_residual_skew_intercept_mean": float("nan"),
+            "evaluation_residual_kurtosis_intercept_mean": float("nan"),
+            "evaluation_range_excursion_fraction": float("nan"),
             "clipped_fraction_mean": float("nan"),
             "zero_sum_fallbacks": 0,
             "min_probability": float("nan"),
@@ -775,21 +848,59 @@ def aggregate(
             if isinstance(record.get("full_info"), dict)
             and "variance_floor_hit" in record["full_info"]
         ]
+        intercept_continuous_infos = [
+            record["intercept_info"]
+            for record in records
+            if isinstance(record.get("intercept_info"), dict)
+            and "variance_floor_hit" in record["intercept_info"]
+        ]
+        reduced_continuous_infos = [
+            info
+            for record in records
+            for info in record.get("reduced_infos", [])
+            if isinstance(info, dict) and "variance_floor_hit" in info
+        ]
         categorical_infos = [
             record["full_info"]
             for record in records
             if isinstance(record.get("full_info"), dict)
             and "clipped_fraction" in record["full_info"]
         ]
+
+        def weighted_info_mean(infos: list[dict[str, Any]], field: str) -> float:
+            values = [
+                (float(info[field]), int(info.get("n_evaluation", 1)))
+                for info in infos
+                if field in info and np.isfinite(float(info[field]))
+            ]
+            total_weight = sum(weight for _, weight in values)
+            if total_weight == 0:
+                return float("nan")
+            return float(sum(value * weight for value, weight in values) / total_weight)
+
+        for model_name, infos in (
+            ("full", continuous_infos),
+            ("reduced", reduced_continuous_infos),
+            ("intercept", intercept_continuous_infos),
+        ):
+            row[f"variance_floor_hits_{model_name}"] = int(
+                sum(bool(info["variance_floor_hit"]) for info in infos)
+            )
+            row[f"variance_floor_observations_{model_name}"] = len(infos)
+            row[f"training_mse_{model_name}_mean"] = weighted_info_mean(infos, "training_mse")
+            row[f"evaluation_mse_{model_name}_mean"] = weighted_info_mean(infos, "evaluation_mse")
+            row[f"evaluation_residual_skew_{model_name}_mean"] = weighted_info_mean(
+                infos, "evaluation_residual_skew"
+            )
+            row[f"evaluation_residual_kurtosis_{model_name}_mean"] = weighted_info_mean(
+                infos, "evaluation_residual_kurtosis"
+            )
         if continuous_infos:
-            row["variance_floor_hits"] = int(
-                sum(bool(info["variance_floor_hit"]) for info in continuous_infos)
-            )
-            row["training_mse_mean"] = float(
-                np.mean([float(info["training_mse"]) for info in continuous_infos])
-            )
-            row["evaluation_mse_mean"] = float(
-                np.mean([float(info["evaluation_mse"]) for info in continuous_infos])
+            row["variance_floor_hits"] = row["variance_floor_hits_full"]
+            row["training_mse_mean"] = row["training_mse_full_mean"]
+            row["evaluation_mse_mean"] = row["evaluation_mse_full_mean"]
+            row["evaluation_range_excursion_fraction"] = weighted_info_mean(
+                continuous_infos, "evaluation_range_excursion_fraction"
             )
         if categorical_infos:
             row["clipped_fraction_mean"] = float(

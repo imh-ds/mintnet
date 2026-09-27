@@ -479,6 +479,79 @@ def test_fit_network_reports_type_specific_node_diagnostics() -> None:
         assert column in result.nodes.columns
 
 
+def test_fit_network_exports_continuous_residual_and_range_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import mintnet.cin.fit as fit_module
+
+    frame, schema, config = _continuous_fixture()
+    frame.loc[0, "a"] += 10.0
+    frame.loc[29, "a"] -= 7.0
+    original_score_target = fit_module._score_target
+    full_predictions: dict[
+        tuple[tuple[int, ...], tuple[int, ...]], tuple[object, np.ndarray]
+    ] = {}
+
+    def capture_score_target(*args: object, **kwargs: object) -> tuple[np.ndarray, dict[str, object]]:
+        result = original_score_target(*args, **kwargs)
+        feature_space = args[1]
+        target = int(args[2])
+        train_rows = np.asarray(args[3], dtype=np.intp)
+        eval_rows = np.asarray(args[4], dtype=np.intp)
+        eval_prediction = np.asarray(args[7], dtype=np.float64)
+        if target == 0 and len(train_rows) == 20:
+            key = (tuple(train_rows.tolist()), tuple(eval_rows.tolist()))
+            full_predictions.setdefault(key, (feature_space, eval_prediction.copy()))
+        return result
+
+    monkeypatch.setattr(fit_module, "_score_target", capture_score_target)
+    result = fit_network(frame, schema, config)
+    node = result.nodes.loc[result.nodes["node"] == "a"].iloc[0]
+
+    assert len(full_predictions) == config.outer_folds
+    expected_skew: list[tuple[float, int]] = []
+    expected_kurtosis: list[tuple[float, int]] = []
+    for (train_rows, eval_rows), (feature_space, prediction) in full_predictions.items():
+        observed = feature_space.responses(np.asarray(eval_rows, dtype=np.intp))[:, 0]
+        residual = observed - prediction[:, 0]
+        centered = residual - np.mean(residual)
+        second = float(np.mean(centered**2))
+        assert second > 0.0
+        expected_skew.append((float(np.mean(centered**3) / second**1.5), len(residual)))
+        expected_kurtosis.append(
+            (float(np.mean(centered**4) / second**2 - 3.0), len(residual))
+        )
+
+    def weighted_mean(values: list[tuple[float, int]]) -> float:
+        return sum(value * count for value, count in values) / sum(count for _, count in values)
+
+    assert node["evaluation_residual_skew_full_mean"] == pytest.approx(
+        weighted_mean(expected_skew)
+    )
+    assert node["evaluation_residual_kurtosis_full_mean"] == pytest.approx(
+        weighted_mean(expected_kurtosis)
+    )
+
+    prepared = prepare_data(frame, schema, config)
+    split_plan = make_splits(prepared.n_retained, config)
+    values = prepared.values[:, 0]
+    n_excursions = 0
+    for outer in split_plan.outer:
+        train_values = values[outer.train_rows]
+        eval_values = values[outer.eval_rows]
+        n_excursions += int(
+            np.count_nonzero(
+                (eval_values < np.min(train_values)) | (eval_values > np.max(train_values))
+            )
+        )
+    assert node["evaluation_range_excursion_fraction"] == pytest.approx(
+        n_excursions / prepared.n_retained
+    )
+    assert node["variance_floor_observations_full"] == config.outer_folds
+    assert node["variance_floor_observations_intercept"] == config.outer_folds
+    assert node["variance_floor_observations_reduced"] == config.outer_folds * (len(schema) - 1)
+
+
 def test_fit_network_factorization_count_is_bounded_for_wide_network() -> None:
     rows = np.arange(30, dtype=np.float64)
     frame = pd.DataFrame(
