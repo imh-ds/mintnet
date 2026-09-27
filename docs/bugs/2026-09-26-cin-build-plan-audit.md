@@ -4,7 +4,7 @@ Audit date: 2026-09-26. Scope: all task plans 01–12 in `docs/design/cin/build-
 
 Priority convention: P1 affects result integrity, availability, or evidence acceptance; P2 is a material contract or reporting gap; P3 is lower-impact exactness. Reproduction probes used small fabricated or synthetic inputs. The full local suite on repository Python 3.11 finished **277 passed, 1 failed, 3 warnings in 233.30 s**; BUG-23 describes the failure. Passing tests do not establish the correctness of untested branches described below.
 
-Follow-up verification on 2026-09-26 used Python 3.12.14: **290 passed, 1 failed, 3 skipped in 196.68 s**. The one failure is the existing BUG-23 cost-ledger snapshot assertion; the three skips require optional matplotlib. This run includes the BUG-04–06 regression tests.
+Follow-up verification on 2026-09-26 used Python 3.12.14: **292 passed, 1 failed, 3 skipped in 184.50 s**. The one failure is the existing BUG-23 cost-ledger snapshot assertion; the three skips require optional matplotlib. This run includes the BUG-04–08 regression tests. Ruff passed on the changed BUG-07/08 implementation and tests.
 
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
@@ -16,8 +16,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-04](#bug-04) | P1 | Fit and stability | Return an incomplete fit when tuning is interrupted | Fixed | `7e79b96` |
 | [BUG-05](#bug-05) | P1 | Fit and stability | Keep valid pair stability when another pair is unsupported | Fixed | `97afd2a` |
 | [BUG-06](#bug-06) | P1 | Fit and stability | Validate all completed-repeat records and seeds on stability resume | Fixed | `3b739ca` |
-| [BUG-07](#bug-07) | P2 | Fit and stability | Keep point-fit evidence if optional stability errors | Open | — |
-| [BUG-08](#bug-08) | P2 | Fit and stability | Complete required continuous-node diagnostics | Open | — |
+| [BUG-07](#bug-07) | P2 | Fit and stability | Keep point-fit evidence if optional stability errors | Fixed | `71aea51` |
+| [BUG-08](#bug-08) | P2 | Fit and stability | Complete required continuous-node diagnostics | Fixed | `825bfc7` |
 | [BUG-09](#bug-09) | P1 | Persistence and methods | Preserve schema order when saving fits and stability | Open | — |
 | [BUG-10](#bug-10) | P3 | Persistence and methods | Restore exact float64 CSV round trips | Open | — |
 | [BUG-11](#bug-11) | P2 | Persistence and methods | State the stability cutoff in methods text | Open | — |
@@ -136,6 +136,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Inject a stability exception after a successful point fit; preserve its metrics and sidecar while reporting unavailable stability.
 
+**Fix update (2026-09-26).** Commit `71aea51` records the pair sidecar promise as soon as its manifest entry is written, before running optional stability. Stability now has independent `stability_status` and `stability_error` fields; an exception no longer changes the point-fit status or removes its metrics, and a partial stability sidecar is cleaned up. The new integration regression forces `estimate_stability` to fail after a successful point fit and verifies the pair file and manifest remain consistent while no stability sidecar is promised. This regression passed in both the focused runner/fit suite and the full suite; the suite's only failure was the unrelated BUG-23 ledger snapshot assertion.
+
 ### BUG-08: Complete required continuous-node diagnostics
 
 **Priority:** P2. **Source:** `src/mintnet/cin/fit.py:549–592`. **Build plan:** Task 05 §6.
@@ -147,6 +149,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Compute descriptive diagnostics from the correct evaluation rows with training-only fitted transforms, attributed by model and fold. Define unavailable values for degenerate samples.
 
 **Regression check.** Use skewed residuals, held-out range excursions, and controlled floor hits; compare with independent hand calculations.
+
+**Fix update (2026-09-26).** Commit `825bfc7` exports continuous evaluation residual skew and Fisher excess kurtosis, the evaluation fraction outside the training response range, and variance-floor hit/observation counts separately for full, reduced, and intercept models. Continuous model MSE and residual summaries are aggregated with evaluation-row weights; existing generic full-model fields remain available for compatibility. The regression test independently checks full-model residual moments and range excursions and verifies the floor-observation counts for each model type. This regression passed in both the focused runner/fit suite and the full suite. Ruff passed on the changed implementation and tests.
 
 ## Persistence and methods
 
