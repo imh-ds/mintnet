@@ -59,7 +59,7 @@ COST_RAW_COLUMNS = (
     "omission_seconds", "score_seconds", "aggregate_seconds", "outputs_seconds",
     "n_large_factorizations", "q", "t", "n_fallbacks", "fallback_fraction",
     "n_requested_omissions", "n_pairs_complete", "n_pairs_total", "peak_rss_mb",
-    "pair_sidecar_file", "requested_directional_outer_fits", "status_histogram_json",
+    "pair_sidecar_file", "node_order_json", "requested_directional_outer_fits", "status_histogram_json",
     "variance_floor_hit_rate", "probability_clipped_fraction", "probability_min",
     "zero_sum_fallbacks", "tuned_penalty_min_fraction", "tuned_penalty_max_fraction",
     "tuned_penalty_histogram_json", "first_scaled_normal_residual", "environment_json",
@@ -141,6 +141,9 @@ def _run_cell(config: CostConfig, output_dir: Path, cell: CostCell, repeat: int,
     started = time.perf_counter()
     try:
         frame, schema = generate_cost_input(cell.kind, cell.p, cell.n, seed=seeds.sample)
+        row["node_order_json"] = json.dumps(
+            [str(name) for name in frame.columns], separators=(",", ":")
+        )
         fit_config = CINConfig(seed=seeds.cin_fit)
         with thread_limits():
             fit = fit_network(frame, schema, fit_config)

@@ -252,6 +252,11 @@ def test_cost_smoke_writes_incremental_raw_rows_and_pair_sidecars(tmp_path: Path
     assert raw["status_histogram_json"].map(json.loads).map(lambda value: isinstance(value, dict)).all()
     assert raw["tuned_penalty_histogram_json"].map(json.loads).map(lambda value: isinstance(value, dict)).all()
     assert raw["charter_sha256"].nunique() == 1
+    node_orders = raw["node_order_json"].map(json.loads)
+    assert all(
+        len(order) == int(p) and len(set(order)) == int(p)
+        for order, p in zip(node_orders, raw["p"])
+    )
     environments = raw["environment_json"].map(json.loads)
     assert environments.map(lambda value: "blas" in value and "cpu" in value).all()
     categorical = raw.loc[raw["kind"] == "categorical10"].iloc[0]
