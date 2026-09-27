@@ -4,7 +4,7 @@ Audit date: 2026-09-26. Scope: all task plans 01–12 in `docs/design/cin/build-
 
 Priority convention: P1 affects result integrity, availability, or evidence acceptance; P2 is a material contract or reporting gap; P3 is lower-impact exactness. Reproduction probes used small fabricated or synthetic inputs. The full local suite on repository Python 3.11 finished **277 passed, 1 failed, 3 warnings in 233.30 s**; BUG-23 describes the failure. Passing tests do not establish the correctness of untested branches described below.
 
-Follow-up verification on 2026-09-26 used Python 3.12.14: **292 passed, 1 failed, 3 skipped in 184.50 s**. The one failure is the existing BUG-23 cost-ledger snapshot assertion; the three skips require optional matplotlib. This run includes the BUG-04–08 regression tests. Ruff passed on the changed BUG-07/08 implementation and tests.
+Follow-up verification on 2026-09-26 used Python 3.12.14: **297 passed, 1 failed, 3 skipped in 202.78 s**. The one failure is the existing BUG-23 cost-ledger snapshot assertion; the three skips require optional matplotlib. This run includes the BUG-04–11 regression tests. The focused fit, view, and stability suites passed (61 tests, with three optional matplotlib skips); Ruff and `git diff --check` passed for BUG-09–11.
 
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
@@ -18,9 +18,9 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-06](#bug-06) | P1 | Fit and stability | Validate all completed-repeat records and seeds on stability resume | Fixed | `3b739ca` |
 | [BUG-07](#bug-07) | P2 | Fit and stability | Keep point-fit evidence if optional stability errors | Fixed | `71aea51` |
 | [BUG-08](#bug-08) | P2 | Fit and stability | Complete required continuous-node diagnostics | Fixed | `825bfc7` |
-| [BUG-09](#bug-09) | P1 | Persistence and methods | Preserve schema order when saving fits and stability | Open | — |
-| [BUG-10](#bug-10) | P3 | Persistence and methods | Restore exact float64 CSV round trips | Open | — |
-| [BUG-11](#bug-11) | P2 | Persistence and methods | State the stability cutoff in methods text | Open | — |
+| [BUG-09](#bug-09) | P1 | Persistence and methods | Preserve schema order when saving fits and stability | Fixed | `8c4dd7e` |
+| [BUG-10](#bug-10) | P3 | Persistence and methods | Restore exact float64 CSV round trips | Fixed | `8c4dd7e` |
+| [BUG-11](#bug-11) | P2 | Persistence and methods | State the stability cutoff in methods text | Fixed | `8c4dd7e` |
 | [BUG-12](#bug-12) | P1 | Statistical evidence | Compute selected-threshold strong-edge recall correctly | Open | — |
 | [BUG-13](#bug-13) | P1 | Statistical evidence | Require each named case to pass validation gates | Open | — |
 | [BUG-14](#bug-14) | P1 | Statistical evidence | Enforce the Case C point-fit runtime threshold | Open | — |
@@ -166,6 +166,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Round-trip complete/incomplete fits and stability with nonalphabetical schema; check views, pair orientation and resume.
 
+**Fix update (2026-09-26).** Commit `8c4dd7e` stores an explicit `node_order` list alongside schema metadata in fit and stability artifacts, preserving the build plan's sorted JSON representation without losing semantic order. Fit loading validates the list and can recover older fit files from the preserved `nodes.csv` order. Stability validation, rule evaluation, and repeat setup use the explicit list to preserve canonical pair orientation. Regression tests round-trip nonalphabetical `z,a,m` fit and stability schemas and verify legacy fit recovery. Both targeted round-trip tests passed.
+
 ### BUG-10: Restore exact float64 CSV round trips
 
 **Priority:** P3. **Source:** `src/mintnet/cin/result.py:127–141,222,262–263; src/mintnet/cin/stability.py:519–530`. **Build plan:** Task 06 §2.
@@ -178,6 +180,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Use exact DataFrame comparisons, values at an inclusive effect threshold, and compressed stability records.
 
+**Fix update (2026-09-26).** Commit `8c4dd7e` enables pandas' `float_precision="round_trip"` parser for fit pair/node/fold/matrix files and plain or gzip stability records. Empty fields are treated as missing only for declared numeric columns, so identifiers and empty diagnostic strings remain strings while missing numeric values remain NaN. Regression tests use adjacent float64 values around 0.1, compare persisted frames exactly, include a pair at its stored inclusive effect threshold, and verify compressed stability precision. Both exact-round-trip tests passed.
+
 ### BUG-11: State the stability cutoff in methods text
 
 **Priority:** P2. **Source:** `src/mintnet/cin/views.py:310–327`. **Build plan:** Task 06 §7.
@@ -189,6 +193,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Print the actual cutoff with its applied rule and keep the subsampling interpretation.
 
 **Regression check.** Compare text for 0.5 and 0.9 cutoffs against the same stability result.
+
+**Fix update (2026-09-26).** Commit `8c4dd7e` adds the actual inclusive rule (`stability >= cutoff`) and formatted `min_stability` value to generated methods text whenever stability filtering is applied. A regression test compares the same fit and stability result at 0.5 and 0.9 and confirms both distinct cutoffs are stated. The test passed.
 
 ## Statistical evidence
 
