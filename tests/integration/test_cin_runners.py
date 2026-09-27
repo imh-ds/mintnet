@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -173,6 +174,44 @@ def test_panel_smoke_persists_charter_identity(tmp_path: Path) -> None:
     metadata = json.loads((tmp_path / "panel" / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["charter_sha256"] == expected_hash
     assert raw["charter_sha256"].nunique() == 1
+
+
+def test_optional_stability_failure_preserves_point_fit_and_pair_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    config = replace(
+        config,
+        stability_cases=("A",),
+        stability_repeats=1,
+        stability_max_seconds=30.0,
+    )
+
+    def fail_stability(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("forced optional stability failure")
+
+    monkeypatch.setattr(cin_baseline, "estimate_stability", fail_stability)
+    output = tmp_path / "optional-stability-failure"
+    raw = run_baseline(
+        config,
+        output,
+        cases=("A",),
+        replicate_batches=("val0",),
+        write_report=False,
+    )
+    row = raw.loc[raw["method"] == "cin"].iloc[0]
+
+    assert row["status"] in {"complete", "incomplete"}
+    assert pd.notna(row["pair_sidecar_file"])
+    assert row["stability_status"] == "error"
+    assert "forced optional stability failure" in row["stability_error"]
+    assert pd.isna(row["stability_sidecar_file"])
+    assert (output / "sidecars" / row["pair_sidecar_file"]).is_file()
+    manifest = pd.read_csv(output / "sidecar_manifest.csv")
+    assert set(manifest.loc[manifest["kind"] == "pairs", "file"]) >= {
+        row["pair_sidecar_file"]
+    }
+    assert not manifest["kind"].eq("stability").any()
 
 
 def test_invalid_config_is_rejected(tmp_path: Path) -> None:

@@ -94,7 +94,7 @@ PANEL_RAW_COLUMNS = (
             f"{prefix}_{token}_empty",
         )
     ),
-    "pair_sidecar_file", "stability_sidecar_file",
+    "stability_status", "stability_error", "pair_sidecar_file", "stability_sidecar_file",
 )
 MANIFEST_COLUMNS = ("file", "case", "phase", "replicate", "method", "kind", "n_rows", "sha256")
 
@@ -409,6 +409,7 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
         sidecar_path = output_dir / "sidecars" / sidecar_name
         n_rows = write_gzip_frame(pair_frame, sidecar_path)
         _write_manifest_row(output_dir, {"file": sidecar_name, "case": case, "phase": phase, "replicate": replicate, "method": method, "kind": "pairs", "n_rows": n_rows, "sha256": sha256_file(sidecar_path)})
+        row["pair_sidecar_file"] = sidecar_name
         row["status"] = "complete" if pair_frame["status"].eq("complete").all() else "incomplete"
         row["elapsed_seconds"] = time.perf_counter() - started
         row["peak_rss_mb"] = peak_rss_mb()
@@ -434,20 +435,25 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
             if minimum.notna().any():
                 row["minimum_probability"] = float(minimum.min())
         if case in config.stability_cases and phase == "validation" and method in {"cin", "cin_linear"} and hasattr(fit_result, "metadata"):
-            stability = estimate_stability(
-                fit_result,
-                frame,
-                repeats=config.stability_repeats,
-                fraction=config.stability_fraction,
-                max_seconds=config.stability_max_seconds,
-                elapsed_estimate=elapsed_estimate,
-            )
             stability_name = canonical_stability_sidecar_name(case, phase, replicate, method)
             stability_path = output_dir / "sidecars" / stability_name
-            stability_rows = write_gzip_frame(stability.records, stability_path)
-            _write_manifest_row(output_dir, {"file": stability_name, "case": case, "phase": phase, "replicate": replicate, "method": method, "kind": "stability", "n_rows": stability_rows, "sha256": sha256_file(stability_path)})
-            row["stability_sidecar_file"] = stability_name
-        row["pair_sidecar_file"] = sidecar_name
+            try:
+                stability = estimate_stability(
+                    fit_result,
+                    frame,
+                    repeats=config.stability_repeats,
+                    fraction=config.stability_fraction,
+                    max_seconds=config.stability_max_seconds,
+                    elapsed_estimate=elapsed_estimate,
+                )
+                stability_rows = write_gzip_frame(stability.records, stability_path)
+                _write_manifest_row(output_dir, {"file": stability_name, "case": case, "phase": phase, "replicate": replicate, "method": method, "kind": "stability", "n_rows": stability_rows, "sha256": sha256_file(stability_path)})
+                row["stability_sidecar_file"] = stability_name
+                row["stability_status"] = stability.status
+            except Exception as exc:  # noqa: BLE001 - optional resampling must not erase point-fit evidence.
+                stability_path.unlink(missing_ok=True)
+                row["stability_status"] = "error"
+                row["stability_error"] = f"{type(exc).__name__}: {exc}"
     except Exception as exc:  # noqa: BLE001 - durable failure rows are required.
         row.update({"status": "error", "error_type": type(exc).__name__, "error": str(exc), "elapsed_seconds": time.perf_counter() - started, "peak_rss_mb": peak_rss_mb()})
     return row
