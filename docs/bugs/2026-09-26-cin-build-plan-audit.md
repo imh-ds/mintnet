@@ -12,6 +12,8 @@ Follow-up verification for BUG-16–18 used Python 3.12.14: the full suite repor
 
 Follow-up verification for BUG-19–21 used Python 3.12.14: the final full suite reported **322 passed, 1 failed, 3 skipped in 220.39 s**. The only failure is the existing BUG-23 cost-ledger snapshot assertion; the skips require optional matplotlib. Focused aggregation, provenance, gate-binding, and guide tests passed, as did Ruff and `git diff --check`. The implementation is committed as `95eb893`.
 
+Follow-up for BUG-22–25 on 2026-09-27: implementation and regression tests were reviewed and committed as `fa2f958` and `6d81929`. `git diff --check` passed. Pytest and Ruff could not be run because this checkout's `.venv` points to a missing Python 3.11 executable and `py -0p` reports no installed interpreters; the new tests therefore remain unexecuted pending a working Python environment. The statuses below distinguish implementation from runtime verification.
+
 The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete rows, two incomplete rows, two generation errors, and failed completion and E nonlinear-gain gates. A/B/F/G/H/C conclusions should be revisited after correcting gate semantics, but the historical table must not be silently rewritten or validation retuned. D/I and high-p categorical outcomes remain descriptive or unsupported as recorded. The original plan proposed stability on three validation CIN datasets, whereas the frozen charter says broadly A/B/F and the runner evaluates more; resolve and disclose this scope ambiguity rather than treating it as proof of a false statistical result.
 
 | Issue | Priority | Theme | Short description | Status | Related commits |
@@ -37,10 +39,10 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 | [BUG-19](#bug-19) | P1 | Aggregation and sidecars | Support the prescribed phase-only aggregation sequence | Fixed | `95eb893` |
 | [BUG-20](#bug-20) | P1 | Aggregation and sidecars | Stage validated panel sidecars before writing reports | Fixed | `95eb893` |
 | [BUG-21](#bug-21) | P1 | Aggregation and sidecars | Reject mixed shard provenance and retain environment details | Fixed | `95eb893` |
-| [BUG-22](#bug-22) | P1 | Aggregation and sidecars | Validate pair identities and requested stability repeat coverage | Open | — |
-| [BUG-23](#bug-23) | P2 | Aggregation and sidecars | Update the cost ledger test for later dispatches | Open | — |
-| [BUG-24](#bug-24) | P2 | Documentation and reporting | Produce the declared descriptive statistical-panel report | Open | — |
-| [BUG-25](#bug-25) | P2 | Documentation and reporting | Complete the Task 12 researcher guide and close-out | Open | — |
+| [BUG-22](#bug-22) | P1 | Aggregation and sidecars | Validate pair identities and requested stability repeat coverage | Implemented; verification pending | `fa2f958` |
+| [BUG-23](#bug-23) | P2 | Aggregation and sidecars | Update the cost ledger test for later dispatches | Implemented; verification pending | `fa2f958` |
+| [BUG-24](#bug-24) | P2 | Documentation and reporting | Produce the declared descriptive statistical-panel report | Implemented; verification pending | `6d81929` |
+| [BUG-25](#bug-25) | P2 | Documentation and reporting | Complete the Task 12 researcher guide and close-out | Implemented; verification pending | `6d81929` |
 
 ## Input contracts
 
@@ -358,6 +360,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Reject missing repeat, duplicate/missing pair swap, wrong identity, absent repeat ID and orphan; accept explicitly partial output only with matching status.
 
+**Fix update (2026-09-27).** Commit `fa2f958` records canonical node order and the stability repeat request, repeat seeds, completion IDs, and status in each raw row. Aggregation now requires canonical node-order metadata, compares the exact expected pair set and raw identity, and validates repeat IDs, seeds, per-repeat pair coverage, and partial/complete status. It also rejects orphan sidecars when a shard has no manifest. Regression tests cover duplicate/mismatched pairs, wrong identities, missing canonical metadata/repeat IDs, incomplete requested coverage, valid metadata-matched partial results, and manifestless orphans. `git diff --check` passed; the tests have not run because Python is unavailable in this checkout.
+
 ### BUG-23: Update the cost ledger test for later dispatches
 
 **Priority:** P2. **Source:** `tests/integration/test_cin_runners.py:544–552; docs/cin_compute_ledger.csv`. **Build plan:** Task 09,10,11.
@@ -369,6 +373,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Assert the Task 10 row is present and validate header, unique dispatch identities, dates and numeric runner-hour fields across all rows. Keep Task 11 rows.
 
 **Regression check.** Run the focused integration test and full suite with all current ledger entries; add a later valid row fixture to ensure it remains accepted.
+
+**Fix update (2026-09-27).** Commit `fa2f958` replaces the whole-file snapshot assertion with checks for the Task 10 dispatch, the ledger header, unique phase/run identities, valid ISO dates, and finite nonnegative numeric job/runtime fields across every row. Existing later Task 11 rows remain accepted. The focused test and full suite could not be executed because the configured Python interpreter is missing; only `git diff --check` was verified.
 
 ## Documentation and reporting
 
@@ -384,6 +390,8 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 
 **Regression check.** Assert each required section has actual values and denominators; preserve unavailable results and avoid implying absent demonstrations ran.
 
+**Fix update (2026-09-27).** Commit `6d81929` renders long-form raw panel metrics with finite-observation counts and MCSE, explicit unavailable values, and fit/stability status counts. It consumes promised or combined stability sidecars and reports complete-repeat precision/recall and selected-pair counts against the frozen simulation truth at 0.1 repeat-fraction steps. The report does not imply that variance-only or XOR demonstrations were run. Unit regressions cover available and unavailable metrics plus stability denominators/truth; they remain unexecuted because Python is unavailable.
+
 ### BUG-25: Complete the Task 12 researcher guide and close-out
 
 **Priority:** P2. **Source:** `docs/cin_user_guide.md:1; README.md:12; docs/decision_log.md:D-106`. **Build plan:** Task 12.
@@ -395,3 +403,5 @@ The hosted Task 11 result recorded in D-106 remains frozen: 396/400 complete row
 **Recommended revision.** Write and execute continuous and mixed examples; document defaults, statuses, views, exports, dense/low-N use and limitations; correct README and append an evidence-backed scope decision without rewriting D-106 or rerunning validation.
 
 **Regression check.** Execute every guide code block; check examples and save/load, corrected aggregation commands, and explicit support/withheld statements for continuous, categorical, p=100 runtime and low-N scopes.
+
+**Fix update (2026-09-27).** Commit `6d81929` replaces the runner-only guide with continuous and mixed synthetic fit examples, schema/missingness and status guidance, views/exports, stability, dense/low-N use, reproduction steps, limitations, and scope-specific evidence boundaries. README now describes the implemented engine without claiming broad statistical validation, and D-107 records the Task 12 documentation close-out while preserving D-106. A unit test executes all three Python examples with bounded deterministic fit/stability doubles; real numerical behavior remains covered by the estimator tests. The code-block test and broader suite could not be run because Python is unavailable, so runtime verification remains pending.
