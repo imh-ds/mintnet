@@ -60,6 +60,15 @@ on:
         description: "Comma-separated values for the third shard dimension (leave empty for a two-dimension run)"
         required: false
         default: ""
+      aggregation_phase:
+        description: "Aggregate the full grid or exactly one CIN panel phase"
+        type: choice
+        required: true
+        default: full
+        options:
+          - full
+          - development
+          - validation
 
 jobs:
   plan:
@@ -145,13 +154,23 @@ jobs:
       - env:
           RUNNER_MODULE: ${{ inputs.runner_module }}
           CONFIG: ${{ inputs.config }}
+          AGGREGATION_PHASE: ${{ inputs.aggregation_phase }}
         run: |
+          set -e
           export PYTHONPATH="$GITHUB_WORKSPACE/src"
-          python scripts/aggregate_shards.py \
+          cmd=(python scripts/aggregate_shards.py \
             --module "$RUNNER_MODULE" \
             --config "$CONFIG" \
             --shards-dir shards \
-            --output results/generated/aggregated
+            --output results/generated/aggregated)
+          if [[ "$AGGREGATION_PHASE" != "full" ]]; then
+            if [[ "$RUNNER_MODULE" != "mintnet.experiments.cin_baseline" ]]; then
+              echo "phase aggregation is supported only for the CIN statistical panel" >&2
+              exit 2
+            fi
+            cmd+=(--phase "$AGGREGATION_PHASE")
+          fi
+          "${cmd[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: aggregated-benchmark

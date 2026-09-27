@@ -640,6 +640,79 @@ def test_generic_aggregator_accepts_cost_shards(tmp_path: Path) -> None:
     assert (output / "raw_metrics.csv").exists()
 
 
+def test_panel_phase_aggregator_stages_sidecars_before_writing_report(tmp_path: Path) -> None:
+    config_path = ROOT / "configs" / "cin_baseline_smoke.yaml"
+    config = load_panel_config(config_path)
+    shards = tmp_path / "development-shards"
+    run_baseline(
+        config,
+        shards / "dev0",
+        replicate_batches=("dev0",),
+        write_report=False,
+    )
+    output = tmp_path / "development"
+
+    raw = aggregate_generic(
+        "mintnet.experiments.cin_baseline",
+        config_path,
+        shards,
+        output,
+        phase="development",
+    )
+
+    assert len(raw) == 8
+    assert set(raw["phase"]) == {"development"}
+    assert (output / "baseline_report.md").exists()
+    pairs = pd.read_csv(output / "sidecars" / "pairs_all.csv.gz", compression="gzip")
+    assert set(pairs["phase"]) == {"development"}
+    metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["provenance_validated"] is True
+    assert metadata["shard_count"] == 1
+    assert metadata["shards"][0]["thread_settings"]["threadpool_info"] is not None
+    assert metadata["environment_summary"]["peak_rss_mb_contributing_shards"] == 0
+
+
+def test_panel_phase_aggregator_rejects_wrong_replicate_identities(tmp_path: Path) -> None:
+    config_path = ROOT / "configs" / "cin_baseline_smoke.yaml"
+    config = load_panel_config(config_path)
+    shards = tmp_path / "development-shards"
+    run_baseline(config, shards / "dev0", replicate_batches=("dev0",), write_report=False)
+    raw_path = shards / "dev0" / "raw_metrics.csv"
+    raw = pd.read_csv(raw_path)
+    raw.loc[0, "replicate"] = 99
+    raw.to_csv(raw_path, index=False)
+
+    with pytest.raises(SystemExit, match="identit"):
+        aggregate_generic(
+            "mintnet.experiments.cin_baseline",
+            config_path,
+            shards,
+            tmp_path / "wrong-identities",
+            phase="development",
+        )
+
+
+def test_panel_aggregate_validates_sidecars_before_publishing_raw_or_report(tmp_path: Path) -> None:
+    config_path = ROOT / "configs" / "cin_baseline_smoke.yaml"
+    config = load_panel_config(config_path)
+    shards = tmp_path / "development-shards"
+    run_baseline(config, shards / "dev0", replicate_batches=("dev0",), write_report=False)
+    next((shards / "dev0" / "sidecars").glob("*.csv.gz")).unlink()
+    output = tmp_path / "invalid-aggregate"
+
+    with pytest.raises(FileNotFoundError, match="missing sidecar"):
+        aggregate_generic(
+            "mintnet.experiments.cin_baseline",
+            config_path,
+            shards,
+            output,
+            phase="development",
+        )
+
+    assert not (output / "raw_metrics.csv").exists()
+    assert not (output / "baseline_report.md").exists()
+
+
 def test_comparator_failure_is_an_error_row_without_pair_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     monkeypatch.setattr("mintnet.experiments.cin_baseline.fit_ebicglasso", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("forced comparator failure")))
@@ -701,7 +774,9 @@ def test_user_guide_contains_verified_commands_and_full_shard_axes() -> None:
     assert "-f dim1_flag=--cells" in guide
     assert "c_p8_n100,c_p30_n100,c_p100_n100,c_p100_n300,c_p100_n1000,k5_p30_n150,k10_p100_n200,mix_p100_n200" in guide
     assert "--workers 1" in guide
-    assert "python scripts/aggregate_cin_sidecars.py" in guide
+    assert "--phase development" in guide
+    assert "--phase validation" in guide
+    assert "--provenance" in guide
     assert "development_selection.json" in guide
     assert "python scripts/cin_gate_check.py" in guide
     assert "validation once" in guide

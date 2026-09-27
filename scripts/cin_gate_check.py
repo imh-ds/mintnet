@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -106,6 +107,39 @@ def _validate_input(
     promised = raw["pair_sidecar_file"].notna() & raw["pair_sidecar_file"].astype(str).str.strip().ne("")
     if (complete & ~promised).any():
         raise ValueError("complete validation rows are missing a pair sidecar promise")
+
+
+def _validate_aggregate_provenance(
+    raw_path: Path,
+    config_path: Path,
+    config: PanelConfig,
+    metadata_path: Path,
+) -> None:
+    if not metadata_path.is_file():
+        raise ValueError(f"aggregate provenance file is missing: {metadata_path}")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict) or metadata.get("provenance_validated") is not True:
+        raise ValueError("validation raw input must come from a provenance-validated aggregate")
+    required = {
+        "config_sha256", "source_config_sha256", "charter_sha256", "git_commit",
+        "aggregated_raw_metrics_sha256", "shard_count", "shards",
+    }
+    if required - set(metadata):
+        raise ValueError(f"aggregate provenance is missing fields: {sorted(required - set(metadata))}")
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    if metadata["aggregated_raw_metrics_sha256"] != digest(raw_path):
+        raise ValueError("validation raw metrics do not match aggregate provenance")
+    if metadata["source_config_sha256"] != digest(config_path):
+        raise ValueError("aggregate source config hash does not match the requested config")
+    resolved_path = metadata_path.parent / "resolved_config.yaml"
+    if not resolved_path.is_file() or metadata["config_sha256"] != digest(resolved_path):
+        raise ValueError("aggregate resolved config does not match provenance")
+    if metadata["charter_sha256"] != config.charter_sha256:
+        raise ValueError("aggregate charter hash does not match the configured charter")
+    if not metadata["git_commit"] or int(metadata["shard_count"]) != len(metadata["shards"]):
+        raise ValueError("aggregate provenance has incomplete code or shard identity")
 
 
 def evaluate_validation_gates(
@@ -214,6 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--raw", required=True, type=Path)
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--selection", required=True, type=Path)
+    parser.add_argument("--provenance", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
 
@@ -224,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     selected_delta = selection.get("selected_delta")
     if selected_delta is None:
         raise SystemExit("development selection has no frozen delta")
+    _validate_aggregate_provenance(args.raw, args.config, config, args.provenance)
     raw = pd.read_csv(args.raw)
     result = evaluate_validation_gates(
         raw,

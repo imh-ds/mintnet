@@ -64,9 +64,16 @@ def _raw_promises(raw: pd.DataFrame) -> dict[tuple[Any, ...], dict[str, tuple[st
     return promises
 
 
-def aggregate_sidecars(shards_dir: Path, output_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def aggregate_sidecars(
+    shards_dir: Path,
+    output_dir: Path,
+    *,
+    phase: str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Validate all promised sidecars, then write combined pair/stability tables."""
 
+    if phase not in {None, "development", "validation"}:
+        raise ValueError(f"unknown phase: {phase}")
     roots = _roots(Path(shards_dir))
     target = Path(output_dir)
     (target / "sidecars").mkdir(parents=True, exist_ok=True)
@@ -77,6 +84,12 @@ def aggregate_sidecars(shards_dir: Path, output_dir: Path) -> tuple[pd.DataFrame
     seen_promises: set[tuple[Any, ...]] = set()
     for root in roots:
         raw = pd.read_csv(root / "raw_metrics.csv")
+        if phase is not None:
+            if "phase" not in raw.columns:
+                raise ValueError(f"raw metrics in {root} do not identify a phase")
+            raw = raw.loc[raw["phase"] == phase]
+            if raw.empty:
+                raise ValueError(f"no {phase} raw rows in {root}")
         promises = _raw_promises(raw)
         manifest_path = root / "sidecar_manifest.csv"
         if not manifest_path.exists():
@@ -88,6 +101,8 @@ def aggregate_sidecars(shards_dir: Path, output_dir: Path) -> tuple[pd.DataFrame
         for _, manifest_row in manifest.iterrows():
             file_name = Path(str(manifest_row["file"])).name
             listed_files.add(file_name)
+            if phase is not None and str(manifest_row.get("phase")) != phase:
+                continue
             kind = str(manifest_row["kind"])
             identity = _identity_from_manifest(manifest_row)
             key = (*identity, kind)
@@ -155,8 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--shards-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--phase", choices=("development", "validation"))
     args = parser.parse_args(argv)
-    aggregate_sidecars(args.shards_dir, args.output)
+    aggregate_sidecars(args.shards_dir, args.output, phase=args.phase)
     return 0
 
 

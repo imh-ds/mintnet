@@ -39,30 +39,27 @@ The runner modules force `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THR
 
 ## Aggregation
 
-After downloading shard artifacts, run the unchanged generic raw aggregator and the CIN sidecar validator:
+After downloading shard artifacts, run one aggregation command. It validates raw identities and provenance, validates/stages pair and stability sidecars, then writes the report only after those checks pass:
 
 ```text
 python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir shards --output results/generated/cin_baseline_aggregated
-python scripts/aggregate_cin_sidecars.py --shards-dir shards --output results/generated/cin_baseline_aggregated
 ```
 
-The generic aggregator checks expected raw coverage and duplicate identities. The sidecar aggregator separately checks every promised file, byte hash, declared row count, pair cardinality, stability cardinality, duplicate identity, and orphan file before writing `pairs_all.csv.gz` and `stability_all.csv.gz` when applicable. Reports must preserve counts behind means and must retain incomplete or failed rows.
+The generic aggregator checks exact raw identities, shard configuration/charter/revision agreement, and each promised sidecar's file, byte hash, declared row count, pair cardinality, stability cardinality, identity, and orphan status before publishing any report. The combined artifact retains every shard's package, thread, CPU, RSS, and runtime metadata. Reports preserve counts behind means and retain incomplete or failed rows. The sidecar script remains available for standalone validation, with `--phase development` or `--phase validation` when input shards contain only that phase.
 
 ## Task 11 development and validation sequence
 
 Run the full development matrix first. The report writes `development_selection.json`; its display delta is selected from development CIN A/B rows only and must be treated as frozen before validation:
 
 ```text
-python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir development-shards --output results/generated/cin_baseline_development
-python scripts/aggregate_cin_sidecars.py --shards-dir development-shards --output results/generated/cin_baseline_development
+python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir development-shards --output results/generated/cin_baseline_development --phase development
 ```
 
 Run validation once on the new validation seeds after the development selection is frozen, aggregate its raw rows and sidecars, and then evaluate the named gates without retuning:
 
 ```text
-python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir validation-shards --output results/generated/cin_baseline_validation
-python scripts/aggregate_cin_sidecars.py --shards-dir validation-shards --output results/generated/cin_baseline_validation
-python scripts/cin_gate_check.py --raw results/generated/cin_baseline_validation/raw_metrics.csv --config configs/cin_baseline.yaml --selection results/generated/cin_baseline_development/development_selection.json --output results/generated/cin_baseline_validation/gate_results.json
+python scripts/aggregate_shards.py --module mintnet.experiments.cin_baseline --config configs/cin_baseline.yaml --shards-dir validation-shards --output results/generated/cin_baseline_validation --phase validation
+python scripts/cin_gate_check.py --raw results/generated/cin_baseline_validation/raw_metrics.csv --config configs/cin_baseline.yaml --selection results/generated/cin_baseline_development/development_selection.json --provenance results/generated/cin_baseline_validation/metadata.json --output results/generated/cin_baseline_validation/gate_results.json
 ```
 
 The gate checker refuses development contamination, duplicate or missing validation identities, count mismatch, missing provenance, and charter mismatch. D/I, regression, null, variance-only/XOR, stability, and high-p categorical outputs are descriptive or unsupported where no gate applies. Counts and Monte Carlo standard errors remain visible; the panel does not claim causal effects, precise tail probabilities, FDR control, or broad recovery beyond the named scopes.

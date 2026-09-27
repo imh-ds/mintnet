@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from mintnet.experiments.cin_baseline import load_config, methods_for_case
-from scripts.cin_gate_check import evaluate_validation_gates
+from scripts.cin_gate_check import _validate_aggregate_provenance, evaluate_validation_gates
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -163,3 +165,33 @@ def test_validation_gates_refuse_missing_complete_pair_sidecar_promise() -> None
     raw.loc[0, "pair_sidecar_file"] = None
     with pytest.raises(ValueError, match="pair sidecar"):
         evaluate_validation_gates(raw, config, selected_delta=0.01, charter_sha256=config.charter_sha256)
+
+
+def test_gate_provenance_binds_raw_config_and_charter(tmp_path: Path) -> None:
+    config_path = ROOT / "configs" / "cin_baseline.yaml"
+    config = load_config(config_path)
+    raw_path = tmp_path / "raw_metrics.csv"
+    raw_path.write_text("case\nA\n", encoding="utf-8")
+    resolved_path = tmp_path / "resolved_config.yaml"
+    resolved_path.write_bytes(config_path.read_bytes())
+    resolved_hash = hashlib.sha256(resolved_path.read_bytes()).hexdigest()
+    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    raw_hash = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+    metadata_path = tmp_path / "metadata.json"
+    metadata = {
+        "provenance_validated": True,
+        "config_sha256": resolved_hash,
+        "source_config_sha256": config_hash,
+        "charter_sha256": config.charter_sha256,
+        "git_commit": "abc123",
+        "aggregated_raw_metrics_sha256": raw_hash,
+        "shard_count": 1,
+        "shards": [{"shard": "shard-1"}],
+    }
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    _validate_aggregate_provenance(raw_path, config_path, config, metadata_path)
+
+    raw_path.write_text("case\nB\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="raw metrics"):
+        _validate_aggregate_provenance(raw_path, config_path, config, metadata_path)

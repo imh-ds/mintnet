@@ -188,8 +188,33 @@ def methods_for_case(case: str) -> tuple[str, ...]:
 
 
 def expected_row_count(config: PanelConfig) -> int:
-    n_phases = len(config.development_replicates) + len(config.validation_replicates)
-    return sum(len(methods_for_case(case)) for case in config.cases) * n_phases
+    return len(expected_identities(config))
+
+
+def expected_row_count_for_phase(config: PanelConfig, phase: str) -> int:
+    return len(expected_identities(config, phase=phase))
+
+
+def expected_identities(
+    config: PanelConfig, *, phase: str | None = None
+) -> set[tuple[str, str, int, str]]:
+    if phase not in {None, "development", "validation"}:
+        raise ValueError(f"unknown panel phase: {phase}")
+    phases = (phase,) if phase is not None else ("development", "validation")
+    identities: set[tuple[str, str, int, str]] = set()
+    for case in config.cases:
+        for selected_phase in phases:
+            replicates = (
+                config.development_replicates
+                if selected_phase == "development"
+                else config.validation_replicates
+            )
+            identities.update(
+                (case, selected_phase, replicate, method)
+                for replicate in replicates
+                for method in methods_for_case(case)
+            )
+    return identities
 
 
 def expected_combinations(config: PanelConfig) -> set[tuple[str, str, str]]:
@@ -588,5 +613,6 @@ if __name__ == "__main__":
 
 __all__ = [
     "CASE_ORDER", "COMBINATION_COLUMNS", "PANEL_RAW_COLUMNS", "PanelConfig",
-    "expected_combinations", "expected_row_count", "load_config", "methods_for_case", "run_baseline",
+    "expected_combinations", "expected_identities", "expected_row_count",
+    "expected_row_count_for_phase", "load_config", "methods_for_case", "run_baseline",
 ]
