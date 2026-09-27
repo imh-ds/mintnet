@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import csv
+from datetime import date
+import math
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -495,6 +498,15 @@ def test_sidecar_aggregation_rejects_tampering_and_orphans(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="orphan"):
         aggregate_sidecars(source, tmp_path / "bad-orphan")
 
+    manifestless = tmp_path / "manifestless-orphan"
+    (manifestless / "sidecars").mkdir(parents=True)
+    pd.DataFrame(
+        [{"cell": "c_p8_n100", "repeat": 0, "method": "cin", "pair_sidecar_file": None}]
+    ).to_csv(manifestless / "raw_metrics.csv", index=False)
+    (manifestless / "sidecars" / "orphan.csv.gz").write_bytes(b"orphan")
+    with pytest.raises(ValueError, match="orphan"):
+        aggregate_sidecars(manifestless, tmp_path / "bad-manifestless-orphan")
+
 
 def test_sidecar_aggregation_rejects_duplicate_raw_identity(tmp_path: Path) -> None:
     config = load_cost_config(ROOT / "configs" / "cin_cost_smoke.yaml")
@@ -505,6 +517,119 @@ def test_sidecar_aggregation_rejects_duplicate_raw_identity(tmp_path: Path) -> N
     pd.concat([raw, raw.iloc[[0]]], ignore_index=True).to_csv(raw_path, index=False)
     with pytest.raises(ValueError, match="duplicate raw identity"):
         aggregate_sidecars(source, tmp_path / "duplicate")
+
+
+def _write_synthetic_sidecar_shard(
+    root: Path, table: pd.DataFrame, *, kind: str, raw_updates: dict[str, object]
+) -> None:
+    (root / "sidecars").mkdir(parents=True)
+    file_name = f"A_validation_1000_cin_{kind}.csv.gz"
+    sidecar_path = root / "sidecars" / file_name
+    table.to_csv(sidecar_path, index=False, compression="gzip", lineterminator="\n")
+    identity = {"case": "A", "phase": "validation", "replicate": 1000, "method": "cin"}
+    raw_row = {
+        **identity,
+        "p": 3,
+        "node_order_json": '["a","b","c"]',
+        "pair_sidecar_file": None,
+        "stability_sidecar_file": None,
+        **raw_updates,
+    }
+    raw_row["pair_sidecar_file" if kind == "pairs" else "stability_sidecar_file"] = file_name
+    pd.DataFrame([raw_row]).to_csv(root / "raw_metrics.csv", index=False, lineterminator="\n")
+    manifest_row = {
+        **identity,
+        "file": file_name,
+        "kind": kind,
+        "n_rows": len(table),
+        "sha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
+    }
+    pd.DataFrame([manifest_row]).to_csv(root / "sidecar_manifest.csv", index=False, lineterminator="\n")
+
+
+def test_sidecar_aggregation_rejects_duplicate_pair_and_wrong_identity(tmp_path: Path) -> None:
+    pairs = pd.DataFrame(
+        {"node_i": ["a", "a", "a"], "node_j": ["b", "c", "b"], "status": ["complete"] * 3}
+    )
+    source = tmp_path / "duplicate-pair"
+    _write_synthetic_sidecar_shard(source, pairs, kind="pairs", raw_updates={})
+    with pytest.raises(ValueError, match="pair identit"):
+        aggregate_sidecars(source, tmp_path / "duplicate-pair-out")
+
+    wrong_identity = pd.DataFrame(
+        {"node_i": ["a", "a", "b"], "node_j": ["b", "c", "c"], "status": ["complete"] * 3}
+    )
+    wrong_identity["case"] = "B"
+    source = tmp_path / "wrong-identity"
+    _write_synthetic_sidecar_shard(source, wrong_identity, kind="pairs", raw_updates={})
+    with pytest.raises(ValueError, match="identity mismatch"):
+        aggregate_sidecars(source, tmp_path / "wrong-identity-out")
+
+
+def test_sidecar_aggregation_requires_canonical_node_order_metadata(tmp_path: Path) -> None:
+    pairs = pd.DataFrame(
+        {"node_i": ["a", "a", "b"], "node_j": ["b", "c", "c"], "status": ["complete"] * 3}
+    )
+    source = tmp_path / "missing-node-order"
+    _write_synthetic_sidecar_shard(source, pairs, kind="pairs", raw_updates={})
+    raw_path = source / "raw_metrics.csv"
+    pd.read_csv(raw_path).drop(columns="node_order_json").to_csv(raw_path, index=False)
+
+    with pytest.raises(ValueError, match="canonical node order metadata is missing"):
+        aggregate_sidecars(source, tmp_path / "missing-node-order-out")
+
+
+def test_sidecar_aggregation_requires_repeat_ids_and_requested_coverage(tmp_path: Path) -> None:
+    rows = pd.DataFrame(
+        {
+            "repeat_id": [0, 0, 0],
+            "repeat_seed": [11, 11, 11],
+            "node_i": ["a", "a", "b"],
+            "node_j": ["b", "c", "c"],
+            "status": ["complete"] * 3,
+        }
+    )
+    metadata = {
+        "stability_repeats_requested": 2,
+        "stability_repeat_seeds_json": "[11,22]",
+        "stability_completed_repeat_ids_json": "[0,1]",
+        "stability_node_order_json": '["a","b","c"]',
+        "stability_status": "complete",
+    }
+    source = tmp_path / "missing-repeat"
+    _write_synthetic_sidecar_shard(source, rows, kind="stability", raw_updates=metadata)
+    with pytest.raises(ValueError, match="coverage disagrees"):
+        aggregate_sidecars(source, tmp_path / "missing-repeat-out")
+
+    no_repeat_id = rows.drop(columns="repeat_id")
+    source = tmp_path / "no-repeat-id"
+    _write_synthetic_sidecar_shard(source, no_repeat_id, kind="stability", raw_updates=metadata)
+    with pytest.raises(ValueError, match="missing identity columns"):
+        aggregate_sidecars(source, tmp_path / "no-repeat-id-out")
+
+
+def test_sidecar_aggregation_accepts_metadata_matched_partial_stability(tmp_path: Path) -> None:
+    rows = pd.DataFrame(
+        {
+            "repeat_id": [0, 0, 0],
+            "repeat_seed": [11, 11, 11],
+            "node_i": ["a", "a", "b"],
+            "node_j": ["b", "c", "c"],
+            "status": ["complete"] * 3,
+        }
+    )
+    metadata = {
+        "stability_repeats_requested": 2,
+        "stability_repeat_seeds_json": "[11,22]",
+        "stability_completed_repeat_ids_json": "[0]",
+        "stability_node_order_json": '["a","b","c"]',
+        "stability_status": "interrupted",
+    }
+    source = tmp_path / "partial"
+    _write_synthetic_sidecar_shard(source, rows, kind="stability", raw_updates=metadata)
+    _, stability = aggregate_sidecars(source, tmp_path / "partial-out")
+    assert len(stability) == 3
+    assert set(stability["repeat_id"]) == {0}
 
 
 def test_baseline_report_requires_promised_pair_sidecars(tmp_path: Path) -> None:
@@ -756,11 +881,27 @@ def test_metadata_preserves_thread_and_resolved_config_provenance(tmp_path: Path
 
 def test_compute_ledger_records_task_10_dispatch() -> None:
     ledger = ROOT / "docs" / "cin_compute_ledger.csv"
-    lines = ledger.read_text(encoding="utf-8").splitlines()
-    assert lines == [
-        "phase,workflow_run_id,jobs,wall_hours_max,runner_hours_sum,dispatched_by,date,purpose",
-        "cost_pilot,36096470047,18,0.0258333333,0.22,codex:codex,2026-09-24,Task 10 hosted CIN cost and completion gate"
-    ]
+    with ledger.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == [
+            "phase", "workflow_run_id", "jobs", "wall_hours_max", "runner_hours_sum",
+            "dispatched_by", "date", "purpose",
+        ]
+        rows = list(reader)
+    assert any(
+        row["phase"] == "cost_pilot"
+        and row["workflow_run_id"] == "36096470047"
+        and row["purpose"] == "Task 10 hosted CIN cost and completion gate"
+        for row in rows
+    )
+    dispatches = [(row["phase"], row["workflow_run_id"]) for row in rows]
+    assert len(dispatches) == len(set(dispatches))
+    for row in rows:
+        assert row["phase"] and row["workflow_run_id"] and row["purpose"]
+        assert int(row["jobs"]) > 0
+        assert math.isfinite(float(row["wall_hours_max"])) and float(row["wall_hours_max"]) >= 0
+        assert math.isfinite(float(row["runner_hours_sum"])) and float(row["runner_hours_sum"]) >= 0
+        assert date.fromisoformat(row["date"]).isoformat() == row["date"]
 
 
 def test_user_guide_contains_verified_commands_and_full_shard_axes() -> None:

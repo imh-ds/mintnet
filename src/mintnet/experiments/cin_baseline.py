@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, replace
+import json
 import os
 from pathlib import Path
 import time
@@ -95,6 +96,8 @@ PANEL_RAW_COLUMNS = (
             f"{prefix}_{token}_empty",
         )
     ),
+    "node_order_json", "stability_repeats_requested", "stability_repeat_seeds_json",
+    "stability_completed_repeat_ids_json", "stability_node_order_json",
     "stability_status", "stability_error", "pair_sidecar_file", "stability_sidecar_file",
 )
 MANIFEST_COLUMNS = ("file", "case", "phase", "replicate", "method", "kind", "n_rows", "sha256")
@@ -439,6 +442,7 @@ def _fit_method(method: str, frame: pd.DataFrame, schema: dict[str, dict[str, An
 def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, replicate: int, method: str, seeds: Any, frame: pd.DataFrame, schema: dict[str, dict[str, Any]], truth: frozenset[tuple[str, str]], population_cmi: dict[tuple[str, str], float] | None) -> dict[str, Any]:
     row = _empty_row(case, phase, replicate, method, seeds, len(frame), len(frame.columns))
     row["charter_sha256"] = config.charter_sha256
+    row["node_order_json"] = json.dumps([str(name) for name in frame.columns], separators=(",", ":"))
     started = time.perf_counter()
     try:
         with thread_limits():
@@ -487,6 +491,9 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
             if minimum.notna().any():
                 row["minimum_probability"] = float(minimum.min())
         if case in config.stability_cases and phase == "validation" and method in {"cin", "cin_linear"} and hasattr(fit_result, "metadata"):
+            row["stability_repeats_requested"] = config.stability_repeats
+            row["stability_completed_repeat_ids_json"] = "[]"
+            row["stability_node_order_json"] = row["node_order_json"]
             stability_name = canonical_stability_sidecar_name(case, phase, replicate, method)
             stability_path = output_dir / "sidecars" / stability_name
             try:
@@ -502,6 +509,15 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
                 _write_manifest_row(output_dir, {"file": stability_name, "case": case, "phase": phase, "replicate": replicate, "method": method, "kind": "stability", "n_rows": stability_rows, "sha256": sha256_file(stability_path)})
                 row["stability_sidecar_file"] = stability_name
                 row["stability_status"] = stability.status
+                row["stability_repeat_seeds_json"] = json.dumps(
+                    stability.metadata["repeat_seeds"], separators=(",", ":")
+                )
+                row["stability_completed_repeat_ids_json"] = json.dumps(
+                    stability.metadata["completed_repeat_ids"], separators=(",", ":")
+                )
+                row["stability_node_order_json"] = json.dumps(
+                    stability.metadata["node_order"], separators=(",", ":")
+                )
             except Exception as exc:  # noqa: BLE001 - optional resampling must not erase point-fit evidence.
                 stability_path.unlink(missing_ok=True)
                 row["stability_status"] = "error"
