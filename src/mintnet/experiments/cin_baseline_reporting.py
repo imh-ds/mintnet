@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .cin_baseline import DELTA_TOKENS, PanelConfig, expected_row_count
+from .cin_baseline import DELTA_TOKENS, PanelConfig, _dataset, expected_row_count
 
 
 DELTA_BY_TOKEN = dict(zip(DELTA_TOKENS, (0.0, 0.005, 0.01, 0.02)))
@@ -19,6 +19,10 @@ REPORT_METRICS = (
     "categorical_excess_loss", "n_failed_pairs", "elapsed_seconds",
     "orientation_gap_q95",
 )
+IDENTITY_COLUMNS = {
+    "case", "phase", "replicate", "method", "charter_sha256", "error_type",
+    "error", "stability_error", "pair_sidecar_file", "stability_sidecar_file",
+}
 
 
 def _json_safe(value: Any) -> Any:
@@ -39,11 +43,35 @@ def _load_pairs(raw: pd.DataFrame, output_dir: Path) -> pd.DataFrame:
     if combined.exists():
         return pd.read_csv(combined, compression="gzip")
     tables: list[pd.DataFrame] = []
-    for file_name in promised.astype(str):
+    for _, raw_row in raw.loc[promised.index].iterrows():
+        file_name = str(raw_row["pair_sidecar_file"])
         path = Path(output_dir) / "sidecars" / Path(file_name).name
         if not path.exists():
             raise FileNotFoundError(f"promised sidecar is missing: {file_name}")
-        tables.append(pd.read_csv(path, compression="gzip"))
+        table = pd.read_csv(path, compression="gzip")
+        for column in ("case", "phase", "replicate", "method"):
+            if column in raw_row and column not in table:
+                table.insert(0, column, raw_row[column])
+        tables.append(table)
+    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame()
+
+
+def _load_stability(raw: pd.DataFrame, output_dir: Path) -> pd.DataFrame:
+    combined = Path(output_dir) / "sidecars" / "stability_all.csv.gz"
+    if combined.exists():
+        return pd.read_csv(combined, compression="gzip")
+    promised = raw.get("stability_sidecar_file", pd.Series(dtype=object)).dropna()
+    tables: list[pd.DataFrame] = []
+    for _, raw_row in raw.loc[promised.index].iterrows():
+        file_name = str(raw_row["stability_sidecar_file"])
+        path = Path(output_dir) / "sidecars" / Path(file_name).name
+        if not path.exists():
+            raise FileNotFoundError(f"promised stability sidecar is missing: {file_name}")
+        table = pd.read_csv(path, compression="gzip")
+        for column in ("case", "phase", "replicate", "method"):
+            if column in raw_row and column not in table:
+                table.insert(0, column, raw_row[column])
+        tables.append(table)
     return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame()
 
 
@@ -252,25 +280,25 @@ def aggregate_panel_metrics(
     selected_delta: float | None,
 ) -> pd.DataFrame:
     """Return long-form means, MCSEs, and denominators for report metrics."""
-
-    del pairs  # Raw rows contain the audited scalar contract; sidecars are validated separately.
     if raw.empty:
-        return pd.DataFrame(columns=("case", "phase", "method", "metric", "mean", "mcse", "n"))
-    metrics = list(REPORT_METRICS)
+        return pd.DataFrame(columns=("case", "phase", "method", "metric", "mean", "mcse", "n", "availability"))
+    del pairs  # Pair-level truth is not preserved in the exported sidecar; scalar truth metrics are in raw rows.
+    metrics = list(dict.fromkeys((*REPORT_METRICS, *(
+        column for column in raw.columns
+        if column not in IDENTITY_COLUMNS
+        and not column.endswith("_seed")
+        and column not in {"n", "p", "replicate"}
+        and (pd.api.types.is_numeric_dtype(raw[column]) or pd.api.types.is_bool_dtype(raw[column]))
+    ))))
     if selected_delta is not None:
         token = _delta_token(selected_delta)
-        metrics.extend((
-            f"delta_{token}_precision",
-            f"delta_{token}_recall",
-            f"delta_{token}_strong_recall",
-            f"delta_{token}_displayed_fraction",
-        ))
+        metrics.extend((f"delta_{token}_{field}" for field in ("precision", "recall", "strong_recall", "displayed_fraction")))
+    metrics = list(dict.fromkeys(metrics))
     records: list[dict[str, Any]] = []
     for (case, phase, method), group in raw.groupby(["case", "phase", "method"], dropna=False):
         for metric in metrics:
-            if metric not in group:
-                continue
-            mean, count, error = _mcse(group[metric])
+            values = group[metric] if metric in group else pd.Series(np.nan, index=group.index)
+            mean, count, error = _mcse(values)
             records.append({
                 "case": case,
                 "phase": phase,
@@ -279,8 +307,107 @@ def aggregate_panel_metrics(
                 "mean": mean,
                 "mcse": error,
                 "n": count,
+                "availability": "available" if count else "unavailable",
             })
-    return pd.DataFrame(records, columns=("case", "phase", "method", "metric", "mean", "mcse", "n"))
+    return pd.DataFrame(records, columns=("case", "phase", "method", "metric", "mean", "mcse", "n", "availability"))
+
+
+def _stability_summary(
+    raw: pd.DataFrame,
+    pairs: pd.DataFrame,
+    stability: pd.DataFrame,
+    config: PanelConfig,
+) -> pd.DataFrame:
+    """Summarize stable-subset precision/recall using the frozen simulation truth."""
+    columns = ("case", "phase", "method", "metric", "mean", "mcse", "n", "availability")
+    thresholds = tuple(round(value / 10, 1) for value in range(1, 11))
+    metric_names = tuple(
+        f"stability_{field}_at_{threshold:.1f}"
+        for threshold in thresholds
+        for field in ("precision", "recall", "selected_count")
+    )
+    if stability.empty or pairs.empty:
+        return pd.DataFrame(
+            [{"case": "all", "phase": "validation", "method": "cin", "metric": metric,
+              "mean": np.nan, "mcse": np.nan, "n": 0, "availability": "unavailable"}
+             for metric in metric_names],
+            columns=columns,
+        )
+    required = {"fit_id", "repeat_id", "node_i", "node_j", "status", "weight_nats_raw", "gain_i_to_j", "gain_j_to_i"}
+    if not required <= set(stability.columns):
+        raise ValueError(f"stability sidecar is missing columns: {sorted(required - set(stability.columns))}")
+    records: dict[tuple[str, str, str, float], list[float]] = {}
+    identity = ["case", "phase", "replicate", "method"]
+    if not set(identity) <= set(stability.columns) or not set(identity) <= set(pairs.columns):
+        raise ValueError("validated sidecars are missing panel identity columns")
+    for _, raw_row in raw.loc[raw.get("stability_sidecar_file", pd.Series(index=raw.index, dtype=object)).notna()].iterrows():
+        repeats_requested = int(raw_row.get("stability_repeats_requested", config.stability_repeats))
+        if repeats_requested < 1 or str(raw_row.get("stability_status", "")) == "error":
+            continue
+        row_identity = tuple(raw_row[column] for column in identity)
+        match = pd.Series(True, index=stability.index)
+        point_match = pd.Series(True, index=pairs.index)
+        for column, value in zip(identity, row_identity):
+            match &= stability[column].astype(str).eq(str(value))
+            point_match &= pairs[column].astype(str).eq(str(value))
+        repeat_table = stability.loc[match]
+        point_table = pairs.loc[point_match]
+        if repeat_table.empty or point_table.empty:
+            continue
+        case = str(raw_row["case"])
+        generated = _dataset(
+            case,
+            int(raw_row["structure_seed"]),
+            int(raw_row["sample_seed"]),
+            config.n_overrides.get(case),
+        )
+        truth = {(str(left), str(right)) for left, right in generated[2]}
+        by_pair: dict[tuple[str, str], pd.DataFrame] = {
+            (str(left), str(right)): group
+            for (left, right), group in repeat_table.groupby(["node_i", "node_j"], dropna=False)
+        }
+        point = point_table.loc[
+            point_table["status"].eq("complete")
+            & pd.to_numeric(point_table["weight_nats_raw"], errors="coerce").gt(0)
+        ]
+        predicted_by_threshold: dict[float, set[tuple[str, str]]] = {threshold: set() for threshold in thresholds}
+        for pair, group in by_pair.items():
+            complete = group.loc[group["status"].eq("complete")]
+            if len(complete) != repeats_requested:
+                continue
+            weights = pd.to_numeric(complete["weight_nats_raw"], errors="coerce")
+            gain_i = pd.to_numeric(complete["gain_i_to_j"], errors="coerce")
+            gain_j = pd.to_numeric(complete["gain_j_to_i"], errors="coerce")
+            repeat_fraction = float((weights.gt(0) & gain_i.gt(0) & gain_j.gt(0)).mean())
+            if not bool(((point["node_i"].astype(str) == pair[0]) & (point["node_j"].astype(str) == pair[1])).any()):
+                continue
+            for threshold in thresholds:
+                if repeat_fraction >= threshold:
+                    predicted_by_threshold[threshold].add(pair)
+        for threshold, predicted in predicted_by_threshold.items():
+            precision = float(len(predicted & truth) / len(predicted)) if predicted else np.nan
+            recall = float(len(predicted & truth) / len(truth)) if truth else np.nan
+            prefix = (case, str(raw_row["phase"]), str(raw_row["method"]))
+            records.setdefault((*prefix, threshold), []).extend((precision, recall, float(len(predicted))))
+    output: list[dict[str, Any]] = []
+    groups: dict[tuple[str, str, str, float], list[float]] = records
+    expected_groups = {
+        (str(row.case), str(row.phase), str(row.method), threshold)
+        for row in raw.itertuples(index=False)
+        if getattr(row, "stability_sidecar_file", None) is not None and pd.notna(getattr(row, "stability_sidecar_file", None))
+        for threshold in thresholds
+    }
+    for key in sorted(expected_groups):
+        values = groups.get(key, [])
+        case, phase, method, threshold = key
+        for index, field in enumerate(("precision", "recall", "selected_count")):
+            numeric = pd.Series([values[offset] for offset in range(index, len(values), 3)])
+            mean, count, error = _mcse(numeric)
+            output.append({"case": case, "phase": phase, "method": method,
+                           "metric": f"stability_{field}_at_{threshold:.1f}",
+                           "mean": mean, "mcse": error, "n": count,
+                           "availability": "available" if count else "unavailable"})
+    return pd.DataFrame(output, columns=columns)
 
 
 def _summary_rows(raw: pd.DataFrame) -> pd.DataFrame:
@@ -299,15 +426,19 @@ def _summary_rows(raw: pd.DataFrame) -> pd.DataFrame:
 def write_report(raw: pd.DataFrame, config: PanelConfig, output_dir: Path) -> None:
     target = Path(output_dir)
     pairs = _load_pairs(raw, target)
+    stability = _load_stability(raw, target)
     selection = select_development_delta(raw, config)
     summary = _summary_rows(raw)
     metric_summary = aggregate_panel_metrics(raw, pairs, config, selection["selected_delta"])
+    stability_summary = _stability_summary(raw, pairs, stability, config)
+    metric_summary = pd.concat([metric_summary, stability_summary], ignore_index=True)
     summary.to_csv(target / "baseline_summary.csv", index=False, lineterminator="\n")
     metric_summary.to_csv(target / "panel_metrics.csv", index=False, lineterminator="\n")
     (target / "development_selection.json").write_text(
         json.dumps(_json_safe(selection), indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
+    stability_status_counts = raw.get("stability_status", pd.Series(dtype=object)).fillna("not_requested").value_counts(dropna=False).to_dict()
     payload = {
         "configured_rows": expected_row_count(config),
         "emitted_rows": len(raw),
@@ -315,6 +446,8 @@ def write_report(raw: pd.DataFrame, config: PanelConfig, output_dir: Path) -> No
         "status_counts": raw["status"].value_counts(dropna=False).to_dict(),
         "selected_delta": selection["selected_delta"],
         "charter_sha256": config.charter_sha256,
+        "stability_status_counts": stability_status_counts,
+        "stability_records": int(len(stability)),
     }
     (target / "baseline_summary.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
@@ -329,7 +462,30 @@ def write_report(raw: pd.DataFrame, config: PanelConfig, output_dir: Path) -> No
         "Monte Carlo standard errors are descriptive and do not establish tail probabilities or FDR control.",
         "Oracle CMI, regression, null, stability, and variance-only/XOR sections are descriptive or unsupported where no gate applies.",
         "This panel does not establish causal effects or broad recovery claims beyond named validation scopes.",
+        "",
+        "## Metric summaries",
+        "",
+        "Mean, Monte Carlo standard error (MCSE), and contributing row count are shown. An unavailable value has no contributing finite observations; it is not zero.",
+        "",
+        "| Case | Phase | Method | Metric | Mean | MCSE | n | Availability |",
+        "|---|---|---|---|---:|---:|---:|---|",
     ]
+    for record in metric_summary.loc[metric_summary["case"] != "all"].to_dict(orient="records"):
+        mean = "unavailable" if pd.isna(record["mean"]) else f"{record['mean']:.6g}"
+        mcse = "unavailable" if pd.isna(record["mcse"]) else f"{record['mcse']:.6g}"
+        lines.append(f"| {record['case']} | {record['phase']} | {record['method']} | {record['metric']} | {mean} | {mcse} | {record['n']} | {record['availability']} |")
+    lines.extend(["", "## Stability descriptives", "",
+                  "Stability is repeatability under the configured subsampling procedure, not an edge probability. Pair fractions use complete requested repeats only; incomplete repeats are kept unavailable.",
+                  "", "| Metric | Mean | n pairs | Availability |", "|---|---:|---:|---|"])
+    for record in stability_summary.to_dict(orient="records"):
+        mean = "unavailable" if pd.isna(record["mean"]) else f"{record['mean']:.6g}"
+        lines.append(f"| {record['metric']} | {mean} | {record['n']} | {record['availability']} |")
+    lines.extend(["", "## Row and stability statuses", "", "| Status | Rows |", "|---|---:|"])
+    status_counts = raw["status"].value_counts(dropna=False).to_dict() if "status" in raw else {}
+    for status, count in sorted(status_counts.items(), key=lambda item: str(item[0])):
+        lines.append(f"| {status} | {count} |")
+    for status, count in sorted(stability_status_counts.items(), key=lambda item: str(item[0])):
+        lines.append(f"| stability: {status} | {count} |")
     (target / "baseline_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

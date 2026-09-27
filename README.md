@@ -8,8 +8,13 @@ Predictive-Information Network** under the `mintnet.cin` namespace.
 
 ## Current status
 
-The CIN methodology and build plan are specified, but the engine has not yet
-been implemented or statistically validated. The active design documents are:
+The CIN estimator, fit results, views/exports, stability utility, simulations,
+and evidence runners are implemented. Their statistical scope is bounded by
+the hosted Task 11 results: validation completion and the E nonlinear-gain gate
+failed, while named A/B, selected-delta, F/G/H recovery and C runtime gates
+passed. Those outcomes do not establish broad statistical validation. Read the
+[CIN researcher guide](docs/cin_user_guide.md) before interpreting a fit. The
+active design documents are:
 
 - [CIN methodology](docs/design/cin/methodology/methodology_outline_2026-09-19.md)
 - [Technical implementation roadmap](docs/design/cin/methodology/technical_implementation_roadmap_2026-09-19.md)
@@ -25,9 +30,9 @@ presented as universally model-free CMI estimates.
 ## Repository layout
 
 ```text
-src/mintnet/cin/                  forthcoming CIN numerical core
-src/mintnet/experiments/cin_*    forthcoming evidence runners
-src/mintnet/simulation/          reusable fixtures and forthcoming CIN generators
+src/mintnet/cin/                  estimator, results, views, exports, stability
+src/mintnet/experiments/cin_*    reproducible evidence runners
+src/mintnet/simulation/          reusable fixtures and CIN generators
 docs/design/cin/                 controlling methodology and build plan
 archive/                         retired implementations and their research record
 ```

@@ -7945,3 +7945,61 @@ Consequences: the evidence is reproducible and auditable, but the failed
 completion and E gates must be reported as unsupported scopes. Task 12 may
 document these outcomes and the generic aggregate workflow limitation; it
 must not repair, retune, or reinterpret the failed validation scopes.
+
+## D-107: Complete CIN Task 12 researcher documentation and close-out
+
+Date: 2026-09-27.
+
+Task 12 is closed as a documentation and reproducibility deliverable. The
+researcher guide now covers the public fit, schema and missingness contract,
+statuses and diagnostics, views and exports, optional stability, the mixed
+branch, runner reproduction, methods text, limitations, and individually
+bounded scope outcomes. It includes runnable continuous and mixed synthetic
+examples and a stability walkthrough. The README now describes the implemented
+engine and points researchers to the evidence boundary instead of claiming
+that implementation is forthcoming.
+
+The statistical report now renders long-form metric values with contributing
+counts and MCSE, including agreement thresholds, oracle-CMI errors, null and
+orientation summaries, and diagnostics available in raw rows. It emits
+explicit unavailable entries and fit/stability statuses, and consumes the
+validated stability records for complete-pair and retained-pair descriptives.
+Stability remains a resampling reproducibility measure, never an edge
+probability. No report text claims that variance-only or XOR demonstrations
+were run by the panel.
+
+The evidence basis remains the frozen D-104 cost pilot and D-106 hosted Task
+11 development/validation campaign, plus the methodology, build plan, frozen
+charters, and existing gate outputs. D-106 is unchanged: 396/400 validation
+rows completed, two were incomplete and two had generation errors; the
+completion and E nonlinear-gain gates failed, while the recorded A/B,
+selected-delta, F/G/H recovery and C runtime gates passed. Validation was not
+retuned or rerun for this documentation close-out. The generic phase-only
+workflow aggregation limitation and the plan/charter stability-scope
+ambiguity remain disclosed.
+
+Scope decisions:
+
+- **Continuous preview:** A/B and selected-delta gates passed in the frozen
+  panel; the E nonlinear-gain gate failed. Broad continuous recovery is
+  withheld.
+- **Categorical item branch:** experimental. F/G/H recovery gates passed, but
+  F generation/completion failures remain; high-p categorical recovery is
+  unevidenced.
+- **p=100 runtime:** the bounded Task 10 cost-pilot checks passed for the
+  measured configurations and environment. This is not a general runtime
+  guarantee or statistical validation.
+- **Low-N:** no recovery claim is supported. Case C passed its completion/runtime
+  check only; Case I remains a descriptive null boundary.
+- **Stability:** D-106 does not record a final panel-wide stability outcome,
+  and the build plan and charter differ on scope. No stability outcome is
+  claimed here.
+
+Comparator caveats and the 20-replicate resolution remain in the guide.
+Deferred work includes sign-aware outputs, ordinal-order models, interactions,
+imputation, clustered/time-series support, centrality, causal extensions, and
+other roadmap §13 nice-to-haves.
+
+Decision: accept Task 12 documentation as complete while keeping the failed
+Task 11 evidence scopes explicitly unsupported. Documentation completion does
+not change the statistical validation decision in D-106.

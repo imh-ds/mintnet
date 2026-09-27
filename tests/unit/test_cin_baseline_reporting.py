@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from mintnet.experiments.cin_baseline import load_config
+from mintnet.experiments.cin_baseline import _dataset
 from mintnet.experiments.cin_baseline_reporting import (
+    _stability_summary,
     aggregate_panel_metrics,
     select_development_delta,
+    write_report,
 )
 
 
@@ -174,3 +178,87 @@ def test_aggregate_panel_metrics_preserves_counts_and_mcse() -> None:
     assert ap["mean"] == pytest.approx(0.3)
     assert ap["mcse"] == pytest.approx(0.1)
     assert ((summary["metric"] == "delta_01_strong_recall")).any()
+
+
+def test_report_renders_available_metrics_and_stability_descriptives(tmp_path: Path) -> None:
+    config = replace(load_config(ROOT / "configs" / "cin_baseline_smoke.yaml"), stability_repeats=2)
+    raw = pd.DataFrame(
+        [
+            {
+                **_row(case="A", phase="validation", replicate=1000, precision=0.8, strong_recall=0.5),
+                "oracle_cmi_mae_true": 0.12,
+                "agreement_delta_01_precision": 0.75,
+                "variance_floor_hits": 2,
+                "variance_floor_observations": 10,
+                "stability_status": "complete",
+                "stability_sidecar_file": "stability_A_validation_1000_cin.csv.gz",
+            },
+            {
+                **_row(case="A", phase="validation", replicate=1001, precision=0.6, strong_recall=0.25),
+                "oracle_cmi_mae_true": float("nan"),
+                "agreement_delta_01_precision": float("nan"),
+                "variance_floor_hits": float("nan"),
+                "variance_floor_observations": float("nan"),
+                "stability_status": "interrupted",
+                "stability_sidecar_file": float("nan"),
+            },
+        ]
+    )
+    sidecars = tmp_path / "sidecars"
+    sidecars.mkdir()
+    pd.DataFrame(
+        [
+            {"fit_id": "fit", "repeat_id": repeat, "repeat_seed": repeat, "node_i": left, "node_j": right,
+             "gain_i_to_j": gain, "gain_j_to_i": gain, "weight_nats_raw": weight, "status": "complete"}
+            for repeat in (0, 1)
+            for left, right, gain, weight in (("x", "y", 0.2, 0.2), ("x", "z", -0.1, -0.1))
+        ]
+    ).to_csv(sidecars / "stability_all.csv.gz", index=False, compression="gzip")
+
+    write_report(raw, config, tmp_path)
+
+    metrics = pd.read_csv(tmp_path / "panel_metrics.csv")
+    assert {"oracle_cmi_mae_true", "agreement_delta_01_precision", "variance_floor_hits"} <= set(metrics["metric"])
+    oracle = metrics.loc[metrics["metric"] == "oracle_cmi_mae_true"].iloc[0]
+    assert oracle["n"] == 1
+    assert oracle["mean"] == pytest.approx(0.12)
+    stability_metric = metrics.loc[metrics["metric"] == "stability_precision_at_0.1"].iloc[0]
+    assert stability_metric["availability"] == "unavailable"
+    report = (tmp_path / "baseline_report.md").read_text(encoding="utf-8")
+    assert "## Metric summaries" in report
+    assert "oracle_cmi_mae_true" in report
+    assert "## Stability descriptives" in report
+    assert "interrupted" in report
+
+
+def test_stability_report_uses_pair_truth_and_complete_repeat_denominators() -> None:
+    config = replace(load_config(ROOT / "configs" / "cin_baseline_smoke.yaml"), stability_repeats=2)
+    generated = _dataset("A", 11, 21, config.n_overrides["A"])
+    names = list(generated[0].columns)
+    identity = {"case": "A", "phase": "validation", "replicate": 1000, "method": "cin"}
+    point_rows = []
+    stability_rows = []
+    for left_index, left in enumerate(names):
+        for right in names[left_index + 1 :]:
+            point_rows.append({**identity, "node_i": left, "node_j": right,
+                               "status": "complete", "weight_nats_raw": 0.5})
+            for repeat_id in (0, 1):
+                stability_rows.append({**identity, "fit_id": "fit", "repeat_id": repeat_id,
+                                       "node_i": left, "node_j": right, "status": "complete",
+                                       "weight_nats_raw": 0.5, "gain_i_to_j": 0.3, "gain_j_to_i": 0.3})
+    raw = pd.DataFrame([{
+        **identity,
+        "structure_seed": 11,
+        "sample_seed": 21,
+        "stability_sidecar_file": "stability.csv.gz",
+        "stability_repeats_requested": 2,
+        "stability_status": "complete",
+    }])
+
+    summary = _stability_summary(raw, pd.DataFrame(point_rows), pd.DataFrame(stability_rows), config)
+
+    precision = summary.loc[summary["metric"] == "stability_precision_at_0.1"].iloc[0]
+    recall = summary.loc[summary["metric"] == "stability_recall_at_0.1"].iloc[0]
+    assert precision["mean"] == pytest.approx(len(generated[2]) / len(point_rows))
+    assert recall["mean"] == pytest.approx(1.0)
+    assert precision["n"] == 1
