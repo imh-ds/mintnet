@@ -77,7 +77,7 @@ PANEL_RAW_COLUMNS = (
     "n_nonempty_delta_views", "n_nonempty_agreement_views", "strong_edge_recall",
     *tuple(f"delta_{token}_strong_recall" for token in DELTA_TOKENS),
     "oracle_cmi_mae", "oracle_cmi_bias", "oracle_cmi_mae_true", "oracle_cmi_bias_true",
-    "oracle_cmi_mae_all", "oracle_cmi_bias_all", "categorical_excess_loss",
+    "oracle_cmi_mae_all", "oracle_cmi_bias_all", "categorical_excess_loss", "n_categorical_targets",
     "positive_weight_q50", "positive_weight_q90", "positive_weight_q95", "positive_weight_q99",
     "positive_weight_max", "tie_fraction", "orientation_gap_q50", "orientation_gap_q90",
     "orientation_gap_q95", "orientation_gap_q99", "orientation_gap_max",
@@ -429,9 +429,22 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
         row["peak_rss_mb"] = peak_rss_mb()
         _metrics(row, pair_frame, truth, population_cmi, strong_edge_threshold=config.strong_edge_threshold)
         if method == "cin" and hasattr(fit_result, "nodes"):
-            node_gain = pd.to_numeric(fit_result.nodes.get("full_minus_intercept"), errors="coerce")
-            if node_gain.notna().any() and any(schema[name].get("kind") == "categorical" for name in schema):
-                row["categorical_excess_loss"] = float(-node_gain.mean())
+            categorical_nodes = {
+                name for name, definition in schema.items()
+                if definition.get("kind") == "categorical"
+            }
+            node_table = fit_result.nodes
+            row["n_categorical_targets"] = 0
+            if categorical_nodes and {"node", "full_minus_intercept"} <= set(node_table.columns):
+                categorical_gains = pd.to_numeric(
+                    node_table.loc[
+                        node_table["node"].isin(categorical_nodes), "full_minus_intercept"
+                    ],
+                    errors="coerce",
+                ).dropna()
+                row["n_categorical_targets"] = int(len(categorical_gains))
+                if not categorical_gains.empty:
+                    row["categorical_excess_loss"] = float(-categorical_gains.mean())
             variance_hits = pd.to_numeric(fit_result.nodes.get("variance_floor_hits"), errors="coerce")
             if variance_hits.notna().any():
                 row["variance_floor_hits"] = int(variance_hits.fillna(0).sum())
@@ -507,6 +520,15 @@ def run_baseline(
             for phase, replicates, phase_index in batches:
                 for replicate in replicates:
                     seeds = derive_seed_bundle(config.master_seed, case_index, phase_index, replicate)
+                    if case == "D":
+                        paired_dataset_seeds = derive_seed_bundle(
+                            config.master_seed, CASE_ORDER.index("B"), phase_index, replicate
+                        )
+                        seeds = replace(
+                            seeds,
+                            structure=paired_dataset_seeds.structure,
+                            sample=paired_dataset_seeds.sample,
+                        )
                     n_override = config.n_overrides.get(case)
                     try:
                         frame, schema, truth, population_cmi, _ = _dataset(case, seeds.structure, seeds.sample, n_override)

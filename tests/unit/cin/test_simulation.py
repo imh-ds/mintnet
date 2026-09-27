@@ -67,6 +67,14 @@ def test_population_signal_summary_is_explicit_for_available_and_unavailable_cmi
     assert unavailable["proxy_available"] is True
 
 
+def test_population_edge_density_includes_isolated_nodes() -> None:
+    case_e = generate_case("E", structure_seed=11, sample_seed=13, n=100)
+    case_h = generate_case("H", structure_seed=3, sample_seed=4, n=100)
+
+    assert case_e.meta["population_signal_summary"]["edge_density"] == pytest.approx(24 / 435)
+    assert case_h.meta["population_signal_summary"]["edge_density"] == pytest.approx(4 / 28)
+
+
 @pytest.mark.parametrize(
     ("edges", "p", "expected"),
     [

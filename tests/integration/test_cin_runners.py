@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -551,6 +552,79 @@ def test_panel_full_grid_equals_case_and_batch_shards(tmp_path: Path) -> None:
     pd.testing.assert_frame_equal(_without_runtime_columns(full), _without_runtime_columns(sharded), check_dtype=False)
     assert set(sharded.loc[sharded["phase"] == "development", "replicate"]) == {0, 1}
     assert set(sharded.loc[sharded["phase"] == "validation", "replicate"]) == {1000, 1001}
+
+
+def test_panel_pairs_b_and_d_datasets_while_preserving_case_specific_fit_seeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(
+        load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml"), cases=("B", "D")
+    )
+    captured: dict[str, tuple[object, pd.DataFrame, frozenset[tuple[str, str]]]] = {}
+
+    def capture_run_method(config, output_dir, case, phase, replicate, method, seeds, frame, schema, truth, population_cmi):
+        if method == "cin":
+            captured[case] = (seeds, frame.copy(), truth)
+        row = cin_baseline._empty_row(case, phase, replicate, method, seeds, len(frame), len(frame.columns))
+        row.update({"status": "complete", "charter_sha256": config.charter_sha256})
+        return row
+
+    monkeypatch.setattr(cin_baseline, "_run_method", capture_run_method)
+    run_baseline(
+        config,
+        tmp_path / "paired",
+        cases=("B", "D"),
+        replicate_batches=("dev0",),
+        write_report=False,
+    )
+
+    b_seeds, b_frame, b_truth = captured["B"]
+    d_seeds, d_frame, d_truth = captured["D"]
+    assert (b_seeds.structure, b_seeds.sample) == (d_seeds.structure, d_seeds.sample)
+    assert b_seeds.cin_fit != d_seeds.cin_fit
+    assert b_truth == d_truth
+    pd.testing.assert_frame_equal(b_frame.iloc[:, 1::2], d_frame.iloc[:, 1::2])
+    np.testing.assert_allclose(
+        d_frame.iloc[:, ::2].to_numpy(), np.sinh(0.5 * b_frame.iloc[:, ::2].to_numpy())
+    )
+
+
+def test_categorical_excess_loss_uses_categorical_targets_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = load_panel_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    seeds = derive_seed_bundle(config.master_seed, 7, 0, 0)
+    pair_frame = pd.DataFrame(
+        [{"node_i": "cat", "node_j": "continuous", "weight_nats_raw": 0.1, "status": "complete"}]
+    )
+    nodes = pd.DataFrame(
+        [
+            {"node": "cat", "full_minus_intercept": -0.1, "variance_floor_hits": 0,
+             "clipped_fraction_mean": 0.0, "zero_sum_fallbacks": 0, "min_probability": 0.1},
+            {"node": "continuous", "full_minus_intercept": 0.9, "variance_floor_hits": 0,
+             "clipped_fraction_mean": 0.0, "zero_sum_fallbacks": 0, "min_probability": 0.1},
+        ]
+    )
+    fit_result = SimpleNamespace(nodes=nodes)
+    monkeypatch.setattr(cin_baseline, "_fit_method", lambda *_args: (pair_frame, fit_result, 0.1))
+    monkeypatch.setattr(cin_baseline, "_metrics", lambda *_args, **_kwargs: None)
+
+    row = cin_baseline._run_method(
+        config,
+        tmp_path,
+        "H",
+        "development",
+        0,
+        "cin",
+        seeds,
+        pd.DataFrame({"cat": [0, 1], "continuous": [0.1, 0.2]}),
+        {"cat": {"kind": "categorical", "levels": [0, 1]}, "continuous": {"kind": "continuous"}},
+        frozenset(),
+        None,
+    )
+
+    assert row["categorical_excess_loss"] == pytest.approx(0.1)
+    assert row["n_categorical_targets"] == 1
 
 
 def test_generic_aggregator_accepts_cost_shards(tmp_path: Path) -> None:

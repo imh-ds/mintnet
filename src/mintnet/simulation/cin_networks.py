@@ -140,6 +140,7 @@ def population_signal_summary(
     population_cmi: Mapping[tuple[Any, Any], float] | None,
     truth_edges: Collection[tuple[Any, Any]],
     *,
+    node_count: int | None = None,
     threshold: float = 0.01,
     signal_proxy: Mapping[tuple[Any, Any], float] | None = None,
 ) -> dict[str, Any]:
@@ -159,7 +160,14 @@ def population_signal_summary(
         quantiles = {"q50": None, "q90": None, "q95": None, "max": None}
         strong_count = None
 
-    n_nodes = len(nodes)
+    if node_count is None:
+        n_nodes = len(nodes)
+    else:
+        if isinstance(node_count, bool) or int(node_count) != node_count or node_count < len(nodes):
+            raise ValueError("node_count must be an integer at least as large as the observed node set")
+        n_nodes = int(node_count)
+        if n_nodes < 1:
+            raise ValueError("node_count must be positive")
     possible_edges = n_nodes * (n_nodes - 1) // 2
     summary: dict[str, Any] = {
         "cmi_available": population_cmi is not None,
@@ -375,7 +383,7 @@ def _named_gaussian_result(
     population_cmi = {
         (names[left], names[right]): value for (left, right), value in cmi_indices.items()
     }
-    summary = population_signal_summary(population_cmi, truth_edges)
+    summary = population_signal_summary(population_cmi, truth_edges, node_count=len(names))
     meta = {
         **structure_meta,
         "case": case,
@@ -462,7 +470,9 @@ def _nonlinear_tree_result(
     for node, parent in enumerate(parents):
         if parent is not None:
             function_children[parent].append(node)
-    summary = population_signal_summary(None, truth_edges, signal_proxy=signal_proxy)
+    summary = population_signal_summary(
+        None, truth_edges, node_count=total_nodes, signal_proxy=signal_proxy
+    )
     meta = {
         "case": "E",
         "structure_seed": int(structure_seed),
@@ -544,7 +554,7 @@ def _sample_finite_case(
     population_cmi = {
         (names[left], names[right]): value for (left, right), value in cmi_indices.items()
     }
-    summary = population_signal_summary(population_cmi, truth_edges)
+    summary = population_signal_summary(population_cmi, truth_edges, node_count=len(names))
     schema = {
         name: {"kind": "categorical", "levels": list(range(cardinality))}
         for name in names
@@ -594,7 +604,7 @@ def _mixed_star_result(
         (names[0], names[index]): float(abs(coefficients[index - 1]))
         for index in range(1, 5)
     }
-    summary = population_signal_summary(None, truth_edges, signal_proxy=signal_proxy)
+    summary = population_signal_summary(None, truth_edges, node_count=8, signal_proxy=signal_proxy)
     meta = {
         "case": "H",
         "structure_seed": int(structure_seed),
@@ -647,7 +657,7 @@ def _independent_null_result(
         for right in range(left + 1, 30)
     }
     truth_edges = frozenset()
-    summary = population_signal_summary(population_cmi, truth_edges)
+    summary = population_signal_summary(population_cmi, truth_edges, node_count=len(names))
     meta = {
         "case": "I",
         "structure_seed": int(structure_seed),
