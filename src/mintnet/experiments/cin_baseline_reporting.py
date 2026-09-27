@@ -60,7 +60,7 @@ def _candidate_case_metrics(rows: pd.DataFrame, token: str, case: str) -> dict[s
     precision = pd.to_numeric(subset.get(f"delta_{token}_precision"), errors="coerce")
     empty = subset.get(f"delta_{token}_empty", pd.Series(True, index=subset.index)).fillna(True).astype(bool)
     available = precision.notna() & ~empty
-    recalls = pd.to_numeric(subset.get(f"delta_{token}_recall"), errors="coerce")
+    recalls = pd.to_numeric(subset.get(f"delta_{token}_strong_recall"), errors="coerce")
     return {
         "case": case,
         "n": int(len(subset)),
@@ -71,13 +71,113 @@ def _candidate_case_metrics(rows: pd.DataFrame, token: str, case: str) -> dict[s
     }
 
 
+def _unavailable_development_selection(
+    config: PanelConfig,
+    reason: str,
+    *,
+    observed_identities: int,
+) -> dict[str, Any]:
+    expected_identities = 2 * len(config.development_replicates)
+    return {
+        "selection_phase": "development",
+        "selection_status": "unavailable",
+        "selected_delta": None,
+        "selected_token": None,
+        "expected_gate_failure": True,
+        "fallback_reason": reason,
+        "rule": "qualify A/B at precision >= 0.70 and nonempty fraction >= 0.80; maximize strong recall, then choose smaller delta",
+        "charter_sha256": config.charter_sha256,
+        "development_identities_expected": expected_identities,
+        "development_identities_observed": observed_identities,
+        "candidates": [],
+    }
+
+
 def select_development_delta(raw: pd.DataFrame, config: PanelConfig) -> dict[str, Any]:
     """Select the display delta from development CIN A/B rows only."""
 
+    identity_columns = {"case", "phase", "replicate", "method", "charter_sha256"}
+    if not identity_columns <= set(raw.columns):
+        return _unavailable_development_selection(
+            config,
+            "development rows are missing identity or charter columns",
+            observed_identities=0,
+        )
     development = raw.loc[
         (raw["phase"] == "development")
         & (raw["method"] == "cin")
+        & raw["case"].isin(("A", "B"))
     ].copy()
+    expected_identities = {
+        (case, "development", replicate, "cin")
+        for case in ("A", "B")
+        for replicate in config.development_replicates
+    }
+    observed_count = len(development)
+    if development.duplicated(["case", "phase", "replicate", "method"]).any():
+        return _unavailable_development_selection(
+            config,
+            "A/B development input contains duplicate identities",
+            observed_identities=observed_count,
+        )
+    if development["charter_sha256"].isna().any() or set(
+        development["charter_sha256"].astype(str)
+    ) != {config.charter_sha256}:
+        return _unavailable_development_selection(
+            config,
+            "A/B development charter hash does not match the configured charter",
+            observed_identities=observed_count,
+        )
+    replicate_values = pd.to_numeric(development["replicate"], errors="coerce")
+    if (
+        not np.isfinite(replicate_values).all()
+        or not replicate_values.mod(1).eq(0).all()
+    ):
+        return _unavailable_development_selection(
+            config,
+            "A/B development input contains an invalid replicate identity",
+            observed_identities=observed_count,
+        )
+    observed_identities = {
+        (str(row.case), str(row.phase), int(row.replicate), str(row.method))
+        for row in development.assign(replicate=replicate_values).itertuples(index=False)
+    }
+    if (
+        observed_count != len(expected_identities)
+        or observed_identities != expected_identities
+    ):
+        return _unavailable_development_selection(
+            config,
+            "A/B development identities do not match the configured replicate set",
+            observed_identities=observed_count,
+        )
+    required_metrics = {
+        f"delta_{_delta_token(delta)}_{field}"
+        for delta in config.delta_candidates
+        for field in ("precision", "empty", "strong_recall")
+    }
+    if not required_metrics <= set(development.columns):
+        return _unavailable_development_selection(
+            config,
+            "A/B development rows are missing required threshold metrics",
+            observed_identities=observed_count,
+        )
+    strong_counts = pd.to_numeric(
+        development.get("n_strong_edges", pd.Series(np.nan, index=development.index)),
+        errors="coerce",
+    )
+    recall_columns = [
+        f"delta_{_delta_token(delta)}_strong_recall" for delta in config.delta_candidates
+    ]
+    if (
+        not strong_counts.gt(0).all()
+        or not np.isfinite(development[recall_columns].apply(pd.to_numeric, errors="coerce")).all().all()
+    ):
+        return _unavailable_development_selection(
+            config,
+            "A/B development strong-edge denominators or threshold recalls are unavailable",
+            observed_identities=observed_count,
+        )
     candidates: list[dict[str, Any]] = []
     for delta in config.delta_candidates:
         token = _delta_token(delta)
@@ -99,19 +199,6 @@ def select_development_delta(raw: pd.DataFrame, config: PanelConfig) -> dict[str
             "minimum_precision": float(min(valid_precisions)) if len(valid_precisions) == 2 else float("nan"),
             "mean_strong_recall": float(np.mean(valid_recalls)) if len(valid_recalls) == 2 else float("nan"),
         })
-
-    if any(not (development["case"] == case).any() for case in ("A", "B")):
-        return {
-            "selection_phase": "development",
-            "selection_status": "unavailable",
-            "selected_delta": None,
-            "selected_token": None,
-            "expected_gate_failure": True,
-            "fallback_reason": "A/B development rows are required for threshold selection",
-            "rule": "qualify A/B at precision >= 0.70 and nonempty fraction >= 0.80; maximize strong recall, then choose smaller delta",
-            "charter_sha256": config.charter_sha256,
-            "candidates": candidates,
-        }
 
     qualified = [candidate for candidate in candidates if candidate["qualified"]]
     if qualified:
@@ -172,7 +259,12 @@ def aggregate_panel_metrics(
     metrics = list(REPORT_METRICS)
     if selected_delta is not None:
         token = _delta_token(selected_delta)
-        metrics.extend((f"delta_{token}_precision", f"delta_{token}_recall", f"delta_{token}_displayed_fraction"))
+        metrics.extend((
+            f"delta_{token}_precision",
+            f"delta_{token}_recall",
+            f"delta_{token}_strong_recall",
+            f"delta_{token}_displayed_fraction",
+        ))
     records: list[dict[str, Any]] = []
     for (case, phase, method), group in raw.groupby(["case", "phase", "method"], dropna=False):
         for metric in metrics:

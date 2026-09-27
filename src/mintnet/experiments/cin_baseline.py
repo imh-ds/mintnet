@@ -71,10 +71,11 @@ PANEL_RAW_COLUMNS = (
     "case", "phase", "replicate", "method", "structure_seed", "sample_seed",
     "cin_fit_seed", "comparator_fit_seed", "stability_seed", "n", "p", "status",
     "charter_sha256",
-    "error_type", "error", "elapsed_seconds", "peak_rss_mb", "ap", "prevalence",
+    "error_type", "error", "elapsed_seconds", "point_fit_seconds", "peak_rss_mb", "ap", "prevalence",
     "ap_minus_prevalence", "n_pairs_complete", "n_pairs_total", "n_failed_pairs",
     "n_true_edges", "n_strong_edges", "strong_edge_set_available",
     "n_nonempty_delta_views", "n_nonempty_agreement_views", "strong_edge_recall",
+    *tuple(f"delta_{token}_strong_recall" for token in DELTA_TOKENS),
     "oracle_cmi_mae", "oracle_cmi_bias", "oracle_cmi_mae_true", "oracle_cmi_bias_true",
     "oracle_cmi_mae_all", "oracle_cmi_bias_all", "categorical_excess_loss",
     "positive_weight_q50", "positive_weight_q90", "positive_weight_q95", "positive_weight_q99",
@@ -353,6 +354,17 @@ def _metrics(
             if edge in truth and float(value) >= strong_edge_threshold
         }
         row["n_strong_edges"] = len(strong)
+        for token, delta in zip(DELTA_TOKENS, (0.0, .005, .01, .02)):
+            selected_mask = complete & (weights > 0) & (weights >= delta)
+            selected_edges = set(
+                zip(
+                    pair_frame.loc[selected_mask, "node_i"].astype(str),
+                    pair_frame.loc[selected_mask, "node_j"].astype(str),
+                )
+            )
+            row[f"delta_{token}_strong_recall"] = (
+                float(len(selected_edges & strong) / len(strong)) if strong else np.nan
+            )
         if strong:
             selected = set(
                 zip(
@@ -395,7 +407,8 @@ def _fit_method(method: str, frame: pd.DataFrame, schema: dict[str, dict[str, An
     with thread_limits():
         fit = fit_network(frame, schema, config)
     pairs = fit.pairs.copy()
-    return pairs, fit, float(fit.metadata.get("runtime", {}).get("elapsed_seconds", 0.0))
+    fit_seconds = fit.metadata.get("runtime", {}).get("elapsed_seconds")
+    return pairs, fit, float(fit_seconds) if fit_seconds is not None else None
 
 
 def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, replicate: int, method: str, seeds: Any, frame: pd.DataFrame, schema: dict[str, dict[str, Any]], truth: frozenset[tuple[str, str]], population_cmi: dict[tuple[str, str], float] | None) -> dict[str, Any]:
@@ -405,6 +418,7 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
     try:
         with thread_limits():
             pair_frame, fit_result, elapsed_estimate = _fit_method(method, frame, schema, seeds)
+        row["point_fit_seconds"] = elapsed_estimate
         sidecar_name = canonical_pair_sidecar_name(case, phase, replicate, method)
         sidecar_path = output_dir / "sidecars" / sidecar_name
         n_rows = write_gzip_frame(pair_frame, sidecar_path)

@@ -129,15 +129,39 @@ def evaluate_validation_gates(
     complete_fraction = raw["status"].eq("complete").astype(float)
     gates.append(_gate("completion", 1.0, complete_fraction, lambda value: value == 1.0))
 
-    ab = cin.loc[cin["case"].isin(["A", "B"])]
-    gates.append(_gate("A_B_ap_prevalence", 0.20, ab["ap_minus_prevalence"], lambda value: value >= 0.20))
-    selected_precision = ab[f"delta_{token}_precision"]
-    gates.append(_gate("A_B_selected_precision", 0.70, selected_precision, lambda value: value >= 0.70))
-    nonempty = (~ab[f"delta_{token}_empty"].fillna(True).astype(bool)).astype(float)
-    gates.append(_gate("A_B_selected_nonempty", 0.80, nonempty, lambda value: value >= 0.80))
-    gates.append(_gate("A_B_selected_strong_recall", 0.50, ab[f"delta_{token}_recall"], lambda value: value >= 0.50))
-    strong = ab.groupby("replicate")["n_strong_edges"].min() if "n_strong_edges" in ab else pd.Series(dtype=float)
-    gates.append(_gate("A_B_strong_set_exists", 1.0, (strong > 0).astype(float), lambda value: value == 1.0))
+    for case in ("A", "B"):
+        case_rows = cin.loc[cin["case"] == case]
+        gates.append(_gate(
+            f"{case}_ap_prevalence",
+            0.20,
+            case_rows["ap_minus_prevalence"],
+            lambda value: value >= 0.20,
+        ))
+        gates.append(_gate(
+            f"{case}_selected_precision",
+            0.70,
+            case_rows[f"delta_{token}_precision"],
+            lambda value: value >= 0.70,
+        ))
+        nonempty = (~case_rows[f"delta_{token}_empty"].fillna(True).astype(bool)).astype(float)
+        gates.append(_gate(
+            f"{case}_selected_nonempty", 0.80, nonempty, lambda value: value >= 0.80
+        ))
+        recall_column = f"delta_{token}_strong_recall"
+        recalls = case_rows[recall_column] if recall_column in case_rows else pd.Series(dtype=float)
+        gates.append(_gate(
+            f"{case}_selected_strong_recall", 0.50, recalls, lambda value: value >= 0.50
+        ))
+        strong_count = pd.to_numeric(
+            case_rows.get("n_strong_edges", pd.Series(np.nan, index=case_rows.index)),
+            errors="coerce",
+        ).fillna(0)
+        gates.append(_gate(
+            f"{case}_strong_set_exists",
+            1.0,
+            (strong_count > 0).astype(float),
+            lambda value: value == 1.0,
+        ))
 
     e = raw.loc[raw["case"] == "E", ["replicate", "method", "ap"]].pivot(
         index="replicate", columns="method", values="ap"
@@ -145,14 +169,39 @@ def evaluate_validation_gates(
     e_gain = e["cin"] - e["cin_linear"] if {"cin", "cin_linear"} <= set(e.columns) else pd.Series(dtype=float)
     gates.append(_gate("E_nonlinear_gain", 0.10, e_gain, lambda value: value >= 0.10))
 
-    fgh = cin.loc[cin["case"].isin(["F", "G", "H"])]
-    gates.append(_gate("FGH_ap_prevalence", 0.15, fgh["ap_minus_prevalence"], lambda value: value >= 0.15))
-    fg = cin.loc[cin["case"].isin(["F", "G"])]
-    gates.append(_gate("FG_categorical_loss", 0.10, fg["categorical_excess_loss"], lambda value: value <= 0.10))
+    for case in ("F", "G", "H"):
+        case_rows = cin.loc[cin["case"] == case]
+        gates.append(_gate(
+            f"{case}_ap_prevalence",
+            0.15,
+            case_rows["ap_minus_prevalence"],
+            lambda value: value >= 0.15,
+        ))
+    for case in ("F", "G"):
+        case_rows = cin.loc[cin["case"] == case]
+        gates.append(_gate(
+            f"{case}_categorical_loss",
+            0.10,
+            case_rows["categorical_excess_loss"],
+            lambda value: value <= 0.10,
+        ))
 
     c = cin.loc[cin["case"] == "C"]
-    c_complete = c["status"].eq("complete") & _numeric(c["elapsed_seconds"]).reindex(c.index).notna()
-    gates.append(_gate("C_runtime_completion", 1.0, c_complete.astype(float), lambda value: value == 1.0))
+    point_fit_seconds = pd.to_numeric(
+        c.get("point_fit_seconds", pd.Series(np.nan, index=c.index)), errors="coerce"
+    )
+    within_point_fit_budget = (
+        np.isfinite(point_fit_seconds)
+        & point_fit_seconds.ge(0)
+        & point_fit_seconds.le(config.point_fit_max_seconds)
+    )
+    c_complete = c["status"].eq("complete") & within_point_fit_budget
+    gates.append(_gate(
+        "C_runtime_completion",
+        config.point_fit_max_seconds,
+        c_complete.astype(float),
+        lambda value: value == 1.0,
+    ))
     gates.extend([_descriptive("D_descriptive", raw, "D"), _descriptive("I_descriptive", raw, "I")])
     return pd.DataFrame(
         gates,

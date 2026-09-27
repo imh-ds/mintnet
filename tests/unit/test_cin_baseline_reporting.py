@@ -41,20 +41,33 @@ def _row(
         "delta_02_precision": min(0.99, precision + 0.1),
         "delta_02_empty": empty,
         "delta_02_recall": min(1.0, strong_recall + 0.2),
+        "delta_005_strong_recall": strong_recall,
+        "delta_01_strong_recall": min(1.0, strong_recall + 0.1),
+        "delta_02_strong_recall": min(1.0, strong_recall + 0.2),
         "strong_edge_recall": strong_recall,
+        "n_strong_edges": 1,
     }
+
+
+def _complete_development_rows(config, *, precision: float, strong_recall: float):
+    rows = []
+    for replicate in config.development_replicates:
+        for case in ("A", "B"):
+            row = _row(
+                case=case,
+                phase="development",
+                replicate=replicate,
+                precision=precision,
+                strong_recall=strong_recall,
+            )
+            row["charter_sha256"] = config.charter_sha256
+            rows.append(row)
+    return rows
 
 
 def test_select_development_delta_uses_only_cin_a_b_and_prefers_recall() -> None:
     config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
-    rows = []
-    for replicate in (0, 1):
-        rows.extend(
-            [
-                _row(case="A", phase="development", replicate=replicate, precision=0.75, strong_recall=0.4),
-                _row(case="B", phase="development", replicate=replicate, precision=0.75, strong_recall=0.4),
-            ]
-        )
+    rows = _complete_development_rows(config, precision=0.75, strong_recall=0.4)
     rows.append(_row(case="A", phase="validation", replicate=1000, precision=0.01, strong_recall=0.0))
     rows.append({**rows[0], "method": "cin_linear", "delta_005_precision": 0.01})
 
@@ -66,12 +79,36 @@ def test_select_development_delta_uses_only_cin_a_b_and_prefers_recall() -> None
     assert all(candidate["phase"] == "development" for candidate in selection["candidates"])
 
 
+def test_select_development_delta_uses_recall_at_each_candidate_threshold() -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    rows = []
+    for replicate in config.development_replicates:
+        for case in ("A", "B"):
+            row = _row(
+                case=case,
+                phase="development",
+                replicate=replicate,
+                precision=0.75,
+                strong_recall=0.10,
+            )
+            row.update(
+                {
+                    "charter_sha256": config.charter_sha256,
+                    "delta_005_strong_recall": 0.10,
+                    "delta_01_strong_recall": 0.80,
+                    "delta_02_strong_recall": 0.20,
+                }
+            )
+            rows.append(row)
+
+    selection = select_development_delta(pd.DataFrame(rows), config)
+
+    assert selection["selected_delta"] == pytest.approx(0.01)
+
+
 def test_select_development_delta_marks_fallback_when_no_candidate_qualifies() -> None:
     config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
-    rows = [
-        _row(case=case, phase="development", replicate=0, precision=0.40, strong_recall=0.1)
-        for case in ("A", "B")
-    ]
+    rows = _complete_development_rows(config, precision=0.40, strong_recall=0.1)
 
     selection = select_development_delta(pd.DataFrame(rows), config)
 
@@ -83,11 +120,36 @@ def test_select_development_delta_marks_fallback_when_no_candidate_qualifies() -
 def test_select_development_delta_is_unavailable_without_both_cases() -> None:
     config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
     raw = pd.DataFrame([_row(case="A", phase="development", replicate=0, precision=0.9, strong_recall=0.5)])
+    raw["charter_sha256"] = config.charter_sha256
 
     selection = select_development_delta(raw, config)
 
     assert selection["selected_delta"] is None
     assert selection["selection_status"] == "unavailable"
+    assert selection["expected_gate_failure"] is True
+
+
+@pytest.mark.parametrize(
+    "corruption", ["missing", "duplicate", "out_of_range", "wrong_charter", "missing_strong_set"]
+)
+def test_select_development_delta_rejects_incomplete_or_mismatched_identity_sets(corruption) -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline_smoke.yaml")
+    rows = _complete_development_rows(config, precision=0.8, strong_recall=0.6)
+    if corruption == "missing":
+        rows.pop()
+    elif corruption == "duplicate":
+        rows.append(dict(rows[0]))
+    elif corruption == "out_of_range":
+        rows[0]["replicate"] = 9999
+    elif corruption == "wrong_charter":
+        rows[0]["charter_sha256"] = "wrong-charter"
+    else:
+        rows[0]["n_strong_edges"] = 0
+
+    selection = select_development_delta(pd.DataFrame(rows), config)
+
+    assert selection["selection_status"] == "unavailable"
+    assert selection["selected_delta"] is None
     assert selection["expected_gate_failure"] is True
 
 
@@ -111,3 +173,4 @@ def test_aggregate_panel_metrics_preserves_counts_and_mcse() -> None:
     assert ap["n"] == 2
     assert ap["mean"] == pytest.approx(0.3)
     assert ap["mcse"] == pytest.approx(0.1)
+    assert ((summary["metric"] == "delta_01_strong_recall")).any()

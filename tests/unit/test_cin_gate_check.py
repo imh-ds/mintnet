@@ -44,6 +44,7 @@ def _validation_raw(*, ap_prevalence: float = 0.25, e_gain: float = 0.2) -> pd.D
                     "strong_edge_recall": 0.60,
                     "categorical_excess_loss": 0.05 if case in {"F", "G"} else None,
                     "elapsed_seconds": 1.0,
+                    "point_fit_seconds": 1.0,
                 }
                 rows.append(row)
     raw = pd.DataFrame(rows)
@@ -58,9 +59,11 @@ def test_validation_gates_report_pass_fail_and_unavailable_scopes() -> None:
     )
 
     assert set(result["status"]) <= {"pass", "fail", "unavailable"}
-    assert result.loc[result["gate"] == "A_B_ap_prevalence", "status"].iloc[0] == "pass"
+    assert result.loc[result["gate"] == "A_ap_prevalence", "status"].iloc[0] == "pass"
+    assert result.loc[result["gate"] == "B_ap_prevalence", "status"].iloc[0] == "pass"
     assert result.loc[result["gate"] == "E_nonlinear_gain", "status"].iloc[0] == "pass"
-    assert result.loc[result["gate"] == "FG_categorical_loss", "status"].iloc[0] == "pass"
+    assert result.loc[result["gate"] == "F_categorical_loss", "status"].iloc[0] == "pass"
+    assert result.loc[result["gate"] == "G_categorical_loss", "status"].iloc[0] == "pass"
     assert result.loc[result["gate"] == "D_descriptive", "status"].iloc[0] == "unavailable"
     assert result.loc[result["gate"] == "I_descriptive", "status"].iloc[0] == "unavailable"
     assert result["n_contributing"].notna().all()
@@ -68,7 +71,69 @@ def test_validation_gates_report_pass_fail_and_unavailable_scopes() -> None:
     failed = evaluate_validation_gates(
         _validation_raw(ap_prevalence=0.10), config, selected_delta=0.01, charter_sha256=config.charter_sha256
     )
-    assert failed.loc[failed["gate"] == "A_B_ap_prevalence", "status"].iloc[0] == "fail"
+    assert failed.loc[failed["gate"] == "A_ap_prevalence", "status"].iloc[0] == "fail"
+    assert failed.loc[failed["gate"] == "B_ap_prevalence", "status"].iloc[0] == "fail"
+
+
+def test_validation_gates_require_each_named_case_to_pass() -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline.yaml")
+    raw = _validation_raw()
+    raw.loc[raw["case"] == "A", "delta_01_precision"] = 0.50
+    raw.loc[raw["case"] == "G", "ap_minus_prevalence"] = 0.05
+    raw.loc[raw["case"] == "F", "categorical_excess_loss"] = 0.20
+
+    result = evaluate_validation_gates(
+        raw, config, selected_delta=0.01, charter_sha256=config.charter_sha256
+    )
+
+    statuses = result.set_index("gate")["status"]
+    assert statuses["A_selected_precision"] == "fail"
+    assert statuses["B_selected_precision"] == "pass"
+    assert statuses["G_ap_prevalence"] == "fail"
+    assert statuses["F_ap_prevalence"] == "pass"
+    assert statuses["F_categorical_loss"] == "fail"
+    assert statuses["G_categorical_loss"] == "pass"
+
+
+def test_strong_set_gate_fails_when_any_replicate_set_is_unavailable() -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline.yaml")
+    raw = _validation_raw()
+    missing = (raw["case"] == "A") & (raw["method"] == "cin")
+    raw.loc[raw.index[missing][0], "n_strong_edges"] = None
+
+    result = evaluate_validation_gates(
+        raw, config, selected_delta=0.01, charter_sha256=config.charter_sha256
+    )
+
+    gate = result.loc[result["gate"] == "A_strong_set_exists"].iloc[0]
+    assert gate["status"] == "fail"
+    assert gate["n_contributing"] == len(config.validation_replicates)
+
+
+@pytest.mark.parametrize(
+    ("point_fit_seconds", "expected"),
+    [
+        (599.9, "pass"),
+        (600.0, "pass"),
+        (600.1, "fail"),
+        (None, "fail"),
+        (-1.0, "fail"),
+        (float("inf"), "fail"),
+    ],
+)
+def test_case_c_runtime_gate_enforces_point_fit_budget(point_fit_seconds, expected) -> None:
+    config = load_config(ROOT / "configs" / "cin_baseline.yaml")
+    raw = _validation_raw()
+    selected = (raw["case"] == "C") & (raw["method"] == "cin")
+    raw.loc[selected, "point_fit_seconds"] = point_fit_seconds
+
+    result = evaluate_validation_gates(
+        raw, config, selected_delta=0.01, charter_sha256=config.charter_sha256
+    )
+    gate = result.loc[result["gate"] == "C_runtime_completion"].iloc[0]
+
+    assert gate["threshold"] == config.point_fit_max_seconds
+    assert gate["status"] == expected
 
 
 def test_validation_gates_refuse_development_contamination_and_count_mismatch() -> None:

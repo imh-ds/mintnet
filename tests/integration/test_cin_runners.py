@@ -174,6 +174,8 @@ def test_panel_smoke_persists_charter_identity(tmp_path: Path) -> None:
     metadata = json.loads((tmp_path / "panel" / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["charter_sha256"] == expected_hash
     assert raw["charter_sha256"].nunique() == 1
+    cin_rows = raw.loc[raw["method"] == "cin"]
+    assert pd.to_numeric(cin_rows["point_fit_seconds"], errors="coerce").notna().all()
 
 
 def test_optional_stability_failure_preserves_point_fit_and_pair_sidecar(
@@ -426,6 +428,30 @@ def test_panel_metrics_record_complete_pair_truth_and_population_diagnostics() -
     assert row["orientation_gap_q50"] == pytest.approx(0.15)
 
 
+def test_panel_metrics_record_strong_recall_at_each_display_threshold() -> None:
+    pair_frame = pd.DataFrame(
+        [
+            {"node_i": "A", "node_j": "B", "gain_i_to_j": 0.2, "gain_j_to_i": 0.2, "weight_nats_raw": 0.025, "orientation_gap": 0.0, "status": "complete"},
+            {"node_i": "A", "node_j": "C", "gain_i_to_j": 0.1, "gain_j_to_i": 0.1, "weight_nats_raw": 0.018, "orientation_gap": 0.0, "status": "complete"},
+            {"node_i": "A", "node_j": "D", "gain_i_to_j": 0.1, "gain_j_to_i": 0.1, "weight_nats_raw": 0.009, "orientation_gap": 0.0, "status": "complete"},
+        ]
+    )
+    row = {column: None for column in cin_baseline.PANEL_RAW_COLUMNS}
+    cin_baseline._metrics(
+        row,
+        pair_frame,
+        frozenset({("A", "B"), ("A", "C"), ("A", "D")} ),
+        {("A", "B"): 0.03, ("A", "C"): 0.005, ("A", "D"): 0.02},
+        strong_edge_threshold=0.01,
+    )
+
+    assert row["delta_005_recall"] == pytest.approx(1.0)
+    assert row["delta_005_strong_recall"] == pytest.approx(1.0)
+    assert row["delta_01_recall"] == pytest.approx(2 / 3)
+    assert row["delta_01_strong_recall"] == pytest.approx(0.5)
+    assert row["delta_02_strong_recall"] == pytest.approx(0.5)
+
+
 def test_panel_metrics_make_empty_precision_unavailable() -> None:
     pair_frame = pd.DataFrame(
         [
@@ -492,7 +518,7 @@ def test_baseline_report_requires_promised_pair_sidecars(tmp_path: Path) -> None
 
 def _without_runtime_columns(frame: pd.DataFrame) -> pd.DataFrame:
     ignored = {
-        "elapsed_seconds", "peak_rss_mb", "prepare_seconds", "features_seconds",
+        "elapsed_seconds", "point_fit_seconds", "peak_rss_mb", "prepare_seconds", "features_seconds",
         "gram_factor_seconds", "h_seconds", "omission_seconds", "score_seconds",
         "aggregate_seconds", "outputs_seconds",
     }
