@@ -1,13 +1,13 @@
 {
   "charter_sha256": "0e8306dd9b40f6f383e06a16c2d3739065d2277b4dbb13054173a9c071661f2a",
-  "code_revision": "78a4ceb4085b2872357aaf78ea415bdf51d2e2ce",
+  "code_revision": "d006f7f46a9011125f923de540dce6ac90d3ab11",
   "config_sha256": "cf4f17b7c0d22cbdcbc1a9db24f397a9feab33faa17d94cf70038eb0f7328c09",
   "f_max_tries": 500,
   "protocol": "cin-followup-f-v1",
   "runner_hours_ceiling": 1.25,
   "runner_hours_estimate": 0.585,
   "seed_inventory_sha256": "f7cd65b35b44483359805bb575ff1e7eb75901c3179b73b75dd4e7c56824771e",
-  "source_code_sha256": "33b45bfaf667b23bb3dbda9792b342fe1e247d3bf6057152803865c54e9c2523",
+  "source_code_sha256": "78869eca1f49c0ab44063effa7a15aaead802a0d1262d4d225811db2cc78d3a6",
   "source_config_sha256": "f547b49152ef3160ed673b6119b892c01b555b2203059d5c2e9074c2f04d177c",
   "status": "frozen",
   "support_aware_inner_splits": false

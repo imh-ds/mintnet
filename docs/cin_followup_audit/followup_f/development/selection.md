@@ -1,6 +1,6 @@
 # F Follow-Up Development Selection
 
-Evidence refreshed: 2026-09-29 against source commit `78a4ceb4085b2872357aaf78ea415bdf51d2e2ce`. Runs used the final frozen charter and protocol marker.
+Evidence refreshed: 2026-09-29 against source commit `d006f7f46a9011125f923de540dce6ac90d3ab11`. All five runs used fresh output folders and the final frozen charter.
 
 ## Environment and identity handling
 

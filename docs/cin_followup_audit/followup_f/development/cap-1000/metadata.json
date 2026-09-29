@@ -147,7 +147,7 @@
   },
   "config_sha256": "62c1e956c82838e6e27edd6e67ea5e908676c61598b1510c74466ff3d5580c4a",
   "cpu": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
-  "git_commit": "78a4ceb4085b2872357aaf78ea415bdf51d2e2ce",
+  "git_commit": "d006f7f46a9011125f923de540dce6ac90d3ab11",
   "package_versions": {
     "PyYAML": "6.0.3",
     "numpy": "2.4.6",
@@ -160,7 +160,7 @@
   "peak_rss_mb": null,
   "platform": "Windows-10-10.0.26200-SP0",
   "python": "3.11.9",
-  "runtime_seconds": 6.087586100038607,
+  "runtime_seconds": 5.604604899999686,
   "source_config_sha256": "f547b49152ef3160ed673b6119b892c01b555b2203059d5c2e9074c2f04d177c",
   "thread_settings": {
     "environment": {
