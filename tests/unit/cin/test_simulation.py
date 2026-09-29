@@ -37,6 +37,34 @@ def test_exact_cmi_matches_bruteforce_and_preserves_zero_nonedge() -> None:
     assert observed[(0, 2)] == pytest.approx(0.0, abs=1e-12)
 
 
+def test_f_generation_attempt_cap_is_opt_in_and_preserves_deterministic_sequence() -> None:
+    with pytest.raises(RuntimeError, match="500 tries"):
+        generate_case(
+            "F",
+            structure_seed=275542078,
+            sample_seed=114736330,
+            n=150,
+        )
+
+    extended = generate_case(
+        "F",
+        structure_seed=275542078,
+        sample_seed=114736330,
+        n=150,
+        max_tries=2500,
+    )
+    repeated = generate_case(
+        "F",
+        structure_seed=275542078,
+        sample_seed=114736330,
+        n=150,
+        max_tries=2500,
+    )
+
+    assert 500 < extended.meta["rejection_tries"] <= 2500
+    pd.testing.assert_frame_equal(extended.frame, repeated.frame)
+
+
 def test_gaussian_truth_returns_support_and_all_pair_cmi() -> None:
     omega = np.array(
         [[1.0, -0.4, 0.0], [-0.4, 1.0, -0.2], [0.0, -0.2, 1.0]]

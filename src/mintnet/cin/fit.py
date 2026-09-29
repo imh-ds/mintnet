@@ -68,6 +68,75 @@ def _partition(rows: np.ndarray, n_folds: int) -> tuple[np.ndarray, ...]:
     return tuple(result)
 
 
+def _support_deficit_count(
+    partitions: tuple[np.ndarray, ...],
+    rows: np.ndarray,
+    support_codes: np.ndarray,
+    support_mask: np.ndarray,
+) -> int:
+    deficits = 0
+    for eval_rows in partitions:
+        train_rows = np.setdiff1d(rows, eval_rows, assume_unique=True)
+        for target in np.flatnonzero(support_mask):
+            labels = support_codes[train_rows, target]
+            labels = labels[labels >= 0]
+            if np.unique(labels).size < 2:
+                deficits += 1
+    return deficits
+
+
+def _support_balance_score(
+    partitions: tuple[np.ndarray, ...],
+    rows: np.ndarray,
+    support_codes: np.ndarray,
+    support_mask: np.ndarray,
+) -> float:
+    score = 0.0
+    n_folds = len(partitions)
+    for target in np.flatnonzero(support_mask):
+        labels = support_codes[rows, target]
+        labels = labels[labels >= 0]
+        for level in np.unique(labels):
+            total = int(np.count_nonzero(labels == level))
+            if total < 2:
+                continue
+            counts = np.asarray(
+                [np.count_nonzero(support_codes[part, target] == level) for part in partitions],
+                dtype=np.float64,
+            )
+            score += float(np.sum((counts - total / n_folds) ** 2) / total)
+    return score
+
+
+def _support_aware_partitions(
+    rows: np.ndarray,
+    n_folds: int,
+    rng: np.random.Generator,
+    support_codes: np.ndarray,
+    support_mask: np.ndarray,
+) -> tuple[np.ndarray, ...]:
+    baseline = _partition(rng.permutation(rows), n_folds)
+    baseline_deficits = _support_deficit_count(baseline, rows, support_codes, support_mask)
+    if baseline_deficits == 0:
+        return baseline
+
+    best = baseline
+    best_score = (
+        baseline_deficits,
+        _support_balance_score(baseline, rows, support_codes, support_mask),
+    )
+    for _ in range(255):
+        candidate = _partition(rng.permutation(rows), n_folds)
+        candidate_score = (
+            _support_deficit_count(candidate, rows, support_codes, support_mask),
+            _support_balance_score(candidate, rows, support_codes, support_mask),
+        )
+        if candidate_score < best_score:
+            best = candidate
+            best_score = candidate_score
+    return best
+
+
 @dataclass(frozen=True)
 class InnerSplit:
     train_rows: np.ndarray
@@ -96,13 +165,29 @@ def _seed_record(sequence: np.random.SeedSequence) -> dict[str, Any]:
     return {"entropy": entropy, "spawn_key": list(sequence.spawn_key)}
 
 
-def make_splits(n_rows: int, config: CINConfig, *, seed: int | None = None) -> SplitPlan:
+def make_splits(
+    n_rows: int,
+    config: CINConfig,
+    *,
+    seed: int | None = None,
+    support_codes: np.ndarray | None = None,
+    support_mask: np.ndarray | None = None,
+) -> SplitPlan:
     """Make one shared deterministic outer/inner split plan."""
 
     if isinstance(n_rows, bool) or not isinstance(n_rows, (int, np.integer)) or n_rows < 1:
         raise ValueError("n_rows must be a positive integer")
     if not isinstance(config, CINConfig):
         raise ValueError("config must be a CINConfig instance")
+    if config.support_aware_inner_splits:
+        if support_codes is None or support_mask is None:
+            raise ValueError("support-aware splits require categorical support codes and mask")
+        support_codes = np.asarray(support_codes)
+        support_mask = np.asarray(support_mask, dtype=bool)
+        if support_codes.ndim != 2 or support_codes.shape[0] != int(n_rows):
+            raise ValueError("support_codes must have shape (n_rows, n_targets)")
+        if support_mask.ndim != 1 or support_mask.size != support_codes.shape[1]:
+            raise ValueError("support_mask must have one entry per support-code target")
 
     root_seed = config.seed if seed is None else int(seed)
     root = np.random.SeedSequence(root_seed)
@@ -119,8 +204,19 @@ def make_splits(n_rows: int, config: CINConfig, *, seed: int | None = None) -> S
     }
     for fold_index, eval_rows in enumerate(outer_eval_parts):
         train_rows = _readonly(np.setdiff1d(all_rows, eval_rows, assume_unique=True))
-        inner_permutation = np.random.default_rng(inner_sequences[fold_index]).permutation(train_rows)
-        inner_eval_parts = _partition(inner_permutation, config.inner_folds)
+        inner_rng = np.random.default_rng(inner_sequences[fold_index])
+        if config.support_aware_inner_splits:
+            assert support_codes is not None and support_mask is not None
+            inner_eval_parts = _support_aware_partitions(
+                train_rows,
+                config.inner_folds,
+                inner_rng,
+                support_codes,
+                support_mask,
+            )
+        else:
+            inner_permutation = inner_rng.permutation(train_rows)
+            inner_eval_parts = _partition(inner_permutation, config.inner_folds)
         inner_splits: list[InnerSplit] = []
         for inner_eval in inner_eval_parts:
             inner_train = _readonly(np.setdiff1d(train_rows, inner_eval, assume_unique=True))
@@ -1053,7 +1149,13 @@ def _fit_prepared(
     from .ridge import RidgeNumericalFailure
 
     started_at = time.monotonic()
-    split_plan = make_splits(prepared.n_retained, config, seed=split_seed)
+    split_plan = make_splits(
+        prepared.n_retained,
+        config,
+        seed=split_seed,
+        support_codes=prepared.codes if config.support_aware_inner_splits else None,
+        support_mask=prepared.kinds if config.support_aware_inner_splits else None,
+    )
     actual_deadline = (
         float(deadline) if deadline is not None else started_at + float(config.max_seconds)
     )

@@ -145,7 +145,7 @@ def aggregate(
         _write_provenance(
             shard_paths,
             staging,
-            expected_source_config_sha256=_sha256_file(config_path),
+            expected_source_config_sha256=_sha256_text_file(config_path),
             expected_charter_sha256=expected_charter_sha256,
         )
         reporting.write_report(raw, config, staging)
@@ -169,6 +169,11 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _sha256_text_file(path: Path) -> str:
+    content = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
 
 
 def _write_provenance(

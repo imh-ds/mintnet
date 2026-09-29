@@ -504,13 +504,24 @@ def _finite_states(cardinality: int, p: int) -> np.ndarray:
     return np.moveaxis(axes, 0, -1).reshape(-1, p)
 
 
+class GeneratorAcceptanceError(RuntimeError):
+    """Raised when a finite case exhausts its population-CMI acceptance search."""
+
+    def __init__(self, case: str, attempts: int) -> None:
+        self.attempts = attempts
+        super().__init__(f"{case} did not satisfy its population CMI floor in {attempts} tries")
+
+
 def _sample_finite_case(
     case: str,
     *,
     structure_seed: int,
     sample_seed: int,
     n: int | None,
+    max_tries: int = 500,
 ) -> SimulatedDataset:
+    if isinstance(max_tries, bool) or not isinstance(max_tries, int) or max_tries < 1:
+        raise ValueError("max_tries must be a positive integer")
     structure_rng = np.random.default_rng(_validate_seed(structure_seed, "structure_seed"))
     if case == "F":
         p, cardinality, edge_count, default_n = 8, 2, 10, 150
@@ -520,7 +531,6 @@ def _sample_finite_case(
         raise ValueError(f"unknown finite CIN case: {case}")
     sample_size = _validate_sample_size(n, default_n)
     states = _finite_states(cardinality, p)
-    max_tries = 500
     accepted: tuple[list[tuple[int, int]], np.ndarray, np.ndarray, dict[tuple[int, int], float], int] | None = None
     for tries in range(1, max_tries + 1):
         edges = _finite_case_graph(p, edge_count, structure_rng)
@@ -544,7 +554,7 @@ def _sample_finite_case(
             accepted = (edges, fields, interactions, cmi_indices, tries)
             break
     if accepted is None:
-        raise RuntimeError(f"{case} did not satisfy its population CMI floor in {max_tries} tries")
+        raise GeneratorAcceptanceError(case, max_tries)
 
     edges, fields, interactions, cmi_indices, tries = accepted
     sample_rng = np.random.default_rng(_validate_seed(sample_seed, "sample_seed"))
@@ -779,8 +789,12 @@ def generate_case(
     structure_seed: int,
     sample_seed: int,
     n: int | None = None,
+    max_tries: int | None = None,
 ) -> SimulatedDataset:
     """Generate one deterministic CIN evaluation case."""
+
+    if max_tries is not None and case != "F":
+        raise ValueError("max_tries is an F-only generator option")
 
     if case in _GAUSSIAN_CASES:
         return _named_gaussian_result(
@@ -818,6 +832,7 @@ def generate_case(
             structure_seed=structure_seed,
             sample_seed=sample_seed,
             n=n,
+            max_tries=500 if max_tries is None else max_tries,
         )
     if case == "H":
         return _mixed_star_result(

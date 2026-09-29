@@ -386,6 +386,7 @@ class CINConfig:
     tie_tolerance: float = 1e-8
     fallback_stop_fraction: float = 0.01
     pair_batch_size: int = 256
+    support_aware_inner_splits: bool = False
 
     def __post_init__(self) -> None:
         int_fields = (
@@ -425,6 +426,8 @@ class CINConfig:
             raise ValueError("seed must be >= 0")
         if not isinstance(self.missing, str) or self.missing not in {"error", "complete_case"}:
             raise ValueError("missing must be 'error' or 'complete_case'")
+        if not isinstance(self.support_aware_inner_splits, bool):
+            raise ValueError("support_aware_inner_splits must be a boolean")
         if self.max_seconds <= 0:
             raise ValueError("max_seconds must be > 0")
         if self.outer_folds < 2:

@@ -60,6 +60,10 @@ on:
         description: "Comma-separated values for the third shard dimension (leave empty for a two-dimension run)"
         required: false
         default: ""
+      freeze_manifest:
+        description: "Committed frozen protocol manifest; required for CIN F follow-up configs"
+        required: false
+        default: ""
       aggregation_phase:
         description: "Aggregate the full grid or exactly one CIN panel phase"
         type: choice
@@ -113,7 +117,51 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e .
+      - name: Install project dependencies
+        env:
+          CONFIG: ${{ inputs.config }}
+        run: |
+          if grep -q '^protocol: cin-followup-f-v1$' "$CONFIG"; then
+            pip install -e . -r requirements-cin-followup-v1.txt
+          else
+            pip install -e .
+          fi
+      - name: Verify frozen F follow-up dispatch guard
+        env:
+          RUNNER_MODULE: ${{ inputs.runner_module }}
+          CONFIG: ${{ inputs.config }}
+          FREEZE_MANIFEST: ${{ inputs.freeze_manifest }}
+          DIM3_FLAG: ${{ inputs.dim3_flag }}
+          V3: ${{ matrix.v3 }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if ! grep -q '^protocol: cin-followup-f-v1$' "$CONFIG"; then
+            exit 0
+          fi
+          if [[ "$RUNNER_MODULE" != "mintnet.experiments.cin_baseline" ]]; then
+            echo "F follow-up config requires the CIN baseline runner" >&2
+            exit 2
+          fi
+          if [[ -z "$FREEZE_MANIFEST" ]]; then
+            echo "F follow-up dispatch requires a committed freeze manifest" >&2
+            exit 2
+          fi
+          if [[ "$DIM3_FLAG" == "--f-max-tries" ]]; then
+            echo "F generator cap comparison must finish before protocol freeze" >&2
+            exit 2
+          fi
+          cmd=(python scripts/cin_followup_f_gate_check.py
+            --config "$CONFIG"
+            --preflight-only
+            --freeze-manifest "$FREEZE_MANIFEST"
+            --code-revision "$DISPATCH_SHA")
+          if [[ "$DIM3_FLAG" == "--support-aware-inner-splits" ]]; then
+            cmd+=(--support-aware-inner-splits "$V3")
+          elif [[ -n "$DIM3_FLAG" ]]; then
+            echo "unsupported third dimension for frozen F follow-up" >&2
+            exit 2
+          fi
+          "${cmd[@]}"
       - env:
           RUNNER_MODULE: ${{ inputs.runner_module }}
           CONFIG: ${{ inputs.config }}
@@ -146,7 +194,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e .
+      - name: Install project dependencies
+        env:
+          CONFIG: ${{ inputs.config }}
+        run: |
+          if grep -q '^protocol: cin-followup-f-v1$' "$CONFIG"; then
+            pip install -e . -r requirements-cin-followup-v1.txt
+          else
+            pip install -e .
+          fi
       - uses: actions/download-artifact@v4
         with:
           pattern: "shard-*"

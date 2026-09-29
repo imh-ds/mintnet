@@ -129,9 +129,13 @@ def _validate_aggregate_provenance(
     def digest(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
+    def text_digest(path: Path) -> str:
+        content = path.read_bytes().replace(b"\r\n", b"\n")
+        return hashlib.sha256(content).hexdigest()
+
     if metadata["aggregated_raw_metrics_sha256"] != digest(raw_path):
         raise ValueError("validation raw metrics do not match aggregate provenance")
-    if metadata["source_config_sha256"] != digest(config_path):
+    if metadata["source_config_sha256"] != text_digest(config_path):
         raise ValueError("aggregate source config hash does not match the requested config")
     resolved_path = metadata_path.parent / "resolved_config.yaml"
     if not resolved_path.is_file() or metadata["config_sha256"] != digest(resolved_path):

@@ -59,6 +59,8 @@ class PanelConfig:
     stability_cases: tuple[str, ...]
     stability_repeats: int
     stability_fraction: float
+    f_max_tries: int | None
+    support_aware_inner_splits: bool
     charter_path: Path
     charter_sha256: str
     delta_candidates: tuple[float, ...]
@@ -71,7 +73,7 @@ class PanelConfig:
 PANEL_RAW_COLUMNS = (
     "case", "phase", "replicate", "method", "structure_seed", "sample_seed",
     "cin_fit_seed", "comparator_fit_seed", "stability_seed", "n", "p", "status",
-    "charter_sha256",
+    "charter_sha256", "generator_attempts",
     "error_type", "error", "elapsed_seconds", "point_fit_seconds", "peak_rss_mb", "ap", "prevalence",
     "ap_minus_prevalence", "n_pairs_complete", "n_pairs_total", "n_failed_pairs",
     "n_true_edges", "n_strong_edges", "strong_edge_set_available",
@@ -146,6 +148,17 @@ def load_config(path: Path) -> PanelConfig:
     stability_fraction = float(payload.get("stability_fraction", 0.0))
     if stability_repeats < 0 or not 0.0 < stability_fraction <= 1.0:
         raise ValueError("invalid stability settings")
+    f_max_tries_value = payload.get("f_max_tries")
+    if f_max_tries_value is not None and (
+        isinstance(f_max_tries_value, bool) or not isinstance(f_max_tries_value, int)
+    ):
+        raise ValueError("f_max_tries must be an integer")
+    f_max_tries = None if f_max_tries_value is None else int(f_max_tries_value)
+    if f_max_tries is not None and ("F" not in cases or f_max_tries < 1):
+        raise ValueError("f_max_tries requires case F and must be positive")
+    support_aware_inner_splits = payload.get("support_aware_inner_splits", False)
+    if not isinstance(support_aware_inner_splits, bool):
+        raise ValueError("support_aware_inner_splits must be a boolean")
     charter_value = payload.get("charter", "../docs/cin_baseline_charter.md")
     if not isinstance(charter_value, str) or not charter_value.strip():
         raise ValueError("charter must be a non-empty path")
@@ -174,6 +187,8 @@ def load_config(path: Path) -> PanelConfig:
         stability_cases=stability_cases,
         stability_repeats=stability_repeats,
         stability_fraction=stability_fraction,
+        f_max_tries=f_max_tries,
+        support_aware_inner_splits=support_aware_inner_splits,
         charter_path=charter_path,
         charter_sha256=sha256_text_file(charter_path),
         delta_candidates=delta_candidates,
@@ -230,7 +245,7 @@ def expected_combinations(config: PanelConfig) -> set[tuple[str, str, str]]:
 
 
 def _config_payload(config: PanelConfig) -> dict[str, Any]:
-    return {
+    payload = {
         "master_seed": config.master_seed,
         "cases": list(config.cases),
         "development_replicates": list(config.development_replicates),
@@ -246,6 +261,9 @@ def _config_payload(config: PanelConfig) -> dict[str, Any]:
         "point_fit_max_seconds": config.point_fit_max_seconds,
         "stability_max_seconds": config.stability_max_seconds,
     }
+    if config.f_max_tries is not None:
+        payload["f_max_tries"] = config.f_max_tries
+    return payload
 
 
 def _phase_batches(config: PanelConfig, batches: tuple[str, ...] | None) -> list[tuple[str, tuple[int, ...], int]]:
@@ -272,10 +290,30 @@ def _regression_dataset(seed: int, n: int = 300) -> tuple[pd.DataFrame, dict[str
     return frame, {name: {"kind": "continuous"} for name in names}, truth, None, {"case": "regression", "n": n, "p": 14}
 
 
-def _dataset(case: str, structure_seed: int, sample_seed: int, n_override: int | None) -> Any:
+def _dataset(
+    case: str,
+    structure_seed: int,
+    sample_seed: int,
+    n_override: int | None,
+    f_max_tries: int | None = None,
+) -> Any:
     if case == "regression":
         return _regression_dataset(sample_seed, n_override or 300)
-    generated = generate_case(case, structure_seed=structure_seed, sample_seed=sample_seed, n=n_override)
+    if case == "F" and f_max_tries is not None:
+        generated = generate_case(
+            case,
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n_override,
+            max_tries=f_max_tries,
+        )
+    else:
+        generated = generate_case(
+            case,
+            structure_seed=structure_seed,
+            sample_seed=sample_seed,
+            n=n_override,
+        )
     return generated.frame, generated.schema, generated.truth_edges, generated.population_cmi, generated.meta
 
 
@@ -423,13 +461,23 @@ def _metrics(
             row["oracle_cmi_bias"] = row["oracle_cmi_bias_true"]
 
 
-def _fit_method(method: str, frame: pd.DataFrame, schema: dict[str, dict[str, Any]], seeds: Any) -> tuple[pd.DataFrame, Any, float | None]:
+def _fit_method(
+    method: str,
+    frame: pd.DataFrame,
+    schema: dict[str, dict[str, Any]],
+    seeds: Any,
+    *,
+    support_aware_inner_splits: bool = False,
+) -> tuple[pd.DataFrame, Any, float | None]:
     if method == "ebicglasso":
         result = fit_ebicglasso(frame.to_numpy(dtype=float))
         if not any(np.isfinite(result.ebic_by_lambda)):
             raise RuntimeError("EBICglasso path did not converge at any lambda")
         return _pair_frame_from_ebic(tuple(frame.columns), result), result, None
-    config = CINConfig(seed=seeds.cin_fit)
+    config = CINConfig(
+        seed=seeds.cin_fit,
+        support_aware_inner_splits=support_aware_inner_splits,
+    )
     if method == "cin_linear":
         config = replace(config, max_curvature_rank=0)
     with thread_limits():
@@ -446,7 +494,13 @@ def _run_method(config: PanelConfig, output_dir: Path, case: str, phase: str, re
     started = time.perf_counter()
     try:
         with thread_limits():
-            pair_frame, fit_result, elapsed_estimate = _fit_method(method, frame, schema, seeds)
+            pair_frame, fit_result, elapsed_estimate = _fit_method(
+                method,
+                frame,
+                schema,
+                seeds,
+                support_aware_inner_splits=config.support_aware_inner_splits,
+            )
         row["point_fit_seconds"] = elapsed_estimate
         sidecar_name = canonical_pair_sidecar_name(case, phase, replicate, method)
         sidecar_path = output_dir / "sidecars" / sidecar_name
@@ -535,15 +589,34 @@ def run_baseline(
     replicate_batches: tuple[str, ...] | None = None,
     workers: int = 1,
     write_report: bool = True,
+    f_max_tries: int | None = None,
+    support_aware_inner_splits: bool | None = None,
 ) -> pd.DataFrame:
     """Run selected panel shards using full-grid case and phase coordinates."""
 
     if workers != 1:
         raise ValueError("CIN runners currently require --workers 1")
+    if f_max_tries is not None:
+        if isinstance(f_max_tries, bool) or not isinstance(f_max_tries, int) or f_max_tries < 1:
+            raise ValueError("f_max_tries must be a positive integer")
+        if "F" not in config.cases:
+            raise ValueError("f_max_tries requires case F")
+        config = replace(config, f_max_tries=f_max_tries)
+    if support_aware_inner_splits is not None:
+        if not isinstance(support_aware_inner_splits, bool):
+            raise ValueError("support_aware_inner_splits must be a boolean")
+        config = replace(
+            config,
+            support_aware_inner_splits=support_aware_inner_splits,
+        )
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
     (target / "sidecars").mkdir(parents=True, exist_ok=True)
     payload = load_yaml(config.source_path)
+    if config.f_max_tries is not None:
+        payload["f_max_tries"] = config.f_max_tries
+    if "support_aware_inner_splits" in payload or support_aware_inner_splits is not None:
+        payload["support_aware_inner_splits"] = config.support_aware_inner_splits
     write_resolved_config(target, payload)
     selected_cases = set(cases or config.cases)
     unknown = selected_cases - set(config.cases)
@@ -572,17 +645,25 @@ def run_baseline(
                         )
                     n_override = config.n_overrides.get(case)
                     try:
-                        frame, schema, truth, population_cmi, _ = _dataset(case, seeds.structure, seeds.sample, n_override)
+                        frame, schema, truth, population_cmi, dataset_meta = _dataset(
+                            case,
+                            seeds.structure,
+                            seeds.sample,
+                            n_override,
+                            config.f_max_tries,
+                        )
                     except Exception as exc:  # keep every method identity durable after a dataset failure.
                         for method in methods_for_case(case):
                             failure = _empty_row(case, phase, replicate, method, seeds, n_override or 300, 0)
                             failure["charter_sha256"] = config.charter_sha256
+                            failure["generator_attempts"] = getattr(exc, "attempts", None)
                             failure.update({"status": "error", "error_type": type(exc).__name__, "error": str(exc)})
                             writer.append(failure)
                             rows.append(failure)
                         continue
                     for method in methods_for_case(case):
                         row = _run_method(config, target, case, phase, replicate, method, seeds, frame, schema, truth, population_cmi)
+                        row["generator_attempts"] = dataset_meta.get("rejection_tries")
                         writer.append(row)
                         rows.append(row)
     finally:
@@ -613,12 +694,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cases", type=_parse_csv)
     parser.add_argument("--replicate-batches", type=_parse_csv)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--f-max-tries", type=int)
+    parser.add_argument(
+        "--support-aware-inner-splits",
+        choices=("true", "false"),
+        help="override the configured support-aware inner-split strategy",
+    )
     parser.add_argument("--no-report", action="store_true")
     args = parser.parse_args(argv)
     run_baseline(
         load_config(args.config), args.output, cases=args.cases,
         replicate_batches=args.replicate_batches, workers=args.workers,
-        write_report=not args.no_report,
+        write_report=not args.no_report, f_max_tries=args.f_max_tries,
+        support_aware_inner_splits=(
+            None
+            if args.support_aware_inner_splits is None
+            else args.support_aware_inner_splits == "true"
+        ),
     )
     return 0
 

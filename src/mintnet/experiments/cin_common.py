@@ -216,7 +216,7 @@ def write_provenance(
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     environment = {name: os.environ.get(name) for name in THREAD_ENVIRONMENT}
-    source_config_sha256 = sha256_file(Path(source_path))
+    source_config_sha256 = sha256_text_file(Path(source_path))
     resolved_path = target_dir / "resolved_config.yaml"
     config_sha256 = sha256_file(resolved_path) if resolved_path.exists() else source_config_sha256
     metadata = {

@@ -175,7 +175,7 @@ def test_gate_provenance_binds_raw_config_and_charter(tmp_path: Path) -> None:
     resolved_path = tmp_path / "resolved_config.yaml"
     resolved_path.write_bytes(config_path.read_bytes())
     resolved_hash = hashlib.sha256(resolved_path.read_bytes()).hexdigest()
-    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    config_hash = hashlib.sha256(config_path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     raw_hash = hashlib.sha256(raw_path.read_bytes()).hexdigest()
     metadata_path = tmp_path / "metadata.json"
     metadata = {

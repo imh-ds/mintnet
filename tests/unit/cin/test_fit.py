@@ -71,6 +71,40 @@ def test_make_splits_accepts_an_explicit_repeat_seed() -> None:
         np.testing.assert_array_equal(left.eval_rows, right.eval_rows)
 
 
+def test_support_aware_splits_preserve_categorical_support_deterministically() -> None:
+    config = CINConfig(seed=31, outer_folds=3, inner_folds=2, support_aware_inner_splits=True)
+    labels = np.ones((60, 2), dtype=np.int16)
+    labels[:6, 0] = 0
+    labels[6:12, 1] = 0
+
+    left = make_splits(60, config, support_codes=labels, support_mask=np.ones(2, dtype=bool))
+    right = make_splits(60, config, support_codes=labels, support_mask=np.ones(2, dtype=bool))
+
+    assert left.seed_metadata == right.seed_metadata
+    for outer in left.outer:
+        rare_counts = [int(np.count_nonzero(labels[outer.train_rows, target] == 0)) for target in range(2)]
+        for inner in outer.inner:
+            for target, rare_count in enumerate(rare_counts):
+                if rare_count >= 2:
+                    assert np.unique(labels[inner.train_rows, target]).size == 2
+
+
+def test_support_aware_splits_do_not_use_outer_evaluation_labels() -> None:
+    config = CINConfig(seed=13, outer_folds=3, inner_folds=2, support_aware_inner_splits=True)
+    labels = np.ones((60, 1), dtype=np.int16)
+    labels[:9, 0] = 0
+    baseline = make_splits(60, config, support_codes=labels, support_mask=np.ones(1, dtype=bool))
+
+    changed = labels.copy()
+    selected_outer = baseline.outer[0]
+    changed[selected_outer.eval_rows, 0] = 0
+    perturbed = make_splits(60, config, support_codes=changed, support_mask=np.ones(1, dtype=bool))
+
+    np.testing.assert_array_equal(selected_outer.eval_rows, perturbed.outer[0].eval_rows)
+    for before_inner, after_inner in zip(selected_outer.inner, perturbed.outer[0].inner):
+        np.testing.assert_array_equal(before_inner.eval_rows, after_inner.eval_rows)
+
+
 def test_public_fit_network_still_uses_the_existing_default_seed() -> None:
     frame, schema, config = _continuous_fixture()
 

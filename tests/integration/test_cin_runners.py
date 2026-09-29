@@ -16,6 +16,7 @@ import yaml
 
 from mintnet.experiments.cin_baseline import load_config as load_panel_config
 from mintnet.experiments.cin_baseline import (
+    CASE_ORDER,
     COMBINATION_COLUMNS as PANEL_COMBINATION_COLUMNS,
     expected_combinations as expected_panel_combinations,
     expected_row_count as expected_panel_rows,
@@ -42,6 +43,7 @@ from mintnet.experiments.cin_common import (
     write_provenance,
     write_resolved_config,
 )
+from mintnet.simulation.cin_networks import GeneratorAcceptanceError
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,7 +96,7 @@ def test_provenance_records_hashes_runtime_and_thread_settings(tmp_path: Path) -
         peak_rss_mb=None,
     )
     metadata = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["config_sha256"] == hashlib.sha256(config_path.read_bytes()).hexdigest()
+    assert metadata["config_sha256"] == sha256_text_file(config_path)
     assert metadata["charter_sha256"] == sha256_text_file(charter_path)
     assert metadata["runtime_seconds"] == 1.25
     assert metadata["peak_rss_mb"] is None
@@ -167,6 +169,120 @@ def test_panel_config_has_frozen_charter_and_statistical_controls() -> None:
     assert config.strong_edge_threshold == 0.01
     assert config.point_fit_max_seconds == 600.0
     assert config.stability_max_seconds == 600.0
+
+
+def test_followup_f_generator_cap_is_passed_and_attempts_are_durable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = yaml.safe_load((ROOT / "configs" / "cin_followup_v1.yaml").read_text())
+    payload["development_replicates"] = [2000]
+    payload["validation_replicates"] = [3000]
+    payload["f_max_tries"] = 500
+    payload["charter"] = str((ROOT / "docs" / "cin_followup_charter_v1.md").resolve())
+    config_path = tmp_path / "followup.yaml"
+    config_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    requested_caps: list[int] = []
+
+    def exhaust_f_cap(case: str, **kwargs: object) -> None:
+        requested_caps.append(int(kwargs["max_tries"]))
+        raise GeneratorAcceptanceError(case, int(kwargs["max_tries"]))
+
+    monkeypatch.setattr(cin_baseline, "generate_case", exhaust_f_cap)
+    config = load_panel_config(config_path)
+    raw = run_baseline(
+        config,
+        tmp_path / "panel",
+        cases=("F",),
+        replicate_batches=("dev0",),
+        write_report=False,
+        f_max_tries=1000,
+    )
+
+    assert requested_caps == [1000]
+    assert raw["status"].tolist() == ["error"]
+    assert raw["generator_attempts"].tolist() == [1000]
+    assert yaml.safe_load((tmp_path / "panel" / "resolved_config.yaml").read_text())[
+        "f_max_tries"
+    ] == 1000
+
+
+def test_followup_support_aware_setting_reaches_cin_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    seeds = derive_seed_bundle(20260928, CASE_ORDER.index("F"), 0, 2000)
+    captured: dict[str, object] = {}
+    fit_result = SimpleNamespace(
+        pairs=pd.DataFrame(),
+        metadata={"runtime": {"elapsed_seconds": 0.25}},
+    )
+
+    def capture_fit(_frame: pd.DataFrame, _schema: object, config: object) -> object:
+        captured["support_aware_inner_splits"] = config.support_aware_inner_splits
+        return fit_result
+
+    monkeypatch.setattr(cin_baseline, "fit_network", capture_fit)
+
+    cin_baseline._fit_method(
+        "cin",
+        pd.DataFrame({"V00": [0, 1]}),
+        {"V00": {"kind": "categorical", "levels": [0, 1]}},
+        seeds,
+        support_aware_inner_splits=True,
+    )
+
+    assert captured["support_aware_inner_splits"] is True
+
+
+def test_followup_baseline_override_is_recorded_in_resolved_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = yaml.safe_load((ROOT / "configs" / "cin_followup_v1.yaml").read_text())
+    payload["development_replicates"] = [2000]
+    payload["validation_replicates"] = [3000]
+    payload["charter"] = str((ROOT / "docs" / "cin_followup_charter_v1.md").resolve())
+    config_path = tmp_path / "followup.yaml"
+    config_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    config = load_panel_config(config_path)
+    captured: dict[str, object] = {}
+    frame = pd.DataFrame({"V00": [0, 1], "V01": [1, 0]})
+    schema = {
+        "V00": {"kind": "categorical", "levels": [0, 1]},
+        "V01": {"kind": "categorical", "levels": [0, 1]},
+    }
+    pair_frame = pd.DataFrame(
+        [{"node_i": "V00", "node_j": "V01", "weight_nats_raw": 0.1, "status": "complete"}]
+    )
+    nodes = pd.DataFrame(
+        columns=[
+            "node", "full_minus_intercept", "variance_floor_hits",
+            "clipped_fraction_mean", "zero_sum_fallbacks", "min_probability",
+        ]
+    )
+    fit_result = SimpleNamespace(nodes=nodes, metadata={"runtime": {"elapsed_seconds": 0.1}})
+
+    monkeypatch.setattr(
+        cin_baseline,
+        "_dataset",
+        lambda *_args: (frame, schema, frozenset(), None, {"rejection_tries": 2}),
+    )
+
+    def fake_fit(*_args: object, support_aware_inner_splits: bool = True) -> tuple[object, object, float]:
+        captured["support_aware_inner_splits"] = support_aware_inner_splits
+        return pair_frame, fit_result, 0.1
+
+    monkeypatch.setattr(cin_baseline, "_fit_method", fake_fit)
+    monkeypatch.setattr(cin_baseline, "_metrics", lambda *_args, **_kwargs: None)
+
+    run_baseline(
+        config,
+        tmp_path / "baseline",
+        cases=("F",),
+        replicate_batches=("dev0",),
+        write_report=False,
+        support_aware_inner_splits=False,
+    )
+
+    resolved = yaml.safe_load((tmp_path / "baseline" / "resolved_config.yaml").read_text())
+    assert captured["support_aware_inner_splits"] is False
+    assert resolved["support_aware_inner_splits"] is False
 
 
 def test_panel_smoke_persists_charter_identity(tmp_path: Path) -> None:
@@ -736,7 +852,7 @@ def test_categorical_excess_loss_uses_categorical_targets_only(
         ]
     )
     fit_result = SimpleNamespace(nodes=nodes)
-    monkeypatch.setattr(cin_baseline, "_fit_method", lambda *_args: (pair_frame, fit_result, 0.1))
+    monkeypatch.setattr(cin_baseline, "_fit_method", lambda *_args, **_kwargs: (pair_frame, fit_result, 0.1))
     monkeypatch.setattr(cin_baseline, "_metrics", lambda *_args, **_kwargs: None)
 
     row = cin_baseline._run_method(
