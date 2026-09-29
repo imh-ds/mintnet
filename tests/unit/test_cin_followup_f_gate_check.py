@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import replace
 from pathlib import Path
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ import yaml
 
 from mintnet.experiments.cin_baseline import CASE_ORDER, expected_identities, load_config
 from mintnet.experiments.cin_common import derive_seed_bundle, sha256_text_file
+import scripts.cin_followup_f_gate_check as gate_check
 from scripts.cin_followup_f_gate_check import (
     RUNNER_HOURS_CEILING,
     RUNNER_HOURS_ESTIMATE,
@@ -82,7 +84,13 @@ def _provenance(
         resolved_payload["support_aware_inner_splits"] = support_aware_inner_splits
     resolved_config.write_text(yaml.safe_dump(resolved_payload), encoding="utf-8")
     sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-    code_revision = "a" * 40
+    code_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     metadata = {
         "provenance_validated": True,
         "source_config_sha256": sha256_text_file(FOLLOWUP_CONFIG),
@@ -151,6 +159,37 @@ def test_baseline_validation_accepts_frozen_false_split_manifest(tmp_path: Path)
 
     assert result["status"] == "pass"
     assert result["n_complete"] == 97
+
+
+def test_validation_accepts_docs_only_dispatch_revision_with_frozen_code_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = _f_rows()
+    metadata, freeze = _provenance(tmp_path, raw)
+    freeze["code_revision"] = "a" * 40
+    freeze["source_code_sha256"] = "b" * 64
+    metadata["git_commit"] = "c" * 40
+    monkeypatch.setattr(gate_check, "_frozen_source_sha256", lambda: "d" * 64)
+    monkeypatch.setattr(
+        gate_check,
+        "_frozen_source_sha256_at_revision",
+        lambda revision: "b" * 64,
+        raising=False,
+    )
+
+    result = evaluate_f_validation(
+        raw,
+        load_config(FOLLOWUP_CONFIG),
+        metadata=metadata,
+        freeze_manifest=freeze,
+        raw_metrics_path=tmp_path / "raw_metrics.csv",
+        resolved_config_path=tmp_path / "resolved_config.yaml",
+        source_config_path=FOLLOWUP_CONFIG,
+    )
+
+    assert result["status"] == "pass"
+    assert result["git_commit"] == "c" * 40
 
 
 @pytest.mark.parametrize("failure_kind", ["incomplete", "error"])

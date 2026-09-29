@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 import re
 import subprocess
+from functools import lru_cache
 from typing import Any, Mapping
 
 import pandas as pd
@@ -89,6 +90,26 @@ def _frozen_source_sha256(paths: tuple[Path, ...] = F_FROZEN_SOURCE_FILES) -> st
     for path in paths:
         relative = path.resolve().relative_to(PROJECT_ROOT).as_posix()
         normalized = path.read_bytes().replace(b"\r\n", b"\n")
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(normalized).hexdigest().encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+@lru_cache(maxsize=32)
+def _frozen_source_sha256_at_revision(revision: str) -> str:
+    """Fingerprint the protocol sources recorded in a Git revision."""
+    digest = hashlib.sha256()
+    for path in F_FROZEN_SOURCE_FILES:
+        relative = path.resolve().relative_to(PROJECT_ROOT).as_posix()
+        result = subprocess.run(
+            ["git", "show", f"{revision}:{relative}"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+        )
+        normalized = result.stdout.replace(b"\r\n", b"\n")
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(hashlib.sha256(normalized).hexdigest().encode("ascii"))
@@ -303,12 +324,22 @@ def _validate_provenance(
     if metadata["aggregated_raw_metrics_sha256"] != raw_hash:
         raise ValueError("aggregated_raw_metrics_sha256 mismatch")
 
+    if freeze_manifest.get("status") != "frozen":
+        raise ValueError("freeze manifest status must be frozen before validation can pass")
+    frozen_revision = freeze_manifest.get("code_revision")
+    if not isinstance(frozen_revision, str) or re.fullmatch(revision_pattern, frozen_revision) is None:
+        raise ValueError("freeze manifest code_revision must be a full Git revision hash")
+    frozen_source_hash = _frozen_source_sha256_at_revision(frozen_revision)
+    aggregate_source_hash = _frozen_source_sha256_at_revision(metadata["git_commit"])
+    if aggregate_source_hash != frozen_source_hash:
+        raise ValueError("aggregate code revision does not match the frozen protocol source")
+
     frozen = {
         "source_config_sha256": source_hash,
         "config_sha256": resolved_hash,
         "charter_sha256": charter_hash,
         "seed_inventory_sha256": _seed_inventory_sha256(),
-        "source_code_sha256": _frozen_source_sha256(),
+        "source_code_sha256": frozen_source_hash,
         "f_max_tries": effective_cap_value,
         "support_aware_inner_splits": bool(
             resolved_payload.get("support_aware_inner_splits", False)
@@ -316,12 +347,6 @@ def _validate_provenance(
         "runner_hours_estimate": RUNNER_HOURS_ESTIMATE,
         "runner_hours_ceiling": RUNNER_HOURS_CEILING,
     }
-    if freeze_manifest.get("status") != "frozen":
-        raise ValueError("freeze manifest status must be frozen before validation can pass")
-    revision_pattern = r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}"
-    frozen_revision = freeze_manifest.get("code_revision")
-    if not isinstance(frozen_revision, str) or re.fullmatch(revision_pattern, frozen_revision) is None:
-        raise ValueError("freeze manifest code_revision must be a full Git revision hash")
     for field, value in frozen.items():
         if field not in freeze_manifest or freeze_manifest[field] is None:
             raise ValueError(f"freeze manifest is missing {field}")
