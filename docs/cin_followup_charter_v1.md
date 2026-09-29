@@ -1,6 +1,6 @@
 # CIN Focused F Follow-Up Charter v1
 
-**Status:** Development-selected protocol candidate; source/config hashes and code fingerprint must be frozen in the committed manifest. No hosted phase is authorized by this charter.
+**Status:** Frozen F follow-up protocol candidate. The committed baseline and candidate manifests pin the source, configuration, charter, seed inventory, and code fingerprint. No hosted phase is authorized by this charter.
 
 **Version:** `cin-followup-f-v1`
 **Scope:** Case F, binary categorical simulation, CIN only

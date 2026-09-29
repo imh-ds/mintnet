@@ -1,10 +1,10 @@
 # F Follow-Up Development Selection
 
-Run date: 2026-09-28. Scope: local development-only selection for the F follow-up protocol. No held-out validation identity was opened, and no GitHub Actions workflow was dispatched.
+Evidence refreshed: 2026-09-29 against source commit `78a4ceb4085b2872357aaf78ea415bdf51d2e2ce`. Runs used the final frozen charter and protocol marker.
 
 ## Environment and identity handling
 
-Runs used Python 3.11.9 from the repository `.venv`, NumPy 2.4.6, pandas 3.0.5, SciPy 1.17.1, scikit-learn 1.9.0, PyYAML 6.0.3, threadpoolctl 3.6.0, and matplotlib 3.11.1. BLAS/OpenMP thread counts were set to one. The matching dependency pins are in `requirements-cin-followup-v1.txt`. Development IDs were exactly 2000–2019 with master seed 20260928. The five seed streams matched between fit arms and were preflighted against the D-106 development, validation, and diagnostic inventories.
+Runs used Python 3.11.9 with the repository `.venv` pinned packages, NumPy 2.4.6, pandas 3.0.5, SciPy 1.17.1, scikit-learn 1.9.0, PyYAML 6.0.3, threadpoolctl 3.6.0, and matplotlib 3.11.1. BLAS/OpenMP thread counts were set to one. The matching dependency pins are in `requirements-cin-followup-v1.txt`. Development IDs were exactly 2000–2019 with master seed 20260928. The five seed streams matched between fit arms and were preflighted against the D-106 development, validation, and diagnostic inventories.
 
 The baseline and support-aware fit arms were both rerun under the same source tree and cap after the candidate implementation was added. The baseline arm uses `--support-aware-inner-splits false`; the candidate arm uses the versioned config's `true` setting. Their generated datasets, structure/sample/fit seeds, and generator-attempt counts match identity by identity.
 

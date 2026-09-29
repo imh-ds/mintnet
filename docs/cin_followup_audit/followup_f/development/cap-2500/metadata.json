@@ -1,5 +1,5 @@
 {
-  "charter_sha256": "6d2e225653621cf85c62a0d31139f72d37b8700070f76fa2e358551307cfefd8",
+  "charter_sha256": "0e8306dd9b40f6f383e06a16c2d3739065d2277b4dbb13054173a9c071661f2a",
   "config": {
     "cases": [
       "F"
@@ -38,6 +38,7 @@
       "F": 150
     },
     "point_fit_max_seconds": 600.0,
+    "protocol": "cin-followup-f-v1",
     "stability_cases": [],
     "stability_fraction": 0.8,
     "stability_max_seconds": 600.0,
@@ -144,9 +145,9 @@
       3096
     ]
   },
-  "config_sha256": "11be6f926f92dee3af5d30c7cbb936cb2fc5f896179ae9674f4622078fabdc55",
+  "config_sha256": "dc25cd3143bb37ea3596e8af4ae89a5c4d15914a0b929e8a4e3d73b599fbabe0",
   "cpu": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
-  "git_commit": "6c72ab96708e388453e2b9b637cd63792e724045",
+  "git_commit": "78a4ceb4085b2872357aaf78ea415bdf51d2e2ce",
   "package_versions": {
     "PyYAML": "6.0.3",
     "numpy": "2.4.6",
@@ -159,8 +160,8 @@
   "peak_rss_mb": null,
   "platform": "Windows-10-10.0.26200-SP0",
   "python": "3.11.9",
-  "runtime_seconds": 5.334891400008928,
-  "source_config_sha256": "a4c10e3b0a6ebdf84b62071f43016725a92b907b7f48a18ea7acf12c7538fafe",
+  "runtime_seconds": 5.344631300016772,
+  "source_config_sha256": "f547b49152ef3160ed673b6119b892c01b555b2203059d5c2e9074c2f04d177c",
   "thread_settings": {
     "environment": {
       "MKL_NUM_THREADS": "1",

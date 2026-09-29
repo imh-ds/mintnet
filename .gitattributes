@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+docs/cin_followup_charter_v1.md text eol=lf
+docs/cin_followup_audit/followup_f/development/** text eol=lf

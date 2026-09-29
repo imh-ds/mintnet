@@ -31,6 +31,7 @@ master_seed: 20260928
 n_overrides:
   F: 150
 point_fit_max_seconds: 600.0
+protocol: cin-followup-f-v1
 stability_cases: []
 stability_fraction: 0.8
 stability_max_seconds: 600.0
