@@ -323,7 +323,7 @@ def _validate_provenance(
     if not isinstance(frozen_revision, str) or re.fullmatch(revision_pattern, frozen_revision) is None:
         raise ValueError("freeze manifest code_revision must be a full Git revision hash")
     for field, value in frozen.items():
-        if not freeze_manifest.get(field):
+        if field not in freeze_manifest or freeze_manifest[field] is None:
             raise ValueError(f"freeze manifest is missing {field}")
         if freeze_manifest[field] != value:
             raise ValueError(f"freeze manifest {field} does not match aggregate provenance")

@@ -130,6 +130,29 @@ def test_all_expected_f_validation_identities_pass_strict_completion_gate(tmp_pa
     assert result["wilson_95"]["lower"] < 1.0
 
 
+def test_baseline_validation_accepts_frozen_false_split_manifest(tmp_path: Path) -> None:
+    raw = _f_rows()
+    metadata, freeze = _provenance(
+        tmp_path,
+        raw,
+        support_aware_inner_splits=False,
+    )
+
+    result = evaluate_f_validation(
+        raw,
+        load_config(FOLLOWUP_CONFIG),
+        metadata=metadata,
+        freeze_manifest=freeze,
+        raw_metrics_path=tmp_path / "raw_metrics.csv",
+        resolved_config_path=tmp_path / "resolved_config.yaml",
+        source_config_path=FOLLOWUP_CONFIG,
+        require_candidate=False,
+    )
+
+    assert result["status"] == "pass"
+    assert result["n_complete"] == 97
+
+
 @pytest.mark.parametrize("failure_kind", ["incomplete", "error"])
 def test_any_noncomplete_identity_fails_without_leaving_denominator(
     tmp_path: Path, failure_kind: str
