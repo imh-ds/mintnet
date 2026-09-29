@@ -1,0 +1,70 @@
+{
+  "baseline_gate": {
+    "case": "F",
+    "charter_sha256": "0e8306dd9b40f6f383e06a16c2d3739065d2277b4dbb13054173a9c071661f2a",
+    "completion_rate": 0.9072164948453608,
+    "completion_threshold": 1.0,
+    "f_max_tries": 500,
+    "git_commit": "ad4bf8ae6a6f3f3316db1652a832b61da9002c8d",
+    "method": "cin",
+    "n_complete": 88,
+    "n_expected": 97,
+    "phase": "validation",
+    "protocol": "cin-followup-f-v1",
+    "source_config_sha256": "f547b49152ef3160ed673b6119b892c01b555b2203059d5c2e9074c2f04d177c",
+    "status": "fail",
+    "status_counts": {
+      "complete": 88,
+      "error": 7,
+      "incomplete": 2
+    },
+    "wilson_95": {
+      "half_width": 0.05871280914509758,
+      "lower": 0.8329911632283566,
+      "upper": 0.9504167815185518
+    }
+  },
+  "case": "F",
+  "charter_sha256": "0e8306dd9b40f6f383e06a16c2d3739065d2277b4dbb13054173a9c071661f2a",
+  "completion_rate": 0.9278350515463918,
+  "completion_threshold": 1.0,
+  "f_max_tries": 500,
+  "git_commit": "ad4bf8ae6a6f3f3316db1652a832b61da9002c8d",
+  "method": "cin",
+  "n_complete": 90,
+  "n_expected": 97,
+  "paired_completion": {
+    "baseline_complete": 88,
+    "baseline_completion_rate": 0.9072164948453608,
+    "candidate_complete": 90,
+    "candidate_completion_rate": 0.9278350515463918,
+    "candidate_improvements": 2,
+    "candidate_regressions": 0,
+    "n_expected": 97,
+    "paired_status_counts": {
+      "complete->complete": 88,
+      "complete->error": 0,
+      "complete->incomplete": 0,
+      "error->complete": 0,
+      "error->error": 7,
+      "error->incomplete": 0,
+      "incomplete->complete": 2,
+      "incomplete->error": 0,
+      "incomplete->incomplete": 0
+    }
+  },
+  "phase": "validation",
+  "protocol": "cin-followup-f-v1",
+  "source_config_sha256": "f547b49152ef3160ed673b6119b892c01b555b2203059d5c2e9074c2f04d177c",
+  "status": "fail",
+  "status_counts": {
+    "complete": 90,
+    "error": 7,
+    "incomplete": 0
+  },
+  "wilson_95": {
+    "half_width": 0.05306875679264256,
+    "lower": 0.8584683281060499,
+    "upper": 0.964605841691335
+  }
+}

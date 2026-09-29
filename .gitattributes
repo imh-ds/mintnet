@@ -3,3 +3,5 @@
 docs/cin_followup_charter_v1.md text eol=lf
 docs/cin_followup_audit/followup_f/development/** text eol=lf
 docs/cin_followup_audit/followup_f/development/**/sidecars/** binary
+docs/cin_followup_audit/followup_f/validation/** text eol=lf
+docs/cin_followup_audit/followup_f/validation/**/sidecars/** binary
