@@ -213,7 +213,7 @@ jobs:
           AGGREGATION_PHASE: ${{ inputs.aggregation_phase }}
         run: |
           set -e
-          export PYTHONPATH="$GITHUB_WORKSPACE/src"
+          export PYTHONPATH="$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE"
           cmd=(python scripts/aggregate_shards.py \
             --module "$RUNNER_MODULE" \
             --config "$CONFIG" \

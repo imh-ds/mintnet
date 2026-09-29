@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import csv
+import os
+import subprocess
+import sys
 from datetime import date
 import math
 from dataclasses import replace
@@ -1049,4 +1052,43 @@ def test_sharded_workflow_exposes_src_package_path() -> None:
     workflow = (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(
         encoding="utf-8"
     )
-    assert workflow.count('export PYTHONPATH="$GITHUB_WORKSPACE/src"') == 2
+    assert workflow.count('export PYTHONPATH="$GITHUB_WORKSPACE/src"') == 1
+    assert workflow.count(
+        'export PYTHONPATH="$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE"'
+    ) == 1
+
+
+def test_aggregate_workflow_environment_can_import_sidecar_aggregator(tmp_path: Path) -> None:
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    aggregate_run = next(
+        step["run"]
+        for step in workflow["jobs"]["aggregate"]["steps"]
+        if "scripts/aggregate_shards.py" in step.get("run", "")
+    )
+    path_assignment = next(
+        line.strip()
+        for line in aggregate_run.splitlines()
+        if line.strip().startswith("export PYTHONPATH=")
+    )
+    path_template = path_assignment.split("=", 1)[1].strip().strip('"')
+    import_paths = [
+        Path(part.replace("$GITHUB_WORKSPACE", str(ROOT)))
+        for part in path_template.split(":")
+    ]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(str(path) for path in import_paths)
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import scripts.aggregate_cin_sidecars"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
