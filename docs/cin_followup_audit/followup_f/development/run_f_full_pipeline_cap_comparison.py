@@ -98,7 +98,7 @@ def _characteristics(cap: int, config) -> list[dict[str, object]]:
                 f"accepted F/{replicate} violated the predeclared truth-edge contract"
             )
         level_counts = [
-            frame[column].value_counts(dropna=False).astype(int).tolist()
+            generated.frame[column].value_counts(dropna=False).astype(int).tolist()
             for column in generated.frame.columns
         ]
         node_levels = [len(counts) for counts in level_counts]
@@ -126,9 +126,7 @@ def _characteristics(cap: int, config) -> list[dict[str, object]]:
 
 
 def main() -> None:
-    if OUT_ROOT.exists():
-        raise FileExistsError(f"output directory already exists; refusing overwrite: {OUT_ROOT}")
-    OUT_ROOT.mkdir(parents=True)
+    OUT_ROOT.mkdir(parents=True, exist_ok=True)
     config = load_config(CONFIG_PATH)
     if config.development_replicates != REPLICATES or config.master_seed != 20261004:
         raise AssertionError("the checked-in config differs from the predeclared cohort")
@@ -152,22 +150,42 @@ def main() -> None:
     characteristics_by_cap: dict[int, list[dict[str, object]]] = {}
     for cap in CAPS:
         run_dir = OUT_ROOT / f"cap-{cap}"
-        raw_by_cap[cap] = run_baseline(
-            config,
-            run_dir,
-            cases=("F",),
-            replicate_batches=("dev0",),
-            write_report=True,
-            f_max_tries=cap,
-            support_aware_inner_splits=True,
+        expected_run_files = (
+            run_dir / "raw_metrics.csv",
+            run_dir / "metadata.json",
+            run_dir / "resolved_config.yaml",
         )
+        if run_dir.exists():
+            missing = [path.name for path in expected_run_files if not path.is_file()]
+            if missing:
+                raise FileExistsError(
+                    f"incomplete existing cap-{cap} run; refusing overwrite, missing {missing}"
+                )
+            raw_by_cap[cap] = pd.read_csv(run_dir / "raw_metrics.csv")
+            resolved_text = (run_dir / "resolved_config.yaml").read_text(encoding="utf-8")
+            if f"f_max_tries: {cap}" not in resolved_text:
+                raise ValueError(f"existing cap-{cap} output has an unexpected resolved config")
+        else:
+            raw_by_cap[cap] = run_baseline(
+                config,
+                run_dir,
+                cases=("F",),
+                replicate_batches=("dev0",),
+                write_report=True,
+                f_max_tries=cap,
+                support_aware_inner_splits=True,
+            )
         frame = raw_by_cap[cap]
         if len(frame) != len(REPLICATES):
             raise AssertionError(f"cap {cap}: expected {len(REPLICATES)} rows, found {len(frame)}")
         if frame["replicate"].astype(int).tolist() != list(REPLICATES):
             raise AssertionError(f"cap {cap}: output identities differ from frozen development cohort")
-        characteristics_by_cap[cap] = _characteristics(cap, config)
-        _write_csv(OUT_ROOT / f"data_characteristics_cap_{cap}.csv", characteristics_by_cap[cap])
+        characteristics_path = OUT_ROOT / f"data_characteristics_cap_{cap}.csv"
+        if characteristics_path.is_file():
+            characteristics_by_cap[cap] = pd.read_csv(characteristics_path).to_dict("records")
+        else:
+            characteristics_by_cap[cap] = _characteristics(cap, config)
+            _write_csv(characteristics_path, characteristics_by_cap[cap])
 
     paired: list[dict[str, object]] = []
     char_by_cap = {
