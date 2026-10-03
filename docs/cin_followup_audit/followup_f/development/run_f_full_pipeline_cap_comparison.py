@@ -263,9 +263,13 @@ def main() -> None:
         complete_data = [row for row in characteristics if row["generation_status"] == "complete"]
         run_metadata = json.loads((OUT_ROOT / f"cap-{cap}" / "metadata.json").read_text(encoding="utf-8"))
         metadata["summary"][str(cap)] = {
+            "run_git_commit": run_metadata.get("git_commit"),
             "status_counts": {str(key): int(value) for key, value in status_counts.items()},
             "generated_identities": len(complete_data),
             "generator_attempt_total": int(sum(int(row["generator_attempts"]) for row in complete_data)),
+            "attempts_consumed_total_including_errors": int(
+                pd.to_numeric(frame["generator_attempts"], errors="coerce").fillna(0).sum()
+            ),
             "median_generator_attempts": float(np.median([int(row["generator_attempts"]) for row in complete_data])) if complete_data else None,
             "median_elapsed_seconds": float(frame["elapsed_seconds"].median()),
             "median_point_fit_seconds": float(frame["point_fit_seconds"].median()),
