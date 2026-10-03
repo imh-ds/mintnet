@@ -7,7 +7,7 @@
 - Charter: `docs/cin_followup_charter_v2.md`
 - Config: `configs/cin_followup_v2.yaml`
 - Freeze manifest: `docs/cin_followup_audit/followup_f_v2/freeze_candidate_v2.json`
-- Frozen source revision: `f7e4226aeb69855b73003db7099a4d5ca01eb480`
+- Frozen source revision: `d66afa6afb18042301834ab92425831902f85bb0`
 - Candidate: F generator cap 1,000 plus support-aware inner splits; 0.005 population-CMI floor unchanged.
 - Development: 20 identities, 6400–6419. Validation: 97 identities, 6500–6596. Local correctness smoke identity 6300 is reserved in the seed inventory and is in neither cohort.
 - Primary gate: all 97 validation identities complete, with failures retained in the denominator.
@@ -43,7 +43,9 @@ gh workflow run sharded_benchmark.yml --ref codex/fix-bug-01 `
   --field aggregation_phase=validation
 ```
 
-The validation command is contingent on the development artifacts passing their frozen identity/provenance checks and the owner separately approving the held-out run. The workflow blocks full-grid aggregation, partial validation batches, cap overrides, unsupported dimensions, and missing or changed freeze values before fitting starts. Results upload as `cin-followup-f-v2-aggregate` and aggregate locally under `results/generated/cin_followup_f_v2` in the Actions artifact.
+The validation command is contingent on the development artifacts passing their frozen identity/provenance checks and the owner separately approving the held-out run. The plan job parses config YAML and rejects altered dimensions before creating the shard matrix. The shard preflight resolves the frozen and dispatch revisions, requires dispatch from the checked-out commit and a source-identical descendant of the frozen commit, and verifies the frozen source fingerprint. The workflow also blocks full-grid aggregation, partial validation batches, cap/split overrides, third dimensions, unsupported dimensions, and missing or changed freeze values before fitting starts. Results upload as `cin-followup-f-v2-aggregate` and aggregate locally under `results/generated/cin_followup_f_v2` in the Actions artifact.
+
+An independent final review found and prompted fixes for a dimension-1 override bypass, syntax-only Git revision checks, and exact-text protocol detection. Regression tests now cover those cases, including quoted/commented YAML protocol values. These repairs change dispatch validation only; they do not change the candidate or the frozen statistical gate.
 
 ## What the gate can establish
 
