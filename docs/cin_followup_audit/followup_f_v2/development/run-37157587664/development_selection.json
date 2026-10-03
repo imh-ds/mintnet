@@ -1,0 +1,13 @@
+{
+  "candidates": [],
+  "charter_sha256": "9490b8e36912760a030bf3a3dcf3e37fe81fda0bd284bebbde239e7473fd9b68",
+  "development_identities_expected": 40,
+  "development_identities_observed": 0,
+  "expected_gate_failure": true,
+  "fallback_reason": "A/B development charter hash does not match the configured charter",
+  "rule": "qualify A/B at precision >= 0.70 and nonempty fraction >= 0.80; maximize strong recall, then choose smaller delta",
+  "selected_delta": null,
+  "selected_token": null,
+  "selection_phase": "development",
+  "selection_status": "unavailable"
+}

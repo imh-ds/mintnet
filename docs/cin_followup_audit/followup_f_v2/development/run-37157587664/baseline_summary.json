@@ -1,0 +1,14 @@
+{
+  "charter_sha256": "9490b8e36912760a030bf3a3dcf3e37fe81fda0bd284bebbde239e7473fd9b68",
+  "configured_rows": 117,
+  "emitted_rows": 20,
+  "pair_rows": 560,
+  "selected_delta": null,
+  "stability_records": 0,
+  "stability_status_counts": {
+    "not_requested": 20
+  },
+  "status_counts": {
+    "complete": 20
+  }
+}
