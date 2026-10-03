@@ -38,6 +38,16 @@ D106_SEED_INVENTORY_FILES = (
     / "docs/cin_followup_audit/d106/reconstruction/historical/validation/raw_metrics.csv",
     PROJECT_ROOT / "docs/cin_followup_audit/d106/diagnostic_seed_inventory.csv",
 )
+V2_SEED_INVENTORY_FILES = D106_SEED_INVENTORY_FILES + (
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/development/baseline-500/raw_metrics.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/development/candidate-500/raw_metrics.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/development/fresh_development_acceptance.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/development/full_pipeline_cap_comparison_20261004/cap-500/raw_metrics.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/development/full_pipeline_cap_comparison_20261004/cap-1000/raw_metrics.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/validation/baseline/raw_metrics.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f/validation/candidate/raw_metrics.csv",
+    PROJECT_ROOT / "docs/cin_followup_audit/followup_f_v2/diagnostic_seed_inventory.csv",
+)
 F_FROZEN_SOURCE_FILES = (
     PROJECT_ROOT / "src/mintnet/cin/config.py",
     PROJECT_ROOT / "src/mintnet/cin/features.py",
@@ -73,7 +83,17 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _seed_inventory_sha256(paths: tuple[Path, ...] = D106_SEED_INVENTORY_FILES) -> str:
+def _seed_inventory_files(config: PanelConfig | None = None) -> tuple[Path, ...]:
+    if config is not None and _protocol_name(config) == "cin-followup-f-v2":
+        return V2_SEED_INVENTORY_FILES
+    return D106_SEED_INVENTORY_FILES
+
+
+def _seed_inventory_sha256(
+    paths: tuple[Path, ...] | None = None, *, config: PanelConfig | None = None
+) -> str:
+    if paths is None:
+        paths = _seed_inventory_files(config)
     digest = hashlib.sha256()
     for path in paths:
         relative = path.resolve().relative_to(PROJECT_ROOT).as_posix()
@@ -117,8 +137,41 @@ def _frozen_source_sha256_at_revision(revision: str) -> str:
     return digest.hexdigest()
 
 
-def _load_historical_seed_inventory() -> pd.DataFrame:
-    frames = [pd.read_csv(path) for path in D106_SEED_INVENTORY_FILES]
+def _protocol_name(config: PanelConfig) -> str:
+    return str(load_yaml(config.source_path).get("protocol", ""))
+
+
+def _protocol_policy(config: PanelConfig) -> dict[str, Any]:
+    protocol = _protocol_name(config)
+    if protocol == "cin-followup-f-v1":
+        return {
+            "protocol": protocol,
+            "development_replicates": tuple(range(2000, 2020)),
+            "validation_replicates": tuple(range(3000, 3097)),
+            "f_max_tries": 500,
+            "runner_hours_estimate": RUNNER_HOURS_ESTIMATE,
+            "runner_hours_ceiling": RUNNER_HOURS_CEILING,
+        }
+    if protocol == "cin-followup-f-v2":
+        return {
+            "protocol": protocol,
+            "development_replicates": tuple(range(6400, 6420)),
+            "validation_replicates": tuple(range(6500, 6597)),
+            "f_max_tries": 1000,
+            "runner_hours_estimate": 0.24,
+            "runner_hours_ceiling": 0.50,
+        }
+    raise ValueError(f"unsupported F follow-up protocol: {protocol}")
+
+
+def _load_historical_seed_inventory(config: PanelConfig | None = None) -> pd.DataFrame:
+    frames = []
+    for path in _seed_inventory_files(config):
+        frame = pd.read_csv(path)
+        for column in SEED_COLUMNS:
+            if column not in frame:
+                frame[column] = pd.NA
+        frames.append(frame)
     return pd.concat(frames, ignore_index=True)
 
 
@@ -138,6 +191,7 @@ def _wilson_interval(successes: int, total: int) -> tuple[float, float]:
 
 
 def _validate_protocol_config(config: PanelConfig) -> set[tuple[str, str, int, str]]:
+    policy = _protocol_policy(config)
     if config.cases != ("F",):
         raise ValueError("F follow-up config must contain only case F")
     if len(config.development_replicates) != 20:
@@ -146,14 +200,23 @@ def _validate_protocol_config(config: PanelConfig) -> set[tuple[str, str, int, s
         raise ValueError("F follow-up requires exactly 97 validation identities")
     if config.n_overrides.get("F") != 150:
         raise ValueError("F follow-up sample size must be n=150")
-    if config.f_max_tries not in {500, 1000, 2500}:
-        raise ValueError("F follow-up generator cap must be one of 500, 1000, or 2500")
-    if config.f_max_tries != 500:
-        raise ValueError("F follow-up must use the development-selected 500-attempt cap")
+    if config.f_max_tries != policy["f_max_tries"]:
+        if policy["protocol"] == "cin-followup-f-v1":
+            raise ValueError("F follow-up must use the development-selected 500-attempt cap")
+        raise ValueError(
+            f"{policy['protocol']} requires the frozen {policy['f_max_tries']}-attempt cap"
+        )
     if not config.support_aware_inner_splits:
         raise ValueError("F follow-up must use the development-selected support-aware split")
     if config.stability_cases:
         raise ValueError("F follow-up excludes stability resampling")
+    policy = _protocol_policy(config)
+    payload = load_yaml(config.source_path)
+    if policy["protocol"] == "cin-followup-f-v2":
+        if payload.get("runner_hours_estimate") != policy["runner_hours_estimate"]:
+            raise ValueError("F follow-up runner-hours estimate does not match the frozen protocol")
+        if payload.get("runner_hours_ceiling") != policy["runner_hours_ceiling"]:
+            raise ValueError("F follow-up runner-hours ceiling does not match the frozen protocol")
     if (
         len(set(config.development_replicates)) != 20
         or len(set(config.validation_replicates)) != 97
@@ -161,14 +224,25 @@ def _validate_protocol_config(config: PanelConfig) -> set[tuple[str, str, int, s
         raise ValueError("F follow-up replicate identities must be unique")
     if set(config.development_replicates) & set(config.validation_replicates):
         raise ValueError("F follow-up development and validation identities overlap")
-    if set(config.development_replicates) != set(range(2000, 2020)):
-        raise ValueError("F follow-up development identities must be exactly 2000–2019")
-    if set(config.validation_replicates) != set(range(3000, 3097)):
-        raise ValueError("F follow-up validation identities must be exactly 3000–3096")
-    if set(config.development_replicates) & set(range(0, 10)):
-        raise ValueError("F follow-up development identities overlap D-106 development")
-    if set(config.validation_replicates) & set(range(1000, 1020)):
-        raise ValueError("F follow-up validation identities overlap D-106 validation/diagnostics")
+    if config.development_replicates != policy["development_replicates"]:
+        raise ValueError("F follow-up development identities do not match the frozen protocol")
+    if config.validation_replicates != policy["validation_replicates"]:
+        if policy["protocol"] == "cin-followup-f-v1":
+            raise ValueError("F follow-up validation identities must be exactly 3000–3096")
+        raise ValueError("F follow-up validation identities must be fresh validation identities")
+    if _protocol_name(config) == "cin-followup-f-v2":
+        reserved_ranges = (
+            range(0, 10),
+            range(1000, 1020),
+            range(2000, 2020),
+            range(3000, 3097),
+            range(4000, 4100),
+            range(5000, 5100),
+            range(6300, 6301),
+        )
+        used = set(config.development_replicates) | set(config.validation_replicates)
+        if any(used & set(reserved) for reserved in reserved_ranges):
+            raise ValueError("F follow-up identities overlap a consumed or diagnostic identity")
     return expected_identities(config, phase="validation")
 
 
@@ -181,6 +255,7 @@ def validate_dispatch_preflight(
     support_aware_inner_splits: bool | None = None,
 ) -> dict[str, Any]:
     """Verify the frozen F protocol and identity inventory before any shard runs."""
+    policy = _protocol_policy(config)
     _validate_protocol_config(config)
     if freeze_manifest.get("status") != "frozen":
         raise ValueError("dispatch freeze manifest status must be frozen")
@@ -194,8 +269,8 @@ def validate_dispatch_preflight(
     source_hash = sha256_text_file(source_config_path)
     charter_hash = _sha256_file(config.charter_path)
     payload = load_yaml(source_config_path)
-    if payload.get("protocol") != "cin-followup-f-v1":
-        raise ValueError("dispatch config protocol must be cin-followup-f-v1")
+    if payload.get("protocol") != policy["protocol"]:
+        raise ValueError(f"dispatch config protocol must be {policy['protocol']}")
     if support_aware_inner_splits is not None:
         payload["support_aware_inner_splits"] = support_aware_inner_splits
     resolved_bytes = yaml.safe_dump(
@@ -208,7 +283,7 @@ def validate_dispatch_preflight(
         "source_config_sha256": source_hash,
         "config_sha256": resolved_hash,
         "charter_sha256": charter_hash,
-        "seed_inventory_sha256": _seed_inventory_sha256(),
+        "seed_inventory_sha256": _seed_inventory_sha256(config=config),
         "source_code_sha256": _frozen_source_sha256(),
         "f_max_tries": config.f_max_tries,
         "support_aware_inner_splits": (
@@ -216,14 +291,15 @@ def validate_dispatch_preflight(
             if support_aware_inner_splits is None
             else support_aware_inner_splits
         ),
-        "runner_hours_estimate": RUNNER_HOURS_ESTIMATE,
-        "runner_hours_ceiling": RUNNER_HOURS_CEILING,
+        "runner_hours_estimate": policy["runner_hours_estimate"],
+        "runner_hours_ceiling": policy["runner_hours_ceiling"],
     }
     for field, value in frozen_values.items():
         if freeze_manifest.get(field) != value:
             raise ValueError(f"dispatch freeze manifest {field} mismatch")
     return {
         "status": "dispatch_preflight_pass",
+        "protocol": policy["protocol"],
         "dispatch_revision": code_revision,
         "protocol_code_revision": frozen_revision,
         "f_max_tries": config.f_max_tries,
@@ -237,13 +313,12 @@ def validate_f_seed_bundles(config: PanelConfig, historical: pd.DataFrame) -> di
     missing = set(SEED_COLUMNS) - set(historical.columns)
     if missing:
         raise ValueError(f"historical seed inventory is missing columns: {sorted(missing)}")
-    if historical.loc[:, SEED_COLUMNS].isna().any().any():
-        raise ValueError("historical seed inventory contains unavailable seed values")
-
-    old_streams = {
-        column: set(pd.to_numeric(historical[column], errors="raise").astype(int))
-        for column in SEED_COLUMNS
-    }
+    old_streams = {}
+    for column in SEED_COLUMNS:
+        values = pd.to_numeric(historical[column], errors="coerce")
+        if (historical[column].notna() & values.isna()).any():
+            raise ValueError(f"historical {column} values must be numeric or unavailable")
+        old_streams[column] = set(values.dropna().astype(int))
     proposed: dict[str, list[tuple[int, int, int, int, int]]] = {
         "development": [],
         "validation": [],
@@ -287,6 +362,7 @@ def _validate_provenance(
     resolved_config_path: Path,
     source_config_path: Path,
 ) -> int:
+    policy = _protocol_policy(config)
     required = {
         "provenance_validated",
         "source_config_sha256",
@@ -311,8 +387,11 @@ def _validate_provenance(
     effective_cap_value = resolved_payload.get("f_max_tries", config.f_max_tries)
     if isinstance(effective_cap_value, bool) or not isinstance(effective_cap_value, int):
         raise ValueError("resolved config f_max_tries must be an integer")
-    if effective_cap_value not in {500, 1000, 2500}:
-        raise ValueError("resolved config has an unapproved F generator cap")
+    if policy["protocol"] == "cin-followup-f-v1":
+        if effective_cap_value not in {500, 1000, 2500}:
+            raise ValueError("resolved config has an unapproved F generator cap")
+    elif effective_cap_value != policy["f_max_tries"]:
+        raise ValueError("resolved config F generator cap does not match frozen protocol")
     raw_hash = _sha256_file(raw_metrics_path)
     charter_hash = config.charter_sha256
     if metadata["source_config_sha256"] != source_hash:
@@ -338,14 +417,14 @@ def _validate_provenance(
         "source_config_sha256": source_hash,
         "config_sha256": resolved_hash,
         "charter_sha256": charter_hash,
-        "seed_inventory_sha256": _seed_inventory_sha256(),
+        "seed_inventory_sha256": _seed_inventory_sha256(config=config),
         "source_code_sha256": frozen_source_hash,
         "f_max_tries": effective_cap_value,
         "support_aware_inner_splits": bool(
             resolved_payload.get("support_aware_inner_splits", False)
         ),
-        "runner_hours_estimate": RUNNER_HOURS_ESTIMATE,
-        "runner_hours_ceiling": RUNNER_HOURS_CEILING,
+        "runner_hours_estimate": policy["runner_hours_estimate"],
+        "runner_hours_ceiling": policy["runner_hours_ceiling"],
     }
     for field, value in frozen.items():
         if field not in freeze_manifest or freeze_manifest[field] is None:
@@ -367,10 +446,12 @@ def evaluate_f_validation(
     require_candidate: bool = True,
 ) -> dict[str, Any]:
     """Validate a frozen F validation table and return its strict completion result."""
+    policy = _protocol_policy(config)
+    expected_count = len(config.validation_replicates)
     expected = _validate_protocol_config(config)
-    if load_yaml(source_config_path).get("protocol") != "cin-followup-f-v1":
-        raise ValueError("validation source config protocol must be cin-followup-f-v1")
-    validate_f_seed_bundles(config, _load_historical_seed_inventory())
+    if load_yaml(source_config_path).get("protocol") != policy["protocol"]:
+        raise ValueError(f"validation source config protocol must be {policy['protocol']}")
+    validate_f_seed_bundles(config, _load_historical_seed_inventory(config))
     missing_columns = set(
         IDENTITY_COLUMNS
         + SEED_COLUMNS
@@ -400,8 +481,8 @@ def evaluate_f_validation(
         raise ValueError(
             f"raw validation identity grid mismatch; missing={missing}, foreign={foreign}"
         )
-    if len(raw) != EXPECTED_F_REPLICATES:
-        raise ValueError("raw validation identity count does not equal 97")
+    if len(raw) != expected_count:
+        raise ValueError(f"raw validation identity count does not equal {expected_count}")
 
     resolved_payload = load_yaml(resolved_config_path)
     if require_candidate and resolved_payload.get("support_aware_inner_splits") is not True:
@@ -502,22 +583,22 @@ def evaluate_f_validation(
         raise ValueError("pair failure counts are inconsistent with pair completion")
 
     n_complete = int(complete_rows.sum())
-    low, high = _wilson_interval(n_complete, EXPECTED_F_REPLICATES)
+    low, high = _wilson_interval(n_complete, expected_count)
     status_counts = {
         name: int(statuses.eq(name).sum())
         for name in ("complete", "incomplete", "error")
     }
     return {
-        "protocol": "cin-followup-f-v1",
+        "protocol": policy["protocol"],
         "case": "F",
         "phase": "validation",
         "method": "cin",
-        "status": "pass" if n_complete / EXPECTED_F_REPLICATES >= COMPLETION_THRESHOLD else "fail",
+        "status": "pass" if n_complete / expected_count >= COMPLETION_THRESHOLD else "fail",
         "completion_threshold": COMPLETION_THRESHOLD,
         "f_max_tries": effective_cap,
-        "n_expected": EXPECTED_F_REPLICATES,
+        "n_expected": expected_count,
         "n_complete": n_complete,
-        "completion_rate": n_complete / EXPECTED_F_REPLICATES,
+        "completion_rate": n_complete / expected_count,
         "status_counts": status_counts,
         "wilson_95": {"lower": low, "upper": high, "half_width": (high - low) / 2.0},
         "git_commit": metadata["git_commit"],
@@ -595,8 +676,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
-    seed_counts = validate_f_seed_bundles(config, _load_historical_seed_inventory())
-    seed_inventory_hash = _seed_inventory_sha256()
+    seed_counts = validate_f_seed_bundles(config, _load_historical_seed_inventory(config))
+    seed_inventory_hash = _seed_inventory_sha256(config=config)
     if args.preflight_only:
         if args.freeze_manifest is None:
             parser.error("--freeze-manifest is required with --preflight-only")

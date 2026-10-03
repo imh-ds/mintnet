@@ -1,0 +1,19 @@
+protocol: cin-followup-f-v2
+master_seed: 20261006
+charter: ../../cin_followup_charter_v2.md
+cases: [F]
+development_replicates: [6300]
+validation_replicates: [6301]
+n_overrides:
+  F: 150
+f_max_tries: 1000
+support_aware_inner_splits: true
+runner_hours_estimate: 0.24
+runner_hours_ceiling: 0.50
+stability_cases: []
+stability_repeats: 0
+stability_fraction: 0.8
+delta_candidates: [0.005, 0.01, 0.02]
+strong_edge_threshold: 0.01
+point_fit_max_seconds: 600.0
+stability_max_seconds: 600.0

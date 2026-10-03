@@ -1058,6 +1058,19 @@ def test_sharded_workflow_exposes_src_package_path() -> None:
     ) == 1
 
 
+def test_sharded_workflow_enforces_f_followup_v2_preflight() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "cin-followup-f-v2" in workflow
+    assert "scripts/cin_followup_f_gate_check.py" in workflow
+    assert "requirements-cin-followup-v1.txt" in workflow
+    assert '"$AGGREGATION_PHASE" == "validation"' in workflow
+    assert '"$DIM2_VALUES" != "val0,val1"' in workflow
+    assert "cin-followup-f-v2-aggregate" in workflow
+
+
 def test_aggregate_workflow_environment_can_import_sidecar_aggregator(tmp_path: Path) -> None:
     workflow = yaml.safe_load(
         (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(

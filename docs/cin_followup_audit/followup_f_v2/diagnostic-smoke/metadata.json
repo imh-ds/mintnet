@@ -1,0 +1,90 @@
+{
+  "charter_sha256": "ae63577ae442187c9f4eb4e1721b5b51db54f4c86e1312089e6bef1f2cd72690",
+  "config": {
+    "cases": [
+      "F"
+    ],
+    "charter": "../../cin_followup_charter_v2.md",
+    "delta_candidates": [
+      0.005,
+      0.01,
+      0.02
+    ],
+    "development_replicates": [
+      6300
+    ],
+    "f_max_tries": 1000,
+    "master_seed": 20261006,
+    "n_overrides": {
+      "F": 150
+    },
+    "point_fit_max_seconds": 600.0,
+    "protocol": "cin-followup-f-v2",
+    "runner_hours_ceiling": 0.5,
+    "runner_hours_estimate": 0.24,
+    "stability_cases": [],
+    "stability_fraction": 0.8,
+    "stability_max_seconds": 600.0,
+    "stability_repeats": 0,
+    "strong_edge_threshold": 0.01,
+    "support_aware_inner_splits": true,
+    "validation_replicates": [
+      6301
+    ]
+  },
+  "config_sha256": "3ac472b2f97935da0197cb6d796cf78cf1f8aa6f6ed58a63f79bae1280c332b7",
+  "cpu": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
+  "git_commit": "872c5cf12f40eb6905629822bde0b7e818b302d5",
+  "package_versions": {
+    "PyYAML": "6.0.3",
+    "numpy": "2.4.6",
+    "pandas": "3.0.5",
+    "python": "3.11.9",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.17.1",
+    "threadpoolctl": "3.6.0"
+  },
+  "peak_rss_mb": null,
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "runtime_seconds": 0.3403994000982493,
+  "source_config_sha256": "5df70823ea0bb91768a30f19316c857cba2d4e9a1f9cdf2cc84df05b76de9dc4",
+  "thread_settings": {
+    "environment": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "threadpool_info": [
+      {
+        "architecture": "Haswell",
+        "filepath": "C:\\Users\\imhoh\\GitHub\\mintnet\\.venv\\Lib\\site-packages\\numpy.libs\\libscipy_openblas64_-63c857e738469261263c764a36be9436.dll",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.31.188.0"
+      },
+      {
+        "filepath": "C:\\Users\\imhoh\\GitHub\\mintnet\\.venv\\Lib\\site-packages\\sklearn\\.libs\\vcomp140.dll",
+        "internal_api": "openmp",
+        "num_threads": 1,
+        "prefix": "vcomp",
+        "user_api": "openmp",
+        "version": null
+      },
+      {
+        "architecture": "Haswell",
+        "filepath": "C:\\Users\\imhoh\\GitHub\\mintnet\\.venv\\Lib\\site-packages\\scipy.libs\\libscipy_openblas-64eda39e79589aedb16f58e5547eb599.dll",
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.30"
+      }
+    ]
+  }
+}

@@ -18,6 +18,8 @@ from scripts.cin_followup_f_gate_check import (
     RUNNER_HOURS_ESTIMATE,
     _frozen_source_sha256,
     _seed_inventory_sha256,
+    _load_historical_seed_inventory,
+    _validate_protocol_config,
     evaluate_f_validation,
     paired_completion_comparison,
     validate_dispatch_preflight,
@@ -27,10 +29,115 @@ from scripts.cin_followup_f_gate_check import (
 
 ROOT = Path(__file__).resolve().parents[2]
 FOLLOWUP_CONFIG = ROOT / "configs" / "cin_followup_v1.yaml"
+FOLLOWUP_V2_CONFIG = ROOT / "configs" / "cin_followup_v2.yaml"
 
 
-def _f_rows(*, incomplete: int | None = None, error: int | None = None) -> pd.DataFrame:
-    config = load_config(FOLLOWUP_CONFIG)
+def _v2_config(tmp_path: Path):
+    payload = yaml.safe_load(FOLLOWUP_V2_CONFIG.read_text(encoding="utf-8"))
+    payload["charter"] = str(ROOT / "docs/cin_followup_charter_v2.md")
+    path = tmp_path / "cin_followup_v2.yaml"
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return load_config(path)
+
+
+def test_v2_protocol_accepts_new_fresh_cohort_and_cap_1000(tmp_path: Path) -> None:
+    config = _v2_config(tmp_path)
+
+    expected = _validate_protocol_config(config)
+
+    assert len(expected) == 97
+    assert {identity[2] for identity in expected} == set(range(6500, 6597))
+    assert config.f_max_tries == 1000
+
+
+def test_v2_candidate_validation_uses_97_new_rows_and_cap_1000(tmp_path: Path) -> None:
+    raw = _f_rows(config_path=FOLLOWUP_V2_CONFIG)
+    metadata, freeze = _provenance(tmp_path, raw, config_path=FOLLOWUP_V2_CONFIG)
+
+    result = evaluate_f_validation(
+        raw,
+        load_config(FOLLOWUP_V2_CONFIG),
+        metadata=metadata,
+        freeze_manifest=freeze,
+        raw_metrics_path=tmp_path / "raw_metrics.csv",
+        resolved_config_path=tmp_path / "resolved_config.yaml",
+        source_config_path=FOLLOWUP_V2_CONFIG,
+    )
+
+    assert result["status"] == "pass"
+    assert result["protocol"] == "cin-followup-f-v2"
+    assert result["f_max_tries"] == 1000
+    assert result["n_expected"] == 97
+    assert result["n_complete"] == 97
+
+
+def test_v2_validation_retains_generation_failures_in_strict_denominator(tmp_path: Path) -> None:
+    raw = _f_rows(error=6500, config_path=FOLLOWUP_V2_CONFIG)
+    metadata, freeze = _provenance(tmp_path, raw, config_path=FOLLOWUP_V2_CONFIG)
+
+    result = evaluate_f_validation(
+        raw,
+        load_config(FOLLOWUP_V2_CONFIG),
+        metadata=metadata,
+        freeze_manifest=freeze,
+        raw_metrics_path=tmp_path / "raw_metrics.csv",
+        resolved_config_path=tmp_path / "resolved_config.yaml",
+        source_config_path=FOLLOWUP_V2_CONFIG,
+    )
+
+    assert result["status"] == "fail"
+    assert result["n_expected"] == 97
+    assert result["n_complete"] == 96
+    assert result["status_counts"]["error"] == 1
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["charter_sha256", "source_code_sha256", "seed_inventory_sha256", "runner_hours_ceiling"],
+)
+def test_v2_gate_rejects_modified_frozen_protocol_hash_or_budget(
+    tmp_path: Path, field: str
+) -> None:
+    raw = _f_rows(config_path=FOLLOWUP_V2_CONFIG)
+    metadata, freeze = _provenance(tmp_path, raw, config_path=FOLLOWUP_V2_CONFIG)
+    freeze[field] = "changed"
+
+    with pytest.raises(ValueError, match="freeze manifest"):
+        evaluate_f_validation(
+            raw,
+            load_config(FOLLOWUP_V2_CONFIG),
+            metadata=metadata,
+            freeze_manifest=freeze,
+            raw_metrics_path=tmp_path / "raw_metrics.csv",
+            resolved_config_path=tmp_path / "resolved_config.yaml",
+            source_config_path=FOLLOWUP_V2_CONFIG,
+        )
+
+
+def test_v2_seed_preflight_covers_all_prior_f_campaigns(tmp_path: Path) -> None:
+    config = _v2_config(tmp_path)
+    historical = _load_historical_seed_inventory(config)
+
+    assert {"structure_seed", "sample_seed", "cin_fit_seed"} <= set(historical.columns)
+    assert {2000, 3000, 4000, 5000, 6300} <= set(historical["replicate"].dropna().astype(int))
+    assert validate_f_seed_bundles(config, historical) == {"development": 20, "validation": 97}
+
+
+def test_v2_protocol_rejects_consumed_task11_validation_replicates(tmp_path: Path) -> None:
+    config = _v2_config(tmp_path)
+    reused = replace(config, validation_replicates=tuple(range(3000, 3097)))
+
+    with pytest.raises(ValueError, match="fresh validation identities"):
+        _validate_protocol_config(reused)
+
+
+def _f_rows(
+    *,
+    incomplete: int | None = None,
+    error: int | None = None,
+    config_path: Path = FOLLOWUP_CONFIG,
+) -> pd.DataFrame:
+    config = load_config(config_path)
     rows: list[dict[str, object]] = []
     for case, phase, replicate, method in sorted(expected_identities(config, phase="validation")):
         seeds = derive_seed_bundle(config.master_seed, CASE_ORDER.index("F"), 1, replicate)
@@ -56,7 +163,7 @@ def _f_rows(*, incomplete: int | None = None, error: int | None = None) -> pd.Da
             "n_pairs_complete": n_complete,
             "n_pairs_total": n_total,
             "n_failed_pairs": n_total - n_complete,
-            "generator_attempts": 500 if status == "error" else 47,
+            "generator_attempts": config.f_max_tries if status == "error" else 47,
             "error_type": "GeneratorAcceptanceError" if status == "error" else None,
             "error": "simulated generator rejection" if status == "error" else None,
             "pair_sidecar_file": (
@@ -70,14 +177,15 @@ def _provenance(
     tmp_path: Path,
     raw: pd.DataFrame,
     *,
+    config_path: Path = FOLLOWUP_CONFIG,
     effective_max_tries: int | None = None,
     support_aware_inner_splits: bool | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    config = load_config(FOLLOWUP_CONFIG)
+    config = load_config(config_path)
     raw_path = tmp_path / "raw_metrics.csv"
     raw.to_csv(raw_path, index=False)
     resolved_config = tmp_path / "resolved_config.yaml"
-    resolved_payload = yaml.safe_load(FOLLOWUP_CONFIG.read_text(encoding="utf-8"))
+    resolved_payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if effective_max_tries is not None:
         resolved_payload["f_max_tries"] = effective_max_tries
     if support_aware_inner_splits is not None:
@@ -93,7 +201,7 @@ def _provenance(
     ).stdout.strip()
     metadata = {
         "provenance_validated": True,
-        "source_config_sha256": sha256_text_file(FOLLOWUP_CONFIG),
+        "source_config_sha256": sha256_text_file(config_path),
         "config_sha256": sha(resolved_config),
         "charter_sha256": config.charter_sha256,
         "git_commit": code_revision,
@@ -102,17 +210,17 @@ def _provenance(
     freeze = {
         "status": "frozen",
         "code_revision": code_revision,
-        "source_config_sha256": sha256_text_file(FOLLOWUP_CONFIG),
+        "source_config_sha256": sha256_text_file(config_path),
         "config_sha256": sha(resolved_config),
         "charter_sha256": config.charter_sha256,
-        "seed_inventory_sha256": _seed_inventory_sha256(),
+        "seed_inventory_sha256": _seed_inventory_sha256(config=config),
         "f_max_tries": resolved_payload.get("f_max_tries", config.f_max_tries),
         "support_aware_inner_splits": resolved_payload.get(
             "support_aware_inner_splits", False
         ),
         "source_code_sha256": _frozen_source_sha256(),
-        "runner_hours_estimate": RUNNER_HOURS_ESTIMATE,
-        "runner_hours_ceiling": RUNNER_HOURS_CEILING,
+        "runner_hours_estimate": gate_check._protocol_policy(config)["runner_hours_estimate"],
+        "runner_hours_ceiling": gate_check._protocol_policy(config)["runner_hours_ceiling"],
     }
     return metadata, freeze
 
