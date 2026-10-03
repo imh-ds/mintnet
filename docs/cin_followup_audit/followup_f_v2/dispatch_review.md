@@ -1,0 +1,50 @@
+# CIN F Follow-Up v2 Dispatch Review
+
+**Decision state:** protocol frozen locally; no GitHub Actions run has been launched. Dispatch requires separate owner authorization. The current checkout is the local branch `codex/fix-bug-01`; it must be made available on GitHub before a workflow can run. No push has been made.
+
+## Frozen package
+
+- Charter: `docs/cin_followup_charter_v2.md`
+- Config: `configs/cin_followup_v2.yaml`
+- Freeze manifest: `docs/cin_followup_audit/followup_f_v2/freeze_candidate_v2.json`
+- Frozen source revision: `f7e4226aeb69855b73003db7099a4d5ca01eb480`
+- Candidate: F generator cap 1,000 plus support-aware inner splits; 0.005 population-CMI floor unchanged.
+- Development: 20 identities, 6400–6419. Validation: 97 identities, 6500–6596. Local correctness smoke identity 6300 is reserved in the seed inventory and is in neither cohort.
+- Primary gate: all 97 validation identities complete, with failures retained in the denominator.
+- Precision target: two-sided 95% Wilson interval, worst-case half-width 0.0975835.
+- Expected runner usage: 0.24 hours. Hard ceiling: 0.50 runner-hours for both phases including one outcome-independent operational recovery. Stability is excluded.
+- Environment: GitHub-hosted Ubuntu, Python 3.11, pinned `requirements-cin-followup-v1.txt`.
+
+## Workflow inputs
+
+Both runs use workflow `sharded_benchmark.yml`, runner module `mintnet.experiments.cin_baseline`, config `configs/cin_followup_v2.yaml`, dimension 1 flag/value `--cases` / `F`, dimension 2 flag `--replicate-batches`, no dimension 3, and freeze manifest `docs/cin_followup_audit/followup_f_v2/freeze_candidate_v2.json`. The aggregation phase must match the batch values.
+
+Development is `dev0`, aggregation phase `development`:
+
+```powershell
+gh workflow run sharded_benchmark.yml --ref codex/fix-bug-01 `
+  --field runner_module=mintnet.experiments.cin_baseline `
+  --field config=configs/cin_followup_v2.yaml `
+  --field dim1_flag=--cases --field dim1_values=F `
+  --field dim2_flag=--replicate-batches --field dim2_values=dev0 `
+  --field freeze_manifest=docs/cin_followup_audit/followup_f_v2/freeze_candidate_v2.json `
+  --field aggregation_phase=development
+```
+
+Validation is `val0,val1` in the same workflow so the aggregator receives all 97 identities, aggregation phase `validation`:
+
+```powershell
+gh workflow run sharded_benchmark.yml --ref codex/fix-bug-01 `
+  --field runner_module=mintnet.experiments.cin_baseline `
+  --field config=configs/cin_followup_v2.yaml `
+  --field dim1_flag=--cases --field dim1_values=F `
+  --field dim2_flag=--replicate-batches --field dim2_values=val0,val1 `
+  --field freeze_manifest=docs/cin_followup_audit/followup_f_v2/freeze_candidate_v2.json `
+  --field aggregation_phase=validation
+```
+
+The validation command is contingent on the development artifacts passing their frozen identity/provenance checks and the owner separately approving the held-out run. The workflow blocks full-grid aggregation, partial validation batches, cap overrides, unsupported dimensions, and missing or changed freeze values before fitting starts. Results upload as `cin-followup-f-v2-aggregate` and aggregate locally under `results/generated/cin_followup_f_v2` in the Actions artifact.
+
+## What the gate can establish
+
+A pass would support only that this fixed F-only candidate completed all 97 new identities under this frozen protocol. It would not repair the earlier failed Task 11 gate, demonstrate rare-failure control, establish recovery accuracy, or change the unsupported E and panel-wide claims. A failure remains in the denominator and leaves the candidate gate failed.
