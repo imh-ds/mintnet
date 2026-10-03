@@ -60,3 +60,27 @@ def test_malformed_yaml_is_rejected(tmp_path: Path) -> None:
     config.write_text("protocol: [cin-followup-f-v2\n", encoding="utf-8")
     with pytest.raises(ValueError, match="invalid YAML"):
         dispatch_guard.read_protocol(config)
+
+
+def test_cli_accepts_workflow_dash_prefixed_flags_with_equals_form(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "followup.yaml"
+    config.write_text('protocol: "cin-followup-f-v2" # frozen\n', encoding="utf-8")
+
+    result = dispatch_guard.main(
+        [
+            "--config",
+            str(config),
+            "--dim1-flag=--cases",
+            "--dim1-values=F",
+            "--dim2-flag=--replicate-batches",
+            "--dim2-values=dev0",
+            "--dim3-flag=",
+            "--dim3-values=",
+            "--aggregation-phase=development",
+        ]
+    )
+
+    assert result == 0
+    assert capsys.readouterr().out.strip() == "cin-followup-f-v2"

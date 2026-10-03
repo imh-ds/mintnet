@@ -236,7 +236,7 @@ def _provenance(
         "support_aware_inner_splits": resolved_payload.get(
             "support_aware_inner_splits", False
         ),
-        "source_code_sha256": _frozen_source_sha256(),
+        "source_code_sha256": gate_check._frozen_source_sha256_at_revision(code_revision),
         "runner_hours_estimate": gate_check._protocol_policy(config)["runner_hours_estimate"],
         "runner_hours_ceiling": gate_check._protocol_policy(config)["runner_hours_ceiling"],
     }

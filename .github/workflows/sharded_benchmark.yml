@@ -103,9 +103,9 @@ jobs:
         run: |
           protocol="$(python scripts/cin_followup_dispatch_guard.py \
             --config "$CONFIG" \
-            --dim1-flag "$DIM1_FLAG" --dim1-values "$DIM1_VALUES" \
-            --dim2-flag "$DIM2_FLAG" --dim2-values "$DIM2_VALUES" \
-            --dim3-flag "$DIM3_FLAG" --dim3-values "$DIM3_VALUES" \
+            --dim1-flag="$DIM1_FLAG" --dim1-values="$DIM1_VALUES" \
+            --dim2-flag="$DIM2_FLAG" --dim2-values="$DIM2_VALUES" \
+            --dim3-flag="$DIM3_FLAG" --dim3-values="$DIM3_VALUES" \
             --aggregation-phase "$AGGREGATION_PHASE")"
           echo "protocol=$protocol" >> "$GITHUB_OUTPUT"
       - id: build
@@ -174,9 +174,9 @@ jobs:
         run: |
           protocol="$(python scripts/cin_followup_dispatch_guard.py \
             --config "$CONFIG" \
-            --dim1-flag "$DIM1_FLAG" --dim1-values "$DIM1_VALUES" \
-            --dim2-flag "$DIM2_FLAG" --dim2-values "$DIM2_VALUES" \
-            --dim3-flag "$DIM3_FLAG" --dim3-values "$DIM3_VALUES" \
+            --dim1-flag="$DIM1_FLAG" --dim1-values="$DIM1_VALUES" \
+            --dim2-flag="$DIM2_FLAG" --dim2-values="$DIM2_VALUES" \
+            --dim3-flag="$DIM3_FLAG" --dim3-values="$DIM3_VALUES" \
             --aggregation-phase "$AGGREGATION_PHASE")"
           if [[ -z "$protocol" ]]; then
             exit 0

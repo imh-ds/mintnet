@@ -1067,6 +1067,8 @@ def test_sharded_workflow_enforces_f_followup_v2_preflight() -> None:
 
     assert "cin-followup-f-v2" in workflow
     assert "scripts/cin_followup_dispatch_guard.py" in workflow
+    assert '--dim1-flag="$DIM1_FLAG"' in workflow
+    assert '--dim2-flag="$DIM2_FLAG"' in workflow
     assert "fetch-depth: 0" in workflow
     assert "scripts/cin_followup_f_gate_check.py" in workflow
     assert "requirements-cin-followup-v1.txt" in workflow
