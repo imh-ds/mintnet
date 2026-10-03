@@ -13,6 +13,7 @@ import yaml
 from mintnet.experiments.cin_baseline import CASE_ORDER, expected_identities, load_config
 from mintnet.experiments.cin_common import derive_seed_bundle, sha256_text_file
 import scripts.cin_followup_f_gate_check as gate_check
+import scripts.cin_followup_dispatch_guard as dispatch_guard
 from scripts.cin_followup_f_gate_check import (
     RUNNER_HOURS_CEILING,
     RUNNER_HOURS_ESTIMATE,
@@ -48,6 +49,23 @@ def test_v2_protocol_accepts_new_fresh_cohort_and_cap_1000(tmp_path: Path) -> No
     assert len(expected) == 97
     assert {identity[2] for identity in expected} == set(range(6500, 6597))
     assert config.f_max_tries == 1000
+
+
+def test_dispatch_dimensions_cannot_override_frozen_f_case_or_retry_cap() -> None:
+    valid = {
+        "protocol": "cin-followup-f-v2",
+        "dim1_flag": "--cases",
+        "dim1_values": "F",
+        "dim2_flag": "--replicate-batches",
+        "dim2_values": "val0,val1",
+        "aggregation_phase": "validation",
+    }
+    dispatch_guard.validate_dispatch(**valid)
+
+    with pytest.raises(ValueError, match="dimension 1 must be exactly --cases F"):
+        dispatch_guard.validate_dispatch(**{**valid, "dim1_flag": "--f-max-tries", "dim1_values": "2500"})
+    with pytest.raises(ValueError, match="dimension 1 must be exactly --cases F"):
+        dispatch_guard.validate_dispatch(**{**valid, "dim1_values": "F,C"})
 
 
 def test_v2_candidate_validation_uses_97_new_rows_and_cap_1000(tmp_path: Path) -> None:
@@ -605,7 +623,7 @@ def test_gate_rejects_a_nonselected_development_candidate(
 
 @pytest.mark.parametrize("support_aware", [True, False])
 def test_dispatch_preflight_checks_frozen_candidate_and_baseline_hashes(
-    support_aware: bool,
+    support_aware: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = load_config(FOLLOWUP_CONFIG)
     source_payload = yaml.safe_load(FOLLOWUP_CONFIG.read_text(encoding="utf-8"))
@@ -615,17 +633,26 @@ def test_dispatch_preflight_checks_frozen_candidate_and_baseline_hashes(
     resolved_bytes = yaml.safe_dump(
         resolved_payload, sort_keys=True, default_flow_style=False
     ).encode("utf-8")
-    revision = "b" * 40
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    frozen_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD^"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    source_hash = _frozen_source_sha256()
+    monkeypatch.setattr(
+        gate_check, "_frozen_source_sha256_at_revision", lambda _revision: source_hash
+    )
     freeze = {
         "status": "frozen",
         "source_config_sha256": source_sha,
         "config_sha256": hashlib.sha256(resolved_bytes).hexdigest(),
         "charter_sha256": config.charter_sha256,
         "seed_inventory_sha256": _seed_inventory_sha256(),
-        "code_revision": revision,
+        "code_revision": frozen_revision,
         "f_max_tries": 500,
         "support_aware_inner_splits": support_aware,
-        "source_code_sha256": _frozen_source_sha256(),
+        "source_code_sha256": source_hash,
         "runner_hours_estimate": RUNNER_HOURS_ESTIMATE,
         "runner_hours_ceiling": RUNNER_HOURS_CEILING,
     }
@@ -648,14 +675,19 @@ def test_dispatch_preflight_rejects_changed_revision_or_draft_manifest() -> None
     resolved_bytes = yaml.safe_dump(
         source_payload, sort_keys=True, default_flow_style=False
     ).encode("utf-8")
-    revision = "c" * 40
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    frozen_revision = subprocess.run(
+        ["git", "rev-parse", "HEAD^"], cwd=ROOT, check=True, capture_output=True, text=True
+    ).stdout.strip()
     freeze = {
         "status": "frozen",
         "source_config_sha256": sha256_text_file(FOLLOWUP_CONFIG),
         "config_sha256": hashlib.sha256(resolved_bytes).hexdigest(),
         "charter_sha256": config.charter_sha256,
         "seed_inventory_sha256": _seed_inventory_sha256(),
-        "code_revision": revision,
+        "code_revision": frozen_revision,
         "f_max_tries": 500,
         "support_aware_inner_splits": True,
         "source_code_sha256": _frozen_source_sha256(),
@@ -670,6 +702,31 @@ def test_dispatch_preflight_rejects_changed_revision_or_draft_manifest() -> None
             source_config_path=FOLLOWUP_CONFIG,
             code_revision="not-a-revision",
         )
+    freeze["code_revision"] = "d" * 40
+    with pytest.raises(ValueError, match="must resolve to Git commits"):
+        validate_dispatch_preflight(
+            config,
+            freeze_manifest=freeze,
+            source_config_path=FOLLOWUP_CONFIG,
+            code_revision=revision,
+        )
+    freeze["code_revision"] = frozen_revision
+    with pytest.raises(ValueError, match="dispatch revision must match the checked-out commit"):
+        validate_dispatch_preflight(
+            config,
+            freeze_manifest=freeze,
+            source_config_path=FOLLOWUP_CONFIG,
+            code_revision=frozen_revision,
+        )
+    freeze["code_revision"] = "872c5cf12f40eb6905629822bde0b7e818b302d5"
+    with pytest.raises(ValueError, match="changed frozen protocol source files"):
+        validate_dispatch_preflight(
+            config,
+            freeze_manifest=freeze,
+            source_config_path=FOLLOWUP_CONFIG,
+            code_revision=revision,
+        )
+    freeze["code_revision"] = frozen_revision
     freeze["status"] = "draft"
     with pytest.raises(ValueError, match="status must be frozen"):
         validate_dispatch_preflight(

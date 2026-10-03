@@ -1059,15 +1059,19 @@ def test_sharded_workflow_exposes_src_package_path() -> None:
 
 
 def test_sharded_workflow_enforces_f_followup_v2_preflight() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "sharded_benchmark.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow_path = ROOT / ".github" / "workflows" / "sharded_benchmark.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
+    parsed = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    plan = parsed["jobs"]["plan"]
+    step_names = [step.get("name", step.get("id", "")) for step in plan["steps"]]
 
     assert "cin-followup-f-v2" in workflow
+    assert "scripts/cin_followup_dispatch_guard.py" in workflow
+    assert "fetch-depth: 0" in workflow
     assert "scripts/cin_followup_f_gate_check.py" in workflow
     assert "requirements-cin-followup-v1.txt" in workflow
-    assert '"$AGGREGATION_PHASE" == "validation"' in workflow
-    assert '"$DIM2_VALUES" != "val0,val1"' in workflow
+    assert step_names.index("validate") < step_names.index("build")
+    assert "grep -Eq '^protocol: cin-followup-f-v[12]$'" not in workflow
     assert "cin-followup-f-v2-aggregate" in workflow
 
 

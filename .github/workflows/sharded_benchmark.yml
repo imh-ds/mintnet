@@ -79,7 +79,35 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
+      protocol: ${{ steps.validate.outputs.protocol }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install YAML parser for protocol detection
+        run: python -m pip install "PyYAML==6.0.3"
+      - id: validate
+        env:
+          CONFIG: ${{ inputs.config }}
+          DIM1_FLAG: ${{ inputs.dim1_flag }}
+          DIM1_VALUES: ${{ inputs.dim1_values }}
+          DIM2_FLAG: ${{ inputs.dim2_flag }}
+          DIM2_VALUES: ${{ inputs.dim2_values }}
+          DIM3_FLAG: ${{ inputs.dim3_flag }}
+          DIM3_VALUES: ${{ inputs.dim3_values }}
+          V3: ${{ matrix.v3 }}
+          AGGREGATION_PHASE: ${{ inputs.aggregation_phase }}
+        run: |
+          protocol="$(python scripts/cin_followup_dispatch_guard.py \
+            --config "$CONFIG" \
+            --dim1-flag "$DIM1_FLAG" --dim1-values "$DIM1_VALUES" \
+            --dim2-flag "$DIM2_FLAG" --dim2-values "$DIM2_VALUES" \
+            --dim3-flag "$DIM3_FLAG" --dim3-values "$DIM3_VALUES" \
+            --aggregation-phase "$AGGREGATION_PHASE")"
+          echo "protocol=$protocol" >> "$GITHUB_OUTPUT"
       - id: build
         env:
           DIM1_VALUES: ${{ inputs.dim1_values }}
@@ -114,6 +142,8 @@ jobs:
       NUMEXPR_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -121,7 +151,9 @@ jobs:
         env:
           CONFIG: ${{ inputs.config }}
         run: |
-          if grep -Eq '^protocol: cin-followup-f-v[12]$' "$CONFIG"; then
+          python -m pip install "PyYAML==6.0.3"
+          protocol="$(python scripts/cin_followup_dispatch_guard.py --config "$CONFIG")"
+          if [[ "$protocol" == "cin-followup-f-v1" || "$protocol" == "cin-followup-f-v2" ]]; then
             pip install -e . -r requirements-cin-followup-v1.txt
           else
             pip install -e .
@@ -131,14 +163,22 @@ jobs:
           RUNNER_MODULE: ${{ inputs.runner_module }}
           CONFIG: ${{ inputs.config }}
           FREEZE_MANIFEST: ${{ inputs.freeze_manifest }}
+          DIM1_FLAG: ${{ inputs.dim1_flag }}
+          DIM1_VALUES: ${{ inputs.dim1_values }}
           DIM2_FLAG: ${{ inputs.dim2_flag }}
           DIM2_VALUES: ${{ inputs.dim2_values }}
           DIM3_FLAG: ${{ inputs.dim3_flag }}
-          V3: ${{ matrix.v3 }}
+          DIM3_VALUES: ${{ inputs.dim3_values }}
           AGGREGATION_PHASE: ${{ inputs.aggregation_phase }}
           DISPATCH_SHA: ${{ github.sha }}
         run: |
-          if ! grep -Eq '^protocol: cin-followup-f-v[12]$' "$CONFIG"; then
+          protocol="$(python scripts/cin_followup_dispatch_guard.py \
+            --config "$CONFIG" \
+            --dim1-flag "$DIM1_FLAG" --dim1-values "$DIM1_VALUES" \
+            --dim2-flag "$DIM2_FLAG" --dim2-values "$DIM2_VALUES" \
+            --dim3-flag "$DIM3_FLAG" --dim3-values "$DIM3_VALUES" \
+            --aggregation-phase "$AGGREGATION_PHASE")"
+          if [[ -z "$protocol" ]]; then
             exit 0
           fi
           if [[ "$RUNNER_MODULE" != "mintnet.experiments.cin_baseline" ]]; then
@@ -148,24 +188,6 @@ jobs:
           if [[ -z "$FREEZE_MANIFEST" ]]; then
             echo "F follow-up dispatch requires a committed freeze manifest" >&2
             exit 2
-          fi
-          if grep -q '^protocol: cin-followup-f-v2$' "$CONFIG"; then
-            if [[ "$DIM2_FLAG" != "--replicate-batches" ]]; then
-              echo "F follow-up v2 requires --replicate-batches as dimension 2" >&2
-              exit 2
-            fi
-            if [[ "$AGGREGATION_PHASE" == "development" && "$DIM2_VALUES" != "dev0" ]]; then
-              echo "F follow-up v2 development must contain only dev0" >&2
-              exit 2
-            fi
-            if [[ "$AGGREGATION_PHASE" == "validation" && "$DIM2_VALUES" != "val0,val1" ]]; then
-              echo "F follow-up v2 validation must combine val0 and val1" >&2
-              exit 2
-            fi
-            if [[ "$AGGREGATION_PHASE" == "full" ]]; then
-              echo "F follow-up v2 must aggregate exactly one phase" >&2
-              exit 2
-            fi
           fi
           if [[ "$DIM3_FLAG" == "--f-max-tries" ]]; then
             echo "F generator cap comparison must finish before protocol freeze" >&2
@@ -208,10 +230,12 @@ jobs:
           retention-days: 14
 
   aggregate:
-    needs: shard
+    needs: [plan, shard]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -219,7 +243,9 @@ jobs:
         env:
           CONFIG: ${{ inputs.config }}
         run: |
-          if grep -Eq '^protocol: cin-followup-f-v[12]$' "$CONFIG"; then
+          python -m pip install "PyYAML==6.0.3"
+          protocol="$(python scripts/cin_followup_dispatch_guard.py --config "$CONFIG")"
+          if [[ "$protocol" == "cin-followup-f-v1" || "$protocol" == "cin-followup-f-v2" ]]; then
             pip install -e . -r requirements-cin-followup-v1.txt
           else
             pip install -e .
@@ -236,7 +262,8 @@ jobs:
           set -e
           export PYTHONPATH="$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE"
           OUTPUT_DIR=results/generated/aggregated
-          if grep -q '^protocol: cin-followup-f-v2$' "$CONFIG"; then
+          protocol="$(python scripts/cin_followup_dispatch_guard.py --config "$CONFIG")"
+          if [[ "$protocol" == "cin-followup-f-v2" ]]; then
             OUTPUT_DIR=results/generated/cin_followup_f_v2
           fi
           cmd=(python scripts/aggregate_shards.py \
@@ -254,6 +281,6 @@ jobs:
           "${cmd[@]}"
       - uses: actions/upload-artifact@v4
         with:
-          name: "${{ inputs.config == 'configs/cin_followup_v2.yaml' && 'cin-followup-f-v2-aggregate' || 'aggregated-benchmark' }}"
-          path: ${{ inputs.config == 'configs/cin_followup_v2.yaml' && 'results/generated/cin_followup_f_v2' || 'results/generated/aggregated' }}
+          name: "${{ needs.plan.outputs.protocol == 'cin-followup-f-v2' && 'cin-followup-f-v2-aggregate' || 'aggregated-benchmark' }}"
+          path: ${{ needs.plan.outputs.protocol == 'cin-followup-f-v2' && 'results/generated/cin_followup_f_v2' || 'results/generated/aggregated' }}
           retention-days: 90

@@ -61,6 +61,7 @@ F_FROZEN_SOURCE_FILES = (
     PROJECT_ROOT / "src/mintnet/experiments/cin_common.py",
     PROJECT_ROOT / "src/mintnet/simulation/cin_networks.py",
     PROJECT_ROOT / "scripts/cin_followup_f_gate_check.py",
+    PROJECT_ROOT / "scripts/cin_followup_dispatch_guard.py",
     PROJECT_ROOT / "scripts/aggregate_shards.py",
     PROJECT_ROOT / "scripts/aggregate_cin_sidecars.py",
     PROJECT_ROOT / ".github/workflows/sharded_benchmark.yml",
@@ -123,6 +124,14 @@ def _frozen_source_sha256_at_revision(revision: str) -> str:
     digest = hashlib.sha256()
     for path in F_FROZEN_SOURCE_FILES:
         relative = path.resolve().relative_to(PROJECT_ROOT).as_posix()
+        exists = subprocess.run(
+            ["git", "cat-file", "-e", f"{revision}:{relative}"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+        )
+        if exists.returncode != 0:
+            # Older frozen protocols predate newly added dispatch-guard files.
+            continue
         result = subprocess.run(
             ["git", "show", f"{revision}:{relative}"],
             cwd=PROJECT_ROOT,
@@ -135,6 +144,44 @@ def _frozen_source_sha256_at_revision(revision: str) -> str:
         digest.update(hashlib.sha256(normalized).hexdigest().encode("ascii"))
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def _resolve_git_revision(revision: str) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{revision}^{{commit}}"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _require_frozen_revision_lineage(frozen_revision: str, dispatch_revision: str) -> str:
+    """Require a real frozen commit and a source-identical checked-out descendant."""
+    try:
+        frozen_sha = _resolve_git_revision(frozen_revision)
+        dispatch_sha = _resolve_git_revision(dispatch_revision)
+        checked_out_sha = _resolve_git_revision("HEAD")
+    except subprocess.CalledProcessError as exc:
+        raise ValueError("dispatch and frozen revisions must resolve to Git commits") from exc
+    if dispatch_sha != checked_out_sha:
+        raise ValueError("dispatch revision must match the checked-out commit")
+    ancestry = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", frozen_sha, dispatch_sha],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+    )
+    if ancestry.returncode != 0:
+        raise ValueError("dispatch revision must descend from the frozen protocol revision")
+
+    frozen_sources = _frozen_source_sha256_at_revision(frozen_sha)
+    dispatch_sources = _frozen_source_sha256_at_revision(dispatch_sha)
+    if frozen_sources != dispatch_sources:
+        raise ValueError("dispatch revision changed frozen protocol source files")
+    if _frozen_source_sha256() != dispatch_sources:
+        raise ValueError("checked-out frozen protocol source files differ from dispatch revision")
+    return frozen_sources
 
 
 def _protocol_name(config: PanelConfig) -> str:
@@ -265,6 +312,9 @@ def validate_dispatch_preflight(
     frozen_revision = freeze_manifest.get("code_revision")
     if not isinstance(frozen_revision, str) or re.fullmatch(revision_pattern, frozen_revision) is None:
         raise ValueError("freeze manifest code_revision must be a full Git revision hash")
+    frozen_source_hash = _require_frozen_revision_lineage(frozen_revision, code_revision)
+    if freeze_manifest.get("source_code_sha256") != frozen_source_hash:
+        raise ValueError("dispatch freeze manifest source_code_sha256 mismatch")
 
     source_hash = sha256_text_file(source_config_path)
     charter_hash = _sha256_file(config.charter_path)
@@ -284,7 +334,7 @@ def validate_dispatch_preflight(
         "config_sha256": resolved_hash,
         "charter_sha256": charter_hash,
         "seed_inventory_sha256": _seed_inventory_sha256(config=config),
-        "source_code_sha256": _frozen_source_sha256(),
+        "source_code_sha256": frozen_source_hash,
         "f_max_tries": config.f_max_tries,
         "support_aware_inner_splits": (
             config.support_aware_inner_splits
