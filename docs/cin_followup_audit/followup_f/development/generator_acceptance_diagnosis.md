@@ -49,7 +49,7 @@ Four identities first passed after the original cap: replicate 4012 at attempt 5
 
 ## Recommended next decision
 
-Do not change the frozen campaign or claim the gate passed. The current evidence supports the cap as the direct cause of the seven generation errors and does not show a generator arithmetic bug. Before changing the production cap, assess a proposed cap (for example, 1,000) on a separately frozen development protocol that runs the full candidate pipeline and compares generation yield, fit completion, runtime, and generated-data characteristics. If that development work supports the change, freeze it and use a new disjoint validation cohort for any pass/fail claim. The seven consumed identities and the 100 diagnostic identities must remain excluded from that future validation set.
+Do not change the frozen campaign or claim the gate passed. The generator-only evidence supported a full-pipeline development comparison, which has now been completed: cap 1,000 completed 100/100 identities versus 98/100 at cap 500, while the 98 shared datasets and their non-timing fit metrics were identical. See [`full_pipeline_cap_comparison_20261004/report.md`](full_pipeline_cap_comparison_20261004/report.md). This supports a cap-1,000 implementation candidate without changing the threshold. Any pass/fail claim still requires a new source/config freeze and a disjoint hosted validation cohort. Exclude the consumed validation identities and both development diagnostic cohorts from that future validation set.
 
 ## Files
 
