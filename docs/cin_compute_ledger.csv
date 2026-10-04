@@ -3,3 +3,4 @@ cost_pilot,36096470047,18,0.0258333333,0.22,codex:codex,2026-09-24,Task 10 hoste
 statistical_panel_development,36216599775,12,0.224444,0.4175,codex:codex,2026-09-25,Task 11 hosted development shards; phase-only generic aggregate rejected 200 rows versus 600 expected and evidence was aggregated locally
 statistical_panel_validation,36217428583,22,0.353056,1.319722,codex:codex,2026-09-25,Task 11 hosted validation shards; phase-only generic aggregate rejected 400 rows versus 600 expected and evidence was aggregated locally
 followup_f_v2_development,37157587664,3,0.0108333333,0.0216666667,codex:codex,2026-10-03,Task 8 v2 F-only development checkpoint; one shard plus plan and aggregate; all 20 identities complete and sidecars audited
+followup_f_v2_validation,37177262946,4,0.0163888889,0.0413888889,codex:codex,2026-10-03,Task 8 v2 F-only held-out validation; two shards plus plan and aggregate; strict 97/97 completion gate passed

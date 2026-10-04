@@ -8003,3 +8003,89 @@ other roadmap §13 nice-to-haves.
 Decision: accept Task 12 documentation as complete while keeping the failed
 Task 11 evidence scopes explicitly unsupported. Documentation completion does
 not change the statistical validation decision in D-106.
+
+## D-108: Close the D-106 forensic audit and decline a new campaign for now
+
+Date: 2026-09-27.
+
+The follow-up audit retained and hash-verified the 30 D-106 shard archives,
+reconstructed all 400 validation identities and the recorded gate arithmetic,
+and explicitly documented that the original local aggregates, development
+selection, gate output, and report bytes are unavailable. The reconstructed
+results are not represented as recovered originals. The frozen outcomes
+remain 396/400 complete and E paired AP gain 0.049111 against 0.10; both
+gates fail. D-106 remains unchanged.
+
+Exact-seed diagnosis reproduced F/1004 and F/1012 as bounded generator
+rejections below the population-CMI floor, and F/1003 and F/1011 as fits with
+seven unsupported pairs each after an inner split omitted a rare category.
+No production defect was demonstrated. The E paired arithmetic matches the
+archived raw metrics, but the mechanism for the below-threshold gain remains
+unresolved. The plan/charter stability-scope discrepancy and historical
+phase-only aggregate failure are documented; the latter is already repaired
+in current code and covered by exact phase-count tests.
+
+Decision: do not launch a new hosted campaign at this time. The current audit
+has no independently testable E mechanism, while F replay shows limitations
+rather than a demonstrated software defect. The existing evidence continues
+to withhold broad continuous recovery, high-p categorical recovery, reliable
+F completion, and panel-wide stability claims. Any future generator or
+support-handling change must first be investigated on development identities,
+then frozen in a separate protocol with fresh disjoint validation identities
+and a new compute ceiling. No hosted dispatch is authorized by this entry.
+
+The audit recommends a conservative future F-only planning target of 97
+independent datasets to estimate completion proportion with a nominal 95%
+worst-case normal-approximation half-width of 0.10; this is not a frozen
+campaign size or a rare-failure claim. A Wilson/binomial calculation and
+development-only cost pilot are required before any protocol or dispatch.
+
+See `docs/cin_followup_audit/d106/audit_closeout.md` and
+`docs/cin_followup_audit/d106/decision_memo.md` for evidence, hash records,
+limitations, and the planning rationale. No new benchmark was run, and no
+researcher-guide scope statement changed.
+
+## D-109: Record the CIN F follow-up v2 held-out completion result
+
+Date: 2026-10-03.
+
+After the v2 development checkpoint passed 20/20 complete, the owner approved
+the protocol's single held-out validation dispatch. GitHub Actions run
+`https://github.com/imh-ds/mintnet/actions/runs/37177262946` ran the frozen
+F/CIN candidate on identities 6500–6596 from commit
+`2178ade78ea8b04f048e75677d4a4336aa7a6cab`. The plan guard and both shard
+guards passed; both shards and phase-aware aggregation completed successfully.
+
+The aggregate contains exactly 97 unique expected validation identities:
+97 complete, zero incomplete, and zero errors. Every identity has all 28
+pair fits complete. The frozen strict completion gate passes at 97/97. Its
+two-sided 95% Wilson interval is `[0.961906, 1.000000]` (half-width
+`0.019047`). This meets the v2 completion endpoint for this one candidate,
+sample size, generator cap, support-aware split, and simulation setting.
+
+Independent artifact checks verified the aggregate raw-metrics SHA-256
+`f615333c8c4b0cbc0151214cb1441993fe9ea64d665171217e87671aa5029c82`, the
+frozen config and charter hashes, validated aggregate provenance, 97 source
+sidecar manifest entries, each sidecar's SHA-256 and 28-row count, and all
+2,716 aggregate pair rows. The gate output and all raw, metadata, resolved
+config, report, shard, and sidecar artifacts are retained under
+`docs/cin_followup_audit/followup_f_v2/validation/run-37177262946/`.
+
+Mean AP was `0.619521` (MCSE `0.014449`, n=97), descriptive only; AP and edge
+recovery were not v2 gates. The combined v2 development and validation runs
+used `0.063056` runner-hours against the frozen `0.50`-hour ceiling, below
+the `0.24`-hour estimate. The validation was dispatched once; no identity was
+replaced, selectively stopped, or rerun.
+
+Decision: record a pass for the named F-only completion endpoint. This does
+not revise D-106 or establish AP/edge-recovery performance, a causal effect
+of either candidate component, high-p categorical recovery, panel-wide
+stability, FDR control, tail-risk bounds, or broad CIN recovery. Keep the
+categorical branch experimental and retain the D-106 failures in their
+original denominator. The researcher guide now describes this additional
+bounded evidence next to the unchanged D-106 result.
+
+The run added `0.041389` runner-hours across four jobs; the 59-second maximum
+job duration is `0.016389` hours. GitHub Actions also emitted non-blocking
+Node.js action-runtime deprecation and `ubuntu-latest` migration notices;
+track those as workflow maintenance, separate from the statistical result.

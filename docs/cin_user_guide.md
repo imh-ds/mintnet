@@ -63,7 +63,7 @@ The example intentionally does not assert that the curved fit must assign a part
 
 ## Mixed and categorical worked example
 
-Categorical variables require an explicit list of observed levels. `ordered=True` records metadata only; the current model does not impose an ordinal model. The categorical branch remains experimental because the hosted panel recorded F generation/completion failures even though its named recovery gate passed. High-p categorical recovery was not evaluated.
+Categorical variables require an explicit list of observed levels. `ordered=True` records metadata only; the current model does not impose an ordinal model. The categorical branch remains experimental: D-106 recorded F generation/completion failures, while a later, separate F-only v2 validation passed its completion gate for one frozen candidate and configuration. That bounded result does not establish AP or edge-recovery performance, ordinal validity, or high-p categorical recovery.
 
 ```python
 import numpy as np
@@ -182,7 +182,7 @@ python scripts/cin_gate_check.py --raw results/generated/cin_baseline_validation
 
 Retain raw rows, sidecars, resolved configuration, metadata, and gate results together. See [Task 09](design/cin/build-plan/09_runner_actions_infrastructure.md) for the implementation contract and shard layout. The statistical panel's compute ceiling is 12 aggregate runner-hours.
 
-The hosted results in D-106 are frozen: 396/400 validation rows were complete, two incomplete, and two generation errors. The completion gate failed and the E nonlinear-gain gate failed (0.049111 against 0.10); A/B, selected-delta, F/G/H recovery and C runtime gates passed as recorded. D and I were descriptive. Do not retune or rerun validation to alter these outcomes. High-p categorical recovery is unevidenced. The historical organic-network regression is descriptive only. No broad recovery, causal, inferential, FDR or tail-probability claim follows from the panel.
+The hosted results in D-106 are frozen: 396/400 validation rows were complete, two incomplete, and two generation errors. The completion gate failed and the E nonlinear-gain gate failed (0.049111 against 0.10); A/B, selected-delta, F/G/H recovery and C runtime gates passed as recorded. D and I were descriptive. A separate prospective F-only v2 validation (run 37177262946) completed all 97 identities under its frozen cap-1,000/support-aware candidate; its strict completion gate passed, with a 95% Wilson interval of 0.9619–1.0000. This result is limited to that named F configuration and completion endpoint; AP remains descriptive, and the v2 run does not change D-106. Do not retune or rerun either validation to alter its outcomes. High-p categorical recovery is unevidenced. The historical organic-network regression is descriptive only. No broad recovery, causal, inferential, FDR or tail-probability claim follows from these results.
 
 ## Limitations and methods text
 
@@ -193,7 +193,7 @@ The current estimator can miss variance-only and XOR dependence. Extreme skew, f
 ## Status by scope
 
 - **Continuous preview:** A/B recovery and selected-delta validation gates passed; E's nonlinear-gain gate failed. The intended broad continuous claim is withheld.
-- **Categorical item branch:** experimental. The named F/G/H recovery gates passed, but F had generation/completion failures. High-p categorical recovery was not evaluated.
+- **Categorical item branch:** experimental. The named D-106 F/G/H recovery gates passed despite F generation/completion failures. The separate v2 F-only strict completion gate passed 97/97 for its frozen candidate; AP/recovery and high-p categorical performance remain unsupported.
 - **p=100 runtime:** the Task 10 cost pilot's measured runtime checks passed for its configured cells and environment; this is a bounded runtime result only.
 - **Low-N claim:** unsupported as a recovery claim. Case C passed its completion/runtime gate only; Case I is a descriptive null boundary.
 - **Stability:** the plan/charter differ on the number/scope of stability datasets. The hosted D-106 record does not state a final stability outcome; do not claim a panel-wide stability result from that record.

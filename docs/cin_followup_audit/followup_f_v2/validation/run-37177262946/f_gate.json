@@ -1,0 +1,25 @@
+{
+  "case": "F",
+  "charter_sha256": "9490b8e36912760a030bf3a3dcf3e37fe81fda0bd284bebbde239e7473fd9b68",
+  "completion_rate": 1.0,
+  "completion_threshold": 1.0,
+  "f_max_tries": 1000,
+  "git_commit": "2178ade78ea8b04f048e75677d4a4336aa7a6cab",
+  "method": "cin",
+  "n_complete": 97,
+  "n_expected": 97,
+  "phase": "validation",
+  "protocol": "cin-followup-f-v2",
+  "source_config_sha256": "8fa7cac1e2b678fb7744cc4e2909a959c8fae8a0db610f01b39aba6a526225ef",
+  "status": "pass",
+  "status_counts": {
+    "complete": 97,
+    "error": 0,
+    "incomplete": 0
+  },
+  "wilson_95": {
+    "half_width": 0.019047021262973862,
+    "lower": 0.9619059574740523,
+    "upper": 1.0
+  }
+}
